@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Open Folder in Orbit
+Comment=Open selected folder in Orbit file intelligence IDE
+Exec=orbit --folder %f
+Icon=orbit
+Type=Application
+Terminal=false
+Categories=System;FileTools;FileManager;Development;
+MimeType=inode/directory;
+NoDisplay=true
+OnlyShowIn=GNOME;KDE;XFCE;MATE;Cinnamon;Budgie;LXQt;Unity;
