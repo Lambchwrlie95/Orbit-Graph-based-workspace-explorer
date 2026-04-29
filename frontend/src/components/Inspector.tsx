@@ -5,11 +5,12 @@ import { formatBytes, formatDate, isTextFile, isImageFile } from "../utils";
 interface InspectorProps {
   record: FileRecord | null;
   preview: PreviewPayload | null;
+  isLoadingPreview?: boolean;
   onOpen: (path: string) => void;
   onNavigate?: (path: string) => void;
 }
 
-export function Inspector({ record, preview, onOpen, onNavigate }: InspectorProps) {
+export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigate }: InspectorProps) {
   if (!record) {
     return (
       <aside className="inspector">
@@ -86,7 +87,18 @@ export function Inspector({ record, preview, onOpen, onNavigate }: InspectorProp
         )}
       </div>
 
-      {canPreview && preview && <PreviewSection preview={preview} />}
+      {canPreview && (
+        isLoadingPreview ? (
+          <div className="preview-section">
+            <h4>Preview</h4>
+            <div className="empty-state small">
+              <span className="scanning-indicator">Loading preview...</span>
+            </div>
+          </div>
+        ) : preview ? (
+          <PreviewSection preview={preview} />
+        ) : null
+      )}
     </aside>
   );
 }

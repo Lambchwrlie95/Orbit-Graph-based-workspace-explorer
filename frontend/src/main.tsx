@@ -43,6 +43,7 @@ function App() {
   const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics | null>(null);
   const [expandedGraphFolders, setExpandedGraphFolders] = useState<string[]>([]);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   // UI state
   const [status, setStatus] = useState("Ready");
@@ -214,11 +215,21 @@ function App() {
   const selectRecord = async (record: FileRecord) => {
     setSelected(record);
     setError(null);
+    setPreview(null);
+    
+    // Only load preview for files (not folders)
+    if (record.isDir) {
+      return;
+    }
+    
+    setIsPreviewLoading(true);
     try {
       const previewData = await invoke<PreviewPayload>("get_preview", { path: record.path });
       setPreview(previewData);
     } catch (err) {
       setPreview(null);
+    } finally {
+      setIsPreviewLoading(false);
     }
   };
 
@@ -476,6 +487,7 @@ function App() {
         <Inspector
           record={selected}
           preview={preview}
+          isLoadingPreview={isPreviewLoading}
           onOpen={openPath}
           onNavigate={setCurrentPath}
         />
