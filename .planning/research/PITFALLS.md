@@ -39,3 +39,19 @@
 **Warning signs:** Search infrastructure dominates the roadmap before filename/FTS search has shipped.
 
 **Prevention:** Use SQLite filename search and FTS5 first. Add Tantivy only when specific search limits are measured.
+
+## Root-Scoped Graph Drift
+
+**Risk:** Graph data can accidentally mix roots or show stale data if the selected root path or graph mode is not propagated through every backend/frontend layer.
+
+**Warning signs:** Opening a small project shows unrelated home-directory nodes, graph mode changes do not affect results, or watcher updates bring old/global graph data back.
+
+**Prevention:** Make root path and graph mode explicit inputs to graph queries and incremental refreshes. Verify the path through the frontend invoke call, Tauri command, graph builder, and watcher update path before changing renderer logic.
+
+## Missing Durable Diagnostics
+
+**Risk:** Scanner, watcher, and graph bugs are hard to root-cause if errors only appear in transient UI state.
+
+**Warning signs:** Users report behavior "reverting" or scans failing but no durable evidence exists after restart.
+
+**Prevention:** Add file-backed app logs in Phase 1 and surface log locations in diagnostics. Use these logs when investigating scan, SQLite, watcher, permission, and graph-scope issues.

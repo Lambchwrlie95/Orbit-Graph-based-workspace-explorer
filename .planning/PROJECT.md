@@ -134,6 +134,12 @@ MVP v0.1 focuses on the real foundation:
 - Open file externally
 - Search by filename
 
+Reference implementation context:
+
+- `/home/lamb/Projects/graph-file-manager` is available as a practical reference for Tauri 2 + Rust + SQLite + Graphology/Sigma file graph work.
+- Reuse lessons, not blindly copied architecture. Orbit should stay React + TypeScript and graph-first, while borrowing proven backend patterns around scanning, indexing, preview, graph builder boundaries, watcher behavior, and durable logging.
+- Important lessons from that project: keep graph loading root-scoped end to end, propagate graph mode explicitly, avoid stale global graph data, serialize SQLite writes where needed, keep backend command names and frontend invoke IDs aligned, and use file-backed app logs for debugging.
+
 ## Constraints
 
 - **Performance**: Never scan entire home repeatedly, render huge graphs, generate all thumbnails immediately, or load full file contents into memory - the app must run well on a low-spec PC.
@@ -143,6 +149,7 @@ MVP v0.1 focuses on the real foundation:
 - **Search**: SQLite FTS5 is the initial search engine; Tantivy is deferred until a real need appears.
 - **Product shape**: The app starts as a file intelligence tool with editing, not a full IDE.
 - **UI style**: Dark glassy interface, thin sidebar, large central graph, color-coded file types, small image thumbnails, right inspector, bottom command/status area, and fast keyboard shortcuts.
+- **Reference repo**: Use `/home/lamb/Projects/graph-file-manager` as implementation reference for scanner, watcher, SQLite, graph, preview, logging, and Tauri command patterns where useful.
 
 ## Key Decisions
 

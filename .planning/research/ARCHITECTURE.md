@@ -54,3 +54,16 @@ Selection flows both ways: selecting an explorer row or graph node updates the s
 4. Add inspector selection and external open actions.
 5. Add scoped graph API and Sigma rendering.
 6. Add relationship detection and asset/code intelligence in later phases.
+
+## Reference Codebase
+
+Use `/home/lamb/Projects/graph-file-manager` as a reference where useful:
+
+- `src-tauri/src/db.rs` for SQLite setup patterns.
+- `src-tauri/src/indexer.rs`, `scanner.rs`, and `watch.rs` for filesystem indexing/watch concerns.
+- `src-tauri/src/graph_builder.rs` for graph payload construction and root-scoping pitfalls.
+- `src-tauri/src/preview.rs` for preview flow boundaries.
+- `src-tauri/src/logger.rs` for durable file-backed diagnostics.
+- `src-tauri/src/main.rs` and frontend invoke call sites for Tauri command naming and payload-shape lessons.
+
+Do not copy the old product shape wholesale. Orbit should use these as implementation references while keeping the new React + graph-first architecture.

@@ -6,7 +6,7 @@
 
 **Table stakes:** The MVP must open a folder, scan/index files, browse them normally, search by filename, show a scoped graph, inspect selections, open files externally, and stay fast on large folders.
 
-**Watch out for:** Whole-disk graph rendering, scanner overreach, decorative UI, premature IDE scope, and premature Tantivy adoption.
+**Watch out for:** Whole-disk graph rendering, scanner overreach, decorative UI, premature IDE scope, premature Tantivy adoption, root-scoped graph drift, and missing durable diagnostics.
 
 ## Recommended v1 Shape
 
@@ -23,3 +23,4 @@ Build a foundation-first v1:
 - Put explorer/search/inspector before advanced graph relationships.
 - Make graph scope and node caps non-negotiable requirements.
 - Defer Monaco editing, advanced asset intelligence, and Tantivy to v2 unless they become necessary to validate the core value.
+- Use `/home/lamb/Projects/graph-file-manager` as a reference for Tauri/Rust/SQLite scanner, watcher, graph builder, preview, and logging patterns.
