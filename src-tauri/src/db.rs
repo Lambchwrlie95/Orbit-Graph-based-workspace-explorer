@@ -12,6 +12,29 @@ pub fn init_database(db_path: &Path) -> Result<(), String> {
         PRAGMA synchronous = NORMAL;
         PRAGMA temp_store = MEMORY;
 
+        -- Code analysis table for storing import/export data
+        CREATE TABLE IF NOT EXISTS code_analysis (
+            file_id INTEGER PRIMARY KEY,
+            imports JSON DEFAULT '[]',
+            exports JSON DEFAULT '[]',
+            analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_code_analysis_file ON code_analysis(file_id);
+
+        -- Import relationships table for tracking file dependencies
+        CREATE TABLE IF NOT EXISTS import_relationships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file_id INTEGER NOT NULL,
+            target_path TEXT NOT NULL,
+            import_type TEXT NOT NULL,
+            FOREIGN KEY (source_file_id) REFERENCES files(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_imports_source ON import_relationships(source_file_id);
+        CREATE INDEX IF NOT EXISTS idx_imports_target ON import_relationships(target_path);
+
         -- Thumbnail metadata storage
         CREATE TABLE IF NOT EXISTS thumbnails (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
