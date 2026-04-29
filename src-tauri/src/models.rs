@@ -32,6 +32,16 @@ pub struct FileRecord {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct ClusterSummary {
+    pub total_children: i64,
+    pub file_count: i64,
+    pub dir_count: i64,
+    pub total_size: i64,
+    pub top_extensions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GraphNode {
     pub id: i64,
     pub label: String,
@@ -44,6 +54,7 @@ pub struct GraphNode {
     pub child_count: Option<i64>,
     pub x: Option<f64>,
     pub y: Option<f64>,
+    pub cluster_summary: Option<ClusterSummary>,
 }
 
 #[derive(Debug, Serialize, Clone)]

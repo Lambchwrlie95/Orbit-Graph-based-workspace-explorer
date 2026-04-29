@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
 import { GraphPayload, GraphNode } from "../types";
+import { formatBytes } from "../utils";
 
 interface GraphViewProps {
   payload: GraphPayload | null;
@@ -43,6 +44,7 @@ export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: 
         isDir: node.isDir,
         isCluster: node.isCluster,
         extension: node.extension,
+        clusterSummary: node.clusterSummary,
       });
     }
 
@@ -173,8 +175,21 @@ export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: 
     const isDir = graph.getNodeAttribute(hoveredNode, "isDir") as boolean;
     const isCluster = graph.getNodeAttribute(hoveredNode, "isCluster") as boolean;
     const extension = graph.getNodeAttribute(hoveredNode, "extension") as string | undefined;
+    const clusterSummary = graph.getNodeAttribute(hoveredNode, "clusterSummary") as GraphNode["clusterSummary"];
     
-    if (isCluster) return "Click to view folder contents";
+    if (isCluster && clusterSummary) {
+      const lines = [
+        `Cluster: ${clusterSummary.totalChildren} items hidden`,
+        `Files: ${clusterSummary.fileCount}, Folders: ${clusterSummary.dirCount}`,
+        `Total size: ${formatBytes(clusterSummary.totalSize)}`,
+      ];
+      if (clusterSummary.topExtensions.length > 0) {
+        lines.push(`Types: ${clusterSummary.topExtensions.slice(0, 3).join(", ")}`);
+      }
+      lines.push("Double-click to expand");
+      return lines.join("\n");
+    }
+    if (isCluster) return "Click to view folder contents\nDouble-click to expand";
     if (isDir) return `Folder: ${label}\nDouble-click to open`;
     if (extension) return `${extension.toUpperCase()} file: ${label}\nDouble-click to open externally`;
     return `File: ${label}\nDouble-click to open externally`;

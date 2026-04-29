@@ -4,7 +4,7 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 
 use crate::db;
-use crate::models::{GraphEdge, GraphNode, GraphPayload};
+use crate::models::{ClusterSummary, GraphEdge, GraphNode, GraphPayload};
 
 const DEFAULT_NODE_LIMIT: i64 = 200;
 const FOLDER_CLUSTER_THRESHOLD: i64 = 50;
@@ -71,6 +71,7 @@ pub fn load_graph(
                     child_count: None,
                     x: None,
                     y: None,
+                    cluster_summary: None,
                 })
             },
         )
@@ -100,8 +101,8 @@ pub fn load_graph(
                 // This is an oversized folder - keep it but we'll add a cluster node
                 clustered_nodes.push(node.clone());
                 
-                // Count how many children are in our visible set
-                let visible_children: Vec<&GraphNode> = nodes.iter()
+                // Get all children for this folder (for summary)
+                let all_children: Vec<&GraphNode> = nodes.iter()
                     .filter(|n| {
                         if let Some(parent_path) = &n.parent_path {
                             parent_path == &node.path
@@ -111,30 +112,34 @@ pub fn load_graph(
                     })
                     .collect();
                 
-                if visible_children.len() > FOLDER_CLUSTER_THRESHOLD as usize {
+                if all_children.len() > FOLDER_CLUSTER_THRESHOLD as usize {
                     // Hide children beyond the first 20, add cluster node
                     let to_show = 20;
-                    let to_hide = visible_children.len() - to_show;
+                    let to_hide = all_children.len() - to_show;
                     
-                    for (idx, child) in visible_children.iter().enumerate() {
+                    for (idx, child) in all_children.iter().enumerate() {
                         if idx >= to_show {
                             nodes_to_hide.insert(child.id);
                         }
                     }
                     
-                    // Add cluster node
+                    // Compute cluster summary
+                    let summary = compute_cluster_summary(&all_children);
+                    
+                    // Add cluster node with summary
                     clustered_nodes.push(GraphNode {
                         id: cluster_id,
                         label: format!("+{to_hide} more"),
                         path: format!("{}/__cluster__", node.path),
                         is_dir: true,
-                        size_bytes: 0,
+                        size_bytes: summary.total_size,
                         extension: None,
                         parent_path: Some(node.path.clone()),
                         is_cluster: true,
                         child_count: Some(to_hide as i64),
                         x: None,
                         y: None,
+                        cluster_summary: Some(summary),
                     });
                     selected_ids.insert(cluster_id);
                     cluster_id -= 1;
@@ -268,4 +273,36 @@ fn canonicalize(path: &str) -> String {
         .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
         .to_string()
+}
+
+/// Compute summary statistics for a cluster of nodes
+fn compute_cluster_summary(children: &[&GraphNode]) -> ClusterSummary {
+    let total_children = children.len() as i64;
+    let file_count = children.iter().filter(|n| !n.is_dir).count() as i64;
+    let dir_count = children.iter().filter(|n| n.is_dir).count() as i64;
+    let total_size: i64 = children.iter().map(|n| n.size_bytes).sum();
+    
+    // Count extensions and get top 5
+    let mut ext_counts: HashMap<String, i64> = HashMap::new();
+    for child in children {
+        if let Some(ext) = &child.extension {
+            *ext_counts.entry(ext.clone()).or_insert(0) += 1;
+        }
+    }
+    
+    // Sort by count and take top 5
+    let mut ext_vec: Vec<(String, i64)> = ext_counts.into_iter().collect();
+    ext_vec.sort_by(|a, b| b.1.cmp(&a.1));
+    let top_extensions: Vec<String> = ext_vec.into_iter()
+        .take(5)
+        .map(|(ext, _)| ext)
+        .collect();
+    
+    ClusterSummary {
+        total_children,
+        file_count,
+        dir_count,
+        total_size,
+        top_extensions,
+    }
 }
