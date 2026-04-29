@@ -365,3 +365,286 @@ dd {
   padding: 10px;
   white-space: pre-wrap;
 }
+
+/* View Toggle */
+.view-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.view-toggle.inline {
+  gap: 4px;
+}
+
+.view-toggle button {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* File Row Selected State */
+.file-row.selected {
+  background: #1a3a3a;
+  border-color: #20b8a5;
+}
+
+.file-row.parent-row {
+  opacity: 0.8;
+}
+
+/* Explorer List */
+.explorer-list-container {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.explorer-list-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #1c2831;
+}
+
+.item-count {
+  color: #8ca1af;
+  font-size: 12px;
+}
+
+/* Explorer Tree */
+.explorer-tree-container {
+  overflow: auto;
+  padding: 8px 0;
+}
+
+.tree-node {
+  user-select: none;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  gap: 4px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+.tree-row:hover {
+  background: #121d24;
+}
+
+.tree-row.selected {
+  background: #1a3a3a;
+  border-color: #20b8a5;
+}
+
+.tree-chevron {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: #8ca1af;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+
+.tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-spacer {
+  width: 16px;
+}
+
+.tree-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
+.tree-loading,
+.tree-empty {
+  color: #5a6b75;
+  font-size: 12px;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Search Panel */
+.search-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.search-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #1c2831;
+}
+
+.search-input-container {
+  position: relative;
+  flex: 1;
+}
+
+.clear-search {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: #8ca1af;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.clear-search:hover {
+  color: #e5edf4;
+}
+
+.search-status {
+  color: #8ca1af;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.search-result {
+  grid-template-columns: 40px minmax(0, 1fr) 92px;
+}
+
+.search-result-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.search-result-info .file-path {
+  color: #5a6b75;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inspector Enhancements */
+.record-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.file-icon.large {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.metadata-section,
+.actions-section,
+.preview-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #1c2831;
+}
+
+.metadata-section h4,
+.actions-section h4,
+.preview-section h4 {
+  color: #8ca1af;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.meta-grid.small {
+  font-size: 12px;
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+button.secondary {
+  border-color: #3d596c;
+  background: #17232b;
+}
+
+/* Image Preview */
+.image-preview {
+  border: 1px solid #26343f;
+  border-radius: 6px;
+  background: #070a0d;
+  padding: 8px;
+  text-align: center;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+/* Text Preview */
+.text-preview {
+  border: 1px solid #26343f;
+  border-radius: 6px;
+  background: #070a0d;
+  overflow: auto;
+  max-height: 200px;
+}
+
+.text-preview pre {
+  margin: 0;
+  padding: 10px;
+  color: #dce8ef;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.preview-summary {
+  color: #8ca1af;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* File Icons by Type */
+.file-icon.image {
+  background: #1a3a5c;
+  color: #7dd3fc;
+}
+
+.file-icon.code {
+  background: #3a1a5c;
+  color: #c4b5fd;
+}
+
+.file-icon.text {
+  background: #3a3a1a;
+  color: #fde047;
+}
+
+.file-icon.config {
+  background: #1a3a1a;
+  color: #86efac;
+}
