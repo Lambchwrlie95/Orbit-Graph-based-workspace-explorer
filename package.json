@@ -10,7 +10,11 @@
     "frontend:dev": "npm run dev --prefix frontend",
     "frontend:build": "npm run build --prefix frontend",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "build:appimage": "./scripts/build-appimage.sh",
+    "build:appimage:debug": "./scripts/build-appimage.sh --debug",
+    "build:appimage:clean": "./scripts/build-appimage.sh --clean",
+    "package": "./scripts/build-appimage.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0"
