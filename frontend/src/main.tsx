@@ -8,7 +8,7 @@ import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
 import { useDebounce } from "./hooks/useDebounce";
 import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
-import { ResponsivenessWarning } from "./utils/responsiveness.tsx";
+import { ResponsivenessWarning } from "./utils/responsiveness";
 import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus, PerformanceMetrics } from "./types";
 import { shortPath, formatDate } from "./utils";
 import "./styles.css";
