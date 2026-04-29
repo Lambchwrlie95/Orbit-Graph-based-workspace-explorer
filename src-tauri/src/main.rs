@@ -233,6 +233,8 @@ fn main() {
             check_cache_status,
             get_performance_metrics,
             reset_performance_metrics,
+            commands::file::read_file_for_edit,
+            commands::file::save_file,
             commands::image_analysis::analyze_image_file,
             commands::image_analysis::extract_colors,
             commands::thumbnail::ensure_thumbnail,
