@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use tauri::State;
 
+mod commands;
 mod db;
 mod graph;
 mod logger;
@@ -15,6 +16,7 @@ mod thumbnail_generator;
 
 use models::{FileRecord, GraphPayload, GraphRequest, PreviewPayload, ScanProgress};
 use performance::{CacheStatus, PerformanceMetrics};
+use thumbnail_generator::ThumbnailGenerator;
 
 const DB_FILE: &str = "orbit.db";
 const MAX_SCAN_ENTRIES: usize = 120_000;
@@ -22,6 +24,12 @@ const MAX_SCAN_ENTRIES: usize = 120_000;
 struct AppState {
     db_path: PathBuf,
     db_write_lock: Arc<Mutex<()>>,
+}
+
+impl AppState {
+    fn db_path(&self) -> &std::path::Path {
+        &self.db_path
+    }
 }
 
 #[tauri::command]
@@ -195,11 +203,15 @@ fn main() {
     db::init_database(&db_path).expect("database initialized");
     logger::log_event(format!("orbit started: db={}", db_path.to_string_lossy()));
 
+    // Initialize thumbnail generator
+    let thumbnail_generator = ThumbnailGenerator::new(&app_dir);
+
     tauri::Builder::default()
         .manage(AppState {
             db_path,
             db_write_lock: Arc::new(Mutex::new(())),
         })
+        .manage(thumbnail_generator)
         .invoke_handler(tauri::generate_handler![
             choose_folder,
             default_root_path,
@@ -215,7 +227,12 @@ fn main() {
             get_log_path,
             check_cache_status,
             get_performance_metrics,
-            reset_performance_metrics
+            reset_performance_metrics,
+            commands::thumbnail::ensure_thumbnail,
+            commands::thumbnail::get_thumbnail_info,
+            commands::thumbnail::delete_thumbnails,
+            commands::thumbnail::get_supported_thumbnail_sizes,
+            commands::thumbnail::get_thumbnail_base_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Orbit");
