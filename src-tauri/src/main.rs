@@ -14,6 +14,9 @@ mod models;
 mod performance;
 mod preview;
 mod scanner;
+mod services;
+
+// Keep backward compatibility with existing thumbnail_generator at root
 mod thumbnail_generator;
 
 use models::{FileRecord, GraphPayload, GraphRequest, PreviewPayload, ScanProgress};
