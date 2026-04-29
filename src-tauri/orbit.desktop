@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Orbit
+Comment=Graph-first file intelligence IDE
+Exec=orbit %F
+Icon=orbit
+Type=Application
+Terminal=false
+Categories=System;FileTools;FileManager;Development;IDE;
+StartupNotify=true
+StartupWMClass=orbit
+MimeType=inode/directory;
+Keywords=file;manager;graph;ide;code;explorer;
