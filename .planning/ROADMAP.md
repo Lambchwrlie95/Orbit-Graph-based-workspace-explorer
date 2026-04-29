@@ -274,16 +274,21 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 08-01: Monaco Editor integration with tabs
-- [ ] 08-02: Code analysis (imports/exports) and git status
-- [ ] 08-03: Markdown analysis (links, backlinks, outline)
-- [ ] 08-04: Image analysis integration in inspector
+- [ ] **08-01** — Monaco Editor integration with tabs, file read/save commands, editor state management
+- [ ] **08-02** — Code analysis (import/export detection) and git status integration
+- [ ] **08-03** — Markdown analysis (links, backlinks, outline) and preview rendering
+- [ ] **08-04** — Image analysis integration in inspector (dimensions, colors, similar images)
 
 **Artifacts**:
 - `.planning/phases/08-code-mode-enhanced-inspector/08-CONTEXT.md`
-- Monaco Editor integration
-- Code analysis engine
-- Markdown link indexer
+- `.planning/phases/08-code-mode-enhanced-inspector/08-01-PLAN.md` — Monaco Editor Integration
+- `.planning/phases/08-code-mode-enhanced-inspector/08-02-PLAN.md` — Code Analysis and Git Status
+- `.planning/phases/08-code-mode-enhanced-inspector/08-03-PLAN.md` — Markdown Analysis
+- `.planning/phases/08-code-mode-enhanced-inspector/08-04-PLAN.md` — Image Analysis in Inspector
+- Monaco Editor React component
+- Code analysis engine with regex parsers
+- Markdown link indexer and backlink database
+- Git status integration with git2 crate
 
 ---
 
@@ -296,8 +301,8 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 |-------|-------|--------|------------|
 | 5. Packaging & Desktop Integration | 2 | ✅ Complete | 2026-04-29 |
 | 6. Explorer Enhancements | 2 | ✅ Complete | 2026-04-29 |
-| 7. Asset Mode | 3 | Planning | After Phase 6 |
-| 8. Code Mode & Enhanced Inspector | 4 | Planning | After Phase 7 |
+| 7. Asset Mode | 3 | ✅ Complete | 2026-04-29 |
+| 8. Code Mode & Enhanced Inspector | 4 | 📋 Planned | Ready |
 
 **Total v2.0 Plans**: 11 plans
 **Requirements**: 10 new requirements
