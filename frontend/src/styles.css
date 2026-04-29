@@ -1368,3 +1368,249 @@ button.secondary {
 .mode-label {
   white-space: nowrap;
 }
+
+/* ============================================
+   CODE MODE STYLES
+   ============================================ */
+
+/* Code Mode Container */
+.code-mode {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0b0f12;
+  overflow: hidden;
+}
+
+/* Code Mode Content Area */
+.code-mode-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+/* Editor Container */
+.monaco-editor-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Monaco Editor Customization */
+.monaco-editor-container .monaco-editor {
+  background-color: #0b0f12 !important;
+}
+
+.monaco-editor-container .monaco-editor .overflow-guard {
+  border-radius: 0 !important;
+}
+
+/* Editor Status Bar */
+.editor-status-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 22px;
+  background: #1e1e1e;
+  border-top: 1px solid #333;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  color: #858585;
+  gap: 16px;
+  z-index: 10;
+}
+
+/* Code Mode Empty State */
+.code-mode-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #5a6b75;
+  padding: 40px;
+  text-align: center;
+}
+
+.code-mode-empty h3 {
+  margin: 0 0 8px 0;
+  color: #8ca1af;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.code-mode-empty p {
+  margin: 0;
+  font-size: 14px;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* Code Mode Loading State */
+.code-mode-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8ca1af;
+  font-size: 14px;
+}
+
+/* Code Mode Error Banner */
+.code-mode-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #3a2a1a;
+  border-bottom: 1px solid #1c2831;
+  color: #fbbf24;
+  font-size: 13px;
+}
+
+/* Code Mode Status Bar */
+.code-mode-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 12px;
+  background: #121a20;
+  border-top: 1px solid #1c2831;
+  font-size: 12px;
+  color: #8ca1af;
+  height: 24px;
+}
+
+/* Editor Tabs */
+.editor-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 36px;
+  background: #0b0f12;
+  border-bottom: 1px solid #1c2831;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.editor-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.editor-tabs-empty {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #0b0f12;
+  border-bottom: 1px solid #1c2831;
+  color: #5a6b75;
+  font-size: 12px;
+}
+
+/* Individual Tab */
+.editor-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  min-width: 120px;
+  max-width: 200px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  border-right: 1px solid #1c2831;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.editor-tab:hover {
+  background: #121d24;
+}
+
+.editor-tab.active {
+  background: #17232b;
+  border-bottom: 2px solid #20b8a5;
+}
+
+.editor-tab.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.editor-tab.drag-over {
+  background: #1a3a3a !important;
+}
+
+/* Tab Filename */
+.tab-filename {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #8ca1af;
+}
+
+.editor-tab.active .tab-filename {
+  color: #e5edf4;
+  font-weight: 500;
+}
+
+/* Modified Indicator */
+.modified-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fbbf24;
+  flex-shrink: 0;
+}
+
+/* Tab Close Button */
+.tab-close {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #5a6b75;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.editor-tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: #26343f;
+  color: #e5edf4;
+}
+
+.editor-tab.active .tab-close {
+  color: #8ca1af;
+}
+
+/* Drag Handle */
+.editor-tab [data-drag-handle] {
+  opacity: 0.5;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.editor-tab.dragging [data-drag-handle] {
+  cursor: grabbing;
+}
