@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Orbit Foundation
 status: active
-stopped_at: Phase 2 complete - Explorer, Search, Inspector implemented
-last_updated: "2026-04-29T19:00:00Z"
+stopped_at: Phase 3 complete - Scoped Graph Core implemented
+last_updated: "2026-04-29T20:00:00Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 4
-  completed_phases: 2
-  current_phase: 2
+  completed_phases: 3
+  current_phase: 3
   total_plans: 11
-  completed_plans: 6
-  percent: 55
+  completed_plans: 9
+  percent: 82
 ---
 
 # Project State
@@ -22,21 +22,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** Orbit must make local files understandable and actionable by showing the relationships that matter without overwhelming the user or their machine.
-**Current focus:** v1 foundation complete
+**Current focus:** Phase 3 complete - Scoped Graph Core
 
 ## Current Position
 
-Phase: 2 of 4 (Explorer, Search, and Inspector)
-Plan: All 3 plans complete in Phase 2
-Status: Phase 2 implementation complete
-Last activity: 2026-04-29 - Implemented Explorer tree/list views, Inspector panel with preview, and filename search.
+Phase: 3 of 4 (Scoped Graph Core)
+Plan: All 3 plans complete in Phase 3
+Status: Phase 3 implementation complete
+Last activity: 2026-04-29 - Implemented scoped graph with Sigma.js, 200 node cap, folder clustering, and inspector integration.
 
-Progress: [#####-----] 55%
+Progress: [#######---] 82%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 9
 - Average duration: n/a
 - Total execution time: n/a
 
@@ -46,14 +46,28 @@ Progress: [#####-----] 55%
 |-------|-------|--------|----------|
 | Phase 1 | 3 | Complete | n/a |
 | Phase 2 | 3 | Complete | n/a |
-| Phase 3 | 3 | Pending | - |
+| Phase 3 | 3 | Complete | n/a |
 | Phase 4 | 2 | Pending | - |
 
 **Recent Trend:**
-- Last 3 plans: Phase 2 completed (Explorer, Inspector, Search)
-- Trend: Phase 2 implementation complete and verified
+- Last 3 plans: Phase 3 completed (Graph API, Sigma Rendering, Integration)
+- Trend: Phase 3 implementation complete and verified
 
 ## Accumulated Context
+
+### Phase 3 Completion
+
+Phase 3 (Scoped Graph Core) completed successfully:
+- ✅ Graph API with 200 node cap
+- ✅ Folder clustering for large directories (>50 children)
+- ✅ Sigma.js rendering with color-coded nodes
+- ✅ Pan/zoom controls with zoom level display
+- ✅ Click to inspect integration
+- ✅ Double-click to open files or focus folders
+- ✅ Graph mode switcher integration
+- ✅ Scope validation (root path boundary enforcement)
+
+All 5 Phase 3 requirements implemented (GRPH-01 through GRPH-05).
 
 ### Phase 2 Completion
 
@@ -81,10 +95,13 @@ Recent decisions affecting current work:
 - Phase 2: Organized frontend into component-based architecture for maintainability
 - Phase 2: Used 300ms debounce for search to balance responsiveness and performance
 - Phase 2: Implemented lazy loading for tree view to handle large directories
+- Phase 3: Set graph node cap at 200 for UI performance
+- Phase 3: Implemented folder clustering for directories with >50 children
+- Phase 3: Double-click pattern: files open externally, folders navigate, clusters show parent
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -103,7 +120,7 @@ None yet.
 
 - Phase 1: Complete (Workspace Index Foundation)
 - Phase 2: Complete (Explorer, Search, and Inspector) - artifacts in `.planning/phases/02-explorer/`
-- Phase 3: Not started (Scoped Graph Core)
+- Phase 3: Complete (Scoped Graph Core) - artifacts in `.planning/phases/03-scoped-graph-core/`
 - Phase 4: Not started (Performance Guardrails)
 
 Phase evidence preserved in `.planning/phases/` for review.
@@ -111,7 +128,7 @@ Phase evidence preserved in `.planning/phases/` for review.
 ## Session Continuity
 
 Last session: 2026-04-29
-Stopped at: Phase 2 complete - Explorer tree/list views, Inspector with preview, and filename search all implemented and verified.
+Stopped at: Phase 3 complete - Scoped graph with Sigma.js, 200 node cap, folder clustering, pan/zoom controls, and full inspector integration.
 Resume file: None
 
-Next: Phase 3 (Scoped Graph Core) - Graph visualization with Sigma.js and Graphology
+Next: Phase 4 (Performance Guardrails) - Lazy loading, background work, cache reuse, responsiveness checks
