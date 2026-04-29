@@ -9,6 +9,8 @@ import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
 import { AssetMode } from "./components/AssetMode";
+import { CodeMode, isEditableFile } from "./components/CodeMode";
+import { useEditorStore } from "./stores/editorStore";
 import { ModeSwitcher } from "./components/ModeSwitcher";
 import { useDebounce } from "./hooks/useDebounce";
 import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
@@ -520,14 +522,7 @@ function App() {
           )}
 
           {mode === "code" && (
-            <div className="surface-panel">
-              <div className="surface-header">
-                <h2>Code Files</h2>
-              </div>
-              <div className="empty-state">
-                <p>Code view coming soon</p>
-              </div>
-            </div>
+            <CodeMode className="flex-1" />
           )}
         </section>
 
