@@ -11,6 +11,7 @@ mod models;
 mod performance;
 mod preview;
 mod scanner;
+mod thumbnail_generator;
 
 use models::{FileRecord, GraphPayload, GraphRequest, PreviewPayload, ScanProgress};
 use performance::{CacheStatus, PerformanceMetrics};
