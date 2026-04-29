@@ -7,6 +7,8 @@ import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
 import { useDebounce } from "./hooks/useDebounce";
+import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
+import { ResponsivenessWarning } from "./utils/responsiveness";
 import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus, PerformanceMetrics } from "./types";
 import { shortPath, formatDate } from "./utils";
 import "./styles.css";
@@ -50,6 +52,26 @@ function App() {
 
   // Debounced search query
   const debouncedQuery = useDebounce(query, 300);
+
+  // Performance monitoring (only in graph mode)
+  const { fps, isPoorPerformance, slowRenderCount, resetMetrics } = usePerformanceMonitor({
+    monitorFps: mode === "graph",
+    monitorLongTasks: true,
+    slowRenderThreshold: 100,
+    onLowFps: (lowFps) => {
+      console.warn(`[Performance] Low FPS detected: ${lowFps}`);
+    },
+    onSlowRender: (duration, component) => {
+      console.warn(`[Performance] Slow render in ${component}: ${duration}ms`);
+    },
+  });
+
+  // Reset metrics when switching to graph mode
+  useEffect(() => {
+    if (mode === "graph") {
+      resetMetrics();
+    }
+  }, [mode, resetMetrics]);
 
   // Initialize
   useEffect(() => {
@@ -362,6 +384,7 @@ function App() {
             isCheckingCache={isCheckingCache}
             performanceMetrics={performanceMetrics}
             onRefreshCache={() => rootPath && checkCacheStatus(rootPath)}
+            fps={mode === "graph" ? fps : null}
           />
         </aside>
 
@@ -457,6 +480,19 @@ function App() {
           onNavigate={setCurrentPath}
         />
       </section>
+
+      {/* Performance Warning */}
+      <ResponsivenessWarning
+        fps={fps}
+        slowRenderCount={slowRenderCount}
+        onOptimize={() => {
+          // Reset graph view to improve performance
+          setExpandedGraphFolders([]);
+          if (currentPath) {
+            loadGraph(currentPath, []);
+          }
+        }}
+      />
     </main>
   );
 }
@@ -470,6 +506,7 @@ interface StatusBlockProps {
   isCheckingCache: boolean;
   performanceMetrics: PerformanceMetrics | null;
   onRefreshCache: () => void;
+  fps: number | null;
 }
 
 function StatusBlock({ 
@@ -480,7 +517,8 @@ function StatusBlock({
   cacheStatus, 
   isCheckingCache,
   performanceMetrics,
-  onRefreshCache 
+  onRefreshCache,
+  fps,
 }: StatusBlockProps) {
   const getCacheStatusClass = () => {
     if (!cacheStatus || cacheStatus.fileCount === 0) return "empty";
@@ -555,6 +593,16 @@ function StatusBlock({
               ⚠ {performanceMetrics.slowOperations.length} slow ops
             </div>
           )}
+        </div>
+      )}
+
+      {/* FPS Counter (Graph Mode) */}
+      {fps !== null && (
+        <div className="performance-metrics">
+          <div className="metric">
+            <span>FPS:</span>
+            <span style={{ color: fps < 30 ? '#fbbf24' : '#86efac' }}>{fps}</span>
+          </div>
         </div>
       )}
 
