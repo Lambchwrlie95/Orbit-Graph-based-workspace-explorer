@@ -20,12 +20,14 @@ export interface ViewPersistenceState {
 
 /**
  * useViewPersistence - Hook for persisting and retrieving view mode per folder path
- * 
+ *
+ * Supports all Explorer view modes: list, tree, grid, and columns (Miller columns/Finder-style).
+ *
  * Stores view preferences in localStorage with the following keys:
  * - `orbit:view:${folderPath}` - The view mode (list, tree, grid, columns)
  * - `orbit:view:iconSize:${folderPath}` - Grid icon size (48, 64, 96, 128)
  * - `orbit:view:sort:${folderPath}` - Sort configuration object
- * 
+ *
  * @param folderPath - The current folder path to persist view for
  * @param defaultView - Default view mode if none stored
  * @returns ViewPersistenceState with view settings and setters
