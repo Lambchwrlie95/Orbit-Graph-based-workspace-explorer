@@ -11,6 +11,7 @@ import { GraphView } from "./components/GraphView";
 import { AssetMode } from "./components/AssetMode";
 import { CodeMode, isEditableFile } from "./components/CodeMode";
 import { useEditorStore } from "./stores/editorStore";
+import { useOpenFiles } from "./hooks/useOpenFiles";
 import { ModeSwitcher } from "./components/ModeSwitcher";
 import { useDebounce } from "./hooks/useDebounce";
 import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
@@ -59,6 +60,25 @@ function App() {
 
   // Debounced search query
   const debouncedQuery = useDebounce(query, 300);
+
+  // File opening hook for Code Editor
+  const { openFileInEditor } = useOpenFiles({
+    onSwitchToCodeMode: () => setMode("code"),
+  });
+
+  // Handle opening a file in the Code Editor
+  const handleOpenInEditor = useCallback(async (record: FileRecord) => {
+    if (!isEditableFile(record)) {
+      setError(`Cannot edit file type: ${record.extension || "unknown"}`);
+      return;
+    }
+    
+    try {
+      await openFileInEditor(record);
+    } catch (err) {
+      setError(`Failed to open file: ${err}`);
+    }
+  }, [openFileInEditor]);
 
   // Performance monitoring (only in graph mode)
   const { fps, isPoorPerformance, slowRenderCount, resetMetrics } = usePerformanceMonitor({
@@ -533,6 +553,7 @@ function App() {
           isLoadingPreview={isPreviewLoading}
           onOpen={openPath}
           onNavigate={setCurrentPath}
+          onEdit={handleOpenInEditor}
         />
       </section>
 

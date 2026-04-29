@@ -1,6 +1,8 @@
 import React from "react";
+import { FileCode } from "lucide-react";
 import { FileRecord, PreviewPayload } from "../types";
 import { formatBytes, formatDate, isTextFile, isImageFile } from "../utils";
+import { isEditableFile } from "./CodeMode";
 
 interface InspectorProps {
   record: FileRecord | null;
@@ -8,9 +10,10 @@ interface InspectorProps {
   isLoadingPreview?: boolean;
   onOpen: (path: string) => void;
   onNavigate?: (path: string) => void;
+  onEdit?: (record: FileRecord) => void;
 }
 
-export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigate }: InspectorProps) {
+export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigate, onEdit }: InspectorProps) {
   if (!record) {
     return (
       <aside className="inspector">
@@ -73,6 +76,16 @@ export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigat
           <button className="primary" onClick={() => onOpen(record.path)}>
             {record.isDir ? "Open Folder" : "Open File"}
           </button>
+          {!record.isDir && onEdit && isEditableFile(record) && (
+            <button 
+              className="secondary"
+              onClick={() => onEdit(record)}
+              title="Edit in Code Mode"
+            >
+              <FileCode size={14} style={{ marginRight: '4px' }} />
+              Edit
+            </button>
+          )}
           <button onClick={() => navigator.clipboard?.writeText(record.path)}>
             Copy Path
           </button>
