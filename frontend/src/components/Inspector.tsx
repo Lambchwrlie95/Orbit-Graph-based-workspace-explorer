@@ -1,8 +1,8 @@
 import React from "react";
-import { FileCode } from "lucide-react";
 import { FileRecord, PreviewPayload } from "../types";
 import { formatBytes, formatDate, isTextFile, isImageFile } from "../utils";
-import { isEditableFile } from "./CodeMode";
+import { CodeAnalysisPanel } from "./inspector/CodeAnalysisPanel";
+import { isCodeFile } from "../hooks/useCodeAnalysis";
 
 interface InspectorProps {
   record: FileRecord | null;
@@ -10,7 +10,6 @@ interface InspectorProps {
   isLoadingPreview?: boolean;
   onOpen: (path: string) => void;
   onNavigate?: (path: string) => void;
-  onEdit?: (record: FileRecord) => void;
 }
 
 export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigate, onEdit }: InspectorProps) {
@@ -111,6 +110,14 @@ export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigat
         ) : preview ? (
           <PreviewSection preview={preview} />
         ) : null
+      )}
+
+      {/* Code Analysis Panel */}
+      {record && !record.isDir && isCodeFile(record.path) && (
+        <CodeAnalysisPanel
+          filePath={record.path}
+          onOpenFile={onOpen}
+        />
       )}
     </aside>
   );
