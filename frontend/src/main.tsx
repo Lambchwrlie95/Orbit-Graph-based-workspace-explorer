@@ -294,6 +294,11 @@ function App() {
             <GraphView
               payload={graphPayload}
               onSelectPath={handleGraphNodeSelect}
+              onOpenPath={openPath}
+              onFocusFolder={(path) => {
+                setCurrentPath(path);
+                loadGraph(path);
+              }}
             />
           )}
 

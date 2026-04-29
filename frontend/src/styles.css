@@ -313,6 +313,65 @@ dd {
   color: #9bb0bd;
 }
 
+.graph-overlay .capped-badge {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.graph-controls {
+  position: absolute;
+  z-index: 2;
+  bottom: 14px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid #26343f;
+  border-radius: 6px;
+  background: rgba(7, 10, 13, 0.92);
+  padding: 6px;
+}
+
+.graph-controls button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.graph-controls .zoom-level {
+  min-width: 50px;
+  text-align: center;
+  color: #e5edf4;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.graph-tooltip {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  right: 14px;
+  max-width: 280px;
+  border: 1px solid #26343f;
+  border-radius: 6px;
+  background: rgba(7, 10, 13, 0.95);
+  padding: 10px 12px;
+  pointer-events: none;
+}
+
+.graph-tooltip pre {
+  margin: 0;
+  color: #e5edf4;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+
 .empty-state {
   display: grid;
   height: 100%;
