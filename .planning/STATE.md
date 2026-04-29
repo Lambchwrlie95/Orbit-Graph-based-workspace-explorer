@@ -129,7 +129,9 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None. All v1.0 phases complete.
+1. **Orbit v2 - Desktop entries and new modes** — Update desktop entries and implement Explorer Mode, Inspector Mode, Code Mode (Monaco), and Asset Mode with thumbnails/colors.
+   - File: `.planning/todos/pending/2026-04-29-orbit-v2-desktop-entries-and-new-modes.md`
+   - Created: 2026-04-29
 
 ### Blockers/Concerns
 
