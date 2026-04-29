@@ -3,11 +3,13 @@ import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import { ExplorerList } from "./components/ExplorerList";
 import { ExplorerTree } from "./components/ExplorerTree";
+import { ExplorerGrid } from "./components/ExplorerGrid";
 import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
 import { useDebounce } from "./hooks/useDebounce";
 import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
+import { useViewPersistence } from "./hooks/useViewPersistence";
 import { ResponsivenessWarning } from "./utils/responsiveness";
 import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus, PerformanceMetrics } from "./types";
 import { shortPath, formatDate } from "./utils";
@@ -21,14 +23,21 @@ const modeLabels: Array<[Mode, string]> = [
   ["search", "Search"],
 ];
 
-type ExplorerViewMode = "list" | "tree";
+type ExplorerViewMode = "list" | "tree" | "grid" | "columns";
 
 function App() {
   // Mode and navigation state
   const [mode, setMode] = useState<Mode>("graph");
-  const [explorerViewMode, setExplorerViewMode] = useState<ExplorerViewMode>("list");
   const [rootPath, setRootPath] = useState("");
   const [currentPath, setCurrentPath] = useState("");
+
+  // View persistence state
+  const {
+    viewMode: explorerViewMode,
+    setViewMode: setExplorerViewMode,
+    iconSize: gridIconSize,
+    setIconSize: setGridIconSize,
+  } = useViewPersistence(currentPath, "list");
 
   // Data state
   const [children, setChildren] = useState<FileRecord[]>([]);
@@ -382,6 +391,12 @@ function App() {
               >
                 Tree
               </button>
+              <button
+                className={explorerViewMode === "grid" ? "active" : ""}
+                onClick={() => setExplorerViewMode("grid")}
+              >
+                Grid
+              </button>
             </div>
           )}
 
@@ -436,9 +451,26 @@ function App() {
                   >
                     Tree
                   </button>
+                  <button
+                    className={explorerViewMode === "grid" ? "active" : ""}
+                    onClick={() => setExplorerViewMode("grid")}
+                  >
+                    Grid
+                  </button>
                 </div>
               </div>
-              {explorerViewMode === "list" ? (
+              {explorerViewMode === "grid" ? (
+                <ExplorerGrid
+                  currentPath={currentPath}
+                  rootPath={rootPath}
+                  items={children}
+                  selectedPath={selected?.path}
+                  onSelect={selectRecord}
+                  onNavigate={setCurrentPath}
+                  iconSize={gridIconSize}
+                  onIconSizeChange={setGridIconSize}
+                />
+              ) : explorerViewMode === "list" ? (
                 <ExplorerList
                   currentPath={currentPath}
                   rootPath={rootPath}
