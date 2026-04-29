@@ -1,4 +1,7 @@
 -- Thumbnail metadata storage
+-- This schema is used for the Orbit Asset Mode thumbnail generation system
+
+-- Thumbnails table stores metadata about generated thumbnails
 CREATE TABLE IF NOT EXISTS thumbnails (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
@@ -15,7 +18,8 @@ CREATE TABLE IF NOT EXISTS thumbnails (
 CREATE INDEX IF NOT EXISTS idx_thumbnails_file_id ON thumbnails(file_id);
 CREATE INDEX IF NOT EXISTS idx_thumbnails_size ON thumbnails(size);
 
--- Perceptual hash table (for 07-03)
+-- Perceptual hash table (for duplicate detection)
+-- Stores 64-bit perceptual hashes for image similarity detection
 CREATE TABLE IF NOT EXISTS perceptual_hashes (
     file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
     phash BLOB NOT NULL, -- 64-bit hash stored as 8 bytes
@@ -23,7 +27,7 @@ CREATE TABLE IF NOT EXISTS perceptual_hashes (
     generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Asset tags tables (for 07-02)
+-- Asset tags tables (for tagging and collections)
 CREATE TABLE IF NOT EXISTS asset_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
