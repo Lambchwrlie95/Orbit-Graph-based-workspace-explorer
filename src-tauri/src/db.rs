@@ -12,6 +12,46 @@ pub fn init_database(db_path: &Path) -> Result<(), String> {
         PRAGMA synchronous = NORMAL;
         PRAGMA temp_store = MEMORY;
 
+        -- Thumbnail metadata storage
+        CREATE TABLE IF NOT EXISTS thumbnails (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            size INTEGER NOT NULL,
+            path TEXT NOT NULL,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            file_modified_at TIMESTAMP,
+            width INTEGER,
+            height INTEGER,
+            UNIQUE(file_id, size)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_thumbnails_file_id ON thumbnails(file_id);
+        CREATE INDEX IF NOT EXISTS idx_thumbnails_size ON thumbnails(size);
+
+        -- Perceptual hash table (for duplicate detection)
+        CREATE TABLE IF NOT EXISTS perceptual_hashes (
+            file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+            phash BLOB NOT NULL,
+            algorithm TEXT DEFAULT 'phash',
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Asset tags tables
+        CREATE TABLE IF NOT EXISTS asset_tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT DEFAULT '#6366F1',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS file_asset_tags (
+            file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES asset_tags(id) ON DELETE CASCADE,
+            PRIMARY KEY (file_id, tag_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_file_asset_tags_tag_id ON file_asset_tags(tag_id);
+
         CREATE TABLE IF NOT EXISTS scan_sessions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           root_path TEXT NOT NULL,
@@ -301,4 +341,114 @@ fn bool_to_int(value: bool) -> i64 {
     } else {
         0
     }
+}
+
+// Thumbnail operations
+pub struct ThumbnailRecord {
+    pub id: i64,
+    pub file_id: i64,
+    pub size: i32,
+    pub path: String,
+    pub generated_at: i64,
+    pub file_modified_at: Option<i64>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+}
+
+pub fn get_thumbnail(db_path: &Path, file_id: i64, size: i32) -> Result<Option<ThumbnailRecord>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.query_row(
+        r#"
+        SELECT id, file_id, size, path, 
+               CAST(strftime('%s', generated_at) AS INTEGER),
+               file_modified_at, width, height
+        FROM thumbnails WHERE file_id = ?1 AND size = ?2
+        "#,
+        params![file_id, size],
+        |row| {
+            Ok(ThumbnailRecord {
+                id: row.get(0)?,
+                file_id: row.get(1)?,
+                size: row.get(2)?,
+                path: row.get(3)?,
+                generated_at: row.get(4)?,
+                file_modified_at: row.get(5)?,
+                width: row.get(6)?,
+                height: row.get(7)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+pub fn upsert_thumbnail(
+    db_path: &Path,
+    file_id: i64,
+    size: i32,
+    path: &str,
+    file_modified_at: i64,
+    width: i32,
+    height: i32,
+) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        r#"
+        INSERT INTO thumbnails (file_id, size, path, file_modified_at, width, height)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ON CONFLICT(file_id, size) DO UPDATE SET
+            path = excluded.path,
+            generated_at = CURRENT_TIMESTAMP,
+            file_modified_at = excluded.file_modified_at,
+            width = excluded.width,
+            height = excluded.height
+        "#,
+        params![file_id, size, path, file_modified_at, width, height],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn get_thumbnails_for_file(db_path: &Path, file_id: i64) -> Result<Vec<ThumbnailRecord>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT id, file_id, size, path,
+                   CAST(strftime('%s', generated_at) AS INTEGER),
+                   file_modified_at, width, height
+            FROM thumbnails WHERE file_id = ?1
+            ORDER BY size
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![file_id], |row| {
+            Ok(ThumbnailRecord {
+                id: row.get(0)?,
+                file_id: row.get(1)?,
+                size: row.get(2)?,
+                path: row.get(3)?,
+                generated_at: row.get(4)?,
+                file_modified_at: row.get(5)?,
+                width: row.get(6)?,
+                height: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut thumbs = Vec::new();
+    for row in rows {
+        thumbs.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(thumbs)
+}
+
+pub fn delete_thumbnails_for_file(db_path: &Path, file_id: i64) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM thumbnails WHERE file_id = ?1",
+        params![file_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
