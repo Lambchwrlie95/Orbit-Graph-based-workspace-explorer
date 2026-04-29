@@ -8,6 +8,7 @@ import { ExplorerColumns } from "./components/ExplorerColumns";
 import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
+import { AssetMode } from "./components/AssetMode";
 import { useDebounce } from "./hooks/useDebounce";
 import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
 import { useViewPersistence } from "./hooks/useViewPersistence";
@@ -524,13 +525,21 @@ function App() {
             />
           )}
 
-          {(mode === "assets" || mode === "code") && (
+          {mode === "assets" && (
+            <AssetMode
+              files={children}
+              currentPath={currentPath}
+              className="flex-1"
+            />
+          )}
+
+          {mode === "code" && (
             <div className="surface-panel">
               <div className="surface-header">
-                <h2>{mode === "assets" ? "Assets" : "Code Files"}</h2>
+                <h2>Code Files</h2>
               </div>
               <div className="empty-state">
-                <p>{mode === "assets" ? "Assets view coming soon" : "Code view coming soon"}</p>
+                <p>Code view coming soon</p>
               </div>
             </div>
           )}
