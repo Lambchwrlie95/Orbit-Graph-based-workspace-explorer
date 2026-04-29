@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ExplorerList } from "./components/ExplorerList";
 import { ExplorerTree } from "./components/ExplorerTree";
 import { ExplorerGrid } from "./components/ExplorerGrid";
+import { ExplorerColumns } from "./components/ExplorerColumns";
 import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
@@ -397,6 +398,12 @@ function App() {
               >
                 Grid
               </button>
+              <button
+                className={explorerViewMode === "columns" ? "active" : ""}
+                onClick={() => setExplorerViewMode("columns")}
+              >
+                Columns
+              </button>
             </div>
           )}
 
@@ -457,9 +464,23 @@ function App() {
                   >
                     Grid
                   </button>
+                  <button
+                    className={explorerViewMode === "columns" ? "active" : ""}
+                    onClick={() => setExplorerViewMode("columns")}
+                  >
+                    Columns
+                  </button>
                 </div>
               </div>
-              {explorerViewMode === "grid" ? (
+              {explorerViewMode === "columns" ? (
+                <ExplorerColumns
+                  rootPath={rootPath}
+                  currentPath={currentPath}
+                  selectedPath={selected?.path}
+                  onSelect={selectRecord}
+                  onNavigate={setCurrentPath}
+                />
+              ) : explorerViewMode === "grid" ? (
                 <ExplorerGrid
                   currentPath={currentPath}
                   rootPath={rootPath}
