@@ -75,6 +75,10 @@ async fn scan_workspace(
         root,
         progress.duration_ms
     ));
+    
+    // Record performance metric
+    performance::record_operation("scan_workspace", progress.duration_ms as i64);
+    
     Ok(progress)
 }
 
@@ -83,7 +87,10 @@ fn list_children(
     parent_path: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<FileRecord>, String> {
-    db::children(&state.db_path, &parent_path, 1_000)
+    let start = std::time::Instant::now();
+    let result = db::children(&state.db_path, &parent_path, 1_000);
+    performance::record_operation("list_children", start.elapsed().as_millis() as i64);
+    result
 }
 
 #[tauri::command]
@@ -127,13 +134,16 @@ fn load_graph(request: GraphRequest, state: State<'_, AppState>) -> Result<Graph
         "graph load: root={}, scope={:?}, mode={:?}, limit={:?}",
         request.root_path, request.scope_path, request.mode, request.limit
     ));
-    graph::load_graph(
+    let start = std::time::Instant::now();
+    let result = graph::load_graph(
         &state.db_path,
         &request.root_path,
         request.scope_path.as_deref(),
         request.mode.as_deref().unwrap_or("workspace"),
         request.limit,
-    )
+    );
+    performance::record_operation("load_graph", start.elapsed().as_millis() as i64);
+    result
 }
 
 #[tauri::command]
