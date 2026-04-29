@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::db;
 
@@ -185,10 +185,9 @@ pub fn get_file_count(db_path: &Path, root_path: &str) -> Result<i64, String> {
 
 /// Performance metrics storage (in-memory for session)
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
 
-static METRICS: Lazy<Mutex<PerformanceMetrics>> = 
-    Lazy::new(|| Mutex::new(PerformanceMetrics::default()));
+static METRICS: std::sync::LazyLock<Mutex<PerformanceMetrics>> = 
+    std::sync::LazyLock::new(|| Mutex::new(PerformanceMetrics::default()));
 
 /// Record an operation timing
 pub fn record_operation(name: &str, duration_ms: i64) {
