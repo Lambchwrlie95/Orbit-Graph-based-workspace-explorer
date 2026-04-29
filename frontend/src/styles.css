@@ -707,3 +707,96 @@ button.secondary {
   background: #1a3a1a;
   color: #86efac;
 }
+
+/* Virtual Scrolling */
+.virtual-list-container {
+  outline: none;
+}
+
+.virtual-list-container:focus {
+  box-shadow: inset 0 0 0 1px #20b8a5;
+}
+
+.virtual-list-content {
+  will-change: transform;
+}
+
+.virtual-list-items {
+  will-change: transform;
+}
+
+.virtual-list-item {
+  display: flex;
+  align-items: center;
+}
+
+.virtual-list-item.selected {
+  background: #1a3a3a;
+}
+
+.virtual-scroll-indicator {
+  color: #8ca1af;
+  font-size: 11px;
+  margin-left: 6px;
+  font-style: italic;
+}
+
+/* Cache Status Indicators */
+.cache-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.cache-status.fresh {
+  background: #1a3a1a;
+  color: #86efac;
+}
+
+.cache-status.stale {
+  background: #3a2a1a;
+  color: #fbbf24;
+}
+
+.cache-status.empty {
+  background: #2a2a2a;
+  color: #8ca1af;
+}
+
+/* Performance Metrics */
+.performance-metrics {
+  font-size: 11px;
+  color: #8ca1af;
+  margin-top: 8px;
+}
+
+.performance-metrics .metric {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.performance-warning {
+  background: #3a2a1a;
+  color: #fbbf24;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+/* Scan Progress Animation */
+@keyframes scanning {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+.scanning-indicator {
+  animation: scanning 1.5s ease-in-out infinite;
+  color: #20b8a5;
+}
