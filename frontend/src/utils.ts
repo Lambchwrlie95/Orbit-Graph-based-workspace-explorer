@@ -1,4 +1,4 @@
-import { FileRecord } from "../types";
+import { FileRecord } from "./types";
 
 export function fileTypeLabel(item: FileRecord): string {
   return (item.extension ?? "F").slice(0, 2).toUpperCase();
