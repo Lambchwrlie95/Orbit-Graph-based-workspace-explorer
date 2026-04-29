@@ -47,9 +47,9 @@
 
 ### Performance
 
-- [ ] **PERF-01**: Orbit lazy-loads graph data, explorer rows, and previews instead of loading the whole workspace into the UI at once.
-- [ ] **PERF-02**: Orbit remains responsive while scans run in background Rust tasks.
-- [ ] **PERF-03**: Orbit caches metadata in SQLite and reuses it across app launches.
+- [x] **PERF-01**: Orbit lazy-loads graph data, explorer rows, and previews instead of loading the whole workspace into the UI at once.
+- [x] **PERF-02**: Orbit remains responsive while scans run in background Rust tasks.
+- [x] **PERF-03**: Orbit caches metadata in SQLite and reuses it across app launches.
 
 ## v2 Requirements
 
@@ -118,6 +118,11 @@
 | PERF-01 | Phase 4 | Complete |
 | PERF-02 | Phase 4 | Complete |
 | PERF-03 | Phase 4 | Complete |
+
+**Coverage:**
+- v1 requirements: 25 total
+- Implemented: 25
+- Coverage: 100%
 
 **Coverage:**
 - v1 requirements: 25 total
