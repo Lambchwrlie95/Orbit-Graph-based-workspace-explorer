@@ -180,6 +180,15 @@ fn rebuild_contains_edges(tx: &Transaction<'_>, root_path: &str) -> Result<(), S
 }
 
 pub fn children(db_path: &Path, parent_path: &str, limit: i64) -> Result<Vec<FileRecord>, String> {
+    children_paginated(db_path, parent_path, 0, limit)
+}
+
+pub fn children_paginated(
+    db_path: &Path,
+    parent_path: &str,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<FileRecord>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
@@ -188,18 +197,28 @@ pub fn children(db_path: &Path, parent_path: &str, limit: i64) -> Result<Vec<Fil
             FROM files
             WHERE parent_path = ?1
             ORDER BY is_dir DESC, name COLLATE NOCASE ASC
-            LIMIT ?2
+            LIMIT ?2 OFFSET ?3
             "#,
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map(params![parent_path, limit], file_from_row)
+        .query_map(params![parent_path, limit, offset], file_from_row)
         .map_err(|e| e.to_string())?;
     let mut files = Vec::new();
     for row in rows {
         files.push(row.map_err(|e| e.to_string())?);
     }
     Ok(files)
+}
+
+pub fn get_children_count(db_path: &Path, parent_path: &str) -> Result<i64, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.query_row(
+        "SELECT COUNT(*) FROM files WHERE parent_path = ?1",
+        params![parent_path],
+        |row| row.get(0),
+    )
+    .map_err(|e| e.to_string())
 }
 
 pub fn search_files(

@@ -8,10 +8,12 @@ mod db;
 mod graph;
 mod logger;
 mod models;
+mod performance;
 mod preview;
 mod scanner;
 
 use models::{FileRecord, GraphPayload, GraphRequest, PreviewPayload, ScanProgress};
+use performance::{CacheStatus, PerformanceMetrics};
 
 const DB_FILE: &str = "orbit.db";
 const MAX_SCAN_ENTRIES: usize = 120_000;
@@ -85,6 +87,24 @@ fn list_children(
 }
 
 #[tauri::command]
+fn list_children_paginated(
+    parent_path: String,
+    offset: i64,
+    limit: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<FileRecord>, String> {
+    db::children_paginated(&state.db_path, &parent_path, offset, limit)
+}
+
+#[tauri::command]
+fn get_children_count(
+    parent_path: String,
+    state: State<'_, AppState>,
+) -> Result<i64, String> {
+    db::get_children_count(&state.db_path, &parent_path)
+}
+
+#[tauri::command]
 fn search_files(
     root_path: String,
     query: String,
@@ -131,6 +151,24 @@ fn get_log_path() -> Option<String> {
     logger::log_path().map(|path| path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn check_cache_status(root_path: String, state: State<'_, AppState>) -> Result<CacheStatus, String> {
+    let start = std::time::Instant::now();
+    let result = performance::check_cache_status(&state.db_path, &root_path);
+    performance::record_operation("check_cache_status", start.elapsed().as_millis() as i64);
+    result
+}
+
+#[tauri::command]
+fn get_performance_metrics() -> PerformanceMetrics {
+    performance::get_performance_metrics()
+}
+
+#[tauri::command]
+fn reset_performance_metrics() {
+    performance::reset_performance_metrics();
+}
+
 fn app_data_dir() -> Result<PathBuf, String> {
     dirs::data_local_dir()
         .map(|dir| dir.join("orbit"))
@@ -154,12 +192,17 @@ fn main() {
             default_root_path,
             scan_workspace,
             list_children,
+            list_children_paginated,
+            get_children_count,
             search_files,
             get_file,
             load_graph,
             get_preview,
             open_path,
-            get_log_path
+            get_log_path,
+            check_cache_status,
+            get_performance_metrics,
+            reset_performance_metrics
         ])
         .run(tauri::generate_context!())
         .expect("error while running Orbit");
