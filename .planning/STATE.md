@@ -178,6 +178,7 @@ Key decisions from v1.0:
 - **Milestone v1.0**: Complete - archived in `.planning/milestones/v1.0-ROADMAP.md`
 
 Phase evidence preserved for review.
+- **Cleanup**: Completed 2026-04-29 — removed 12 superseded PLAN.md files (kept SUMMARY.md files and Phase 2 archive)
 
 ---
 
