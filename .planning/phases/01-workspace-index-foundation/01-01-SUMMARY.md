@@ -20,7 +20,7 @@ Tauri 2 application foundation with React/TypeScript frontend, Rust backend, and
 - **SQLite integration** via rusqlite with WAL mode and performance pragmas
 - **Dependencies**: tauri, rusqlite, jwalk, chrono, serde, rfd, open, dirs
 
-### Frontend Infrastructure  
+### Frontend Infrastructure
 - **React 18 + TypeScript** application in `frontend/`
 - **Vite** build system with hot reload
 - **Graph visualization** via Graphology and Sigma.js

@@ -1,0 +1,18 @@
+{
+  "name": "orbit-file-intelligence-ide",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev:wayland",
+    "dev:wayland": "WINIT_UNIX_BACKEND=wayland GDK_BACKEND=wayland MOZ_ENABLE_WAYLAND=1 npm run tauri:dev",
+    "dev:x11": "WINIT_UNIX_BACKEND=x11 npm run tauri:dev",
+    "frontend:dev": "npm run dev --prefix frontend",
+    "frontend:build": "npm run build --prefix frontend",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}
