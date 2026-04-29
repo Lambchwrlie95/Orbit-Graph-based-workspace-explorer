@@ -1370,6 +1370,333 @@ button.secondary {
 }
 
 /* ============================================
+   CODE ANALYSIS PANEL STYLES
+   ============================================ */
+
+.code-analysis-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #1c2831;
+}
+
+.code-analysis-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.code-analysis-panel .panel-header h4 {
+  color: #8ca1af;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.code-analysis-panel .loading-indicator {
+  color: #20b8a5;
+  font-size: 11px;
+  animation: scanning 1.5s ease-in-out infinite;
+}
+
+.code-analysis-panel .refresh-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: #8ca1af;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.code-analysis-panel .refresh-btn:hover {
+  color: #e5edf4;
+}
+
+.code-analysis-panel .analysis-error {
+  color: #ff9c9c;
+  font-size: 12px;
+  padding: 8px;
+  background: rgba(255, 100, 100, 0.1);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.code-analysis-panel .analysis-empty {
+  color: #5a6b75;
+  font-size: 12px;
+  font-style: italic;
+  padding: 12px 0;
+  text-align: center;
+}
+
+/* Analysis Sections */
+.analysis-section {
+  margin-bottom: 8px;
+}
+
+.analysis-section .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #dbe7ee;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.analysis-section .section-header:hover {
+  background: #121d24;
+}
+
+.analysis-section .section-icon {
+  color: #8ca1af;
+  font-size: 10px;
+  width: 12px;
+}
+
+.analysis-section .section-header span:not(.section-icon) {
+  flex: 1;
+}
+
+.analysis-section .item-count {
+  color: #5a6b75;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.analysis-section .section-content {
+  padding: 8px 10px 8px 30px;
+}
+
+/* Git Status Styles */
+.git-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.git-status-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.git-status-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.git-diff-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.git-diff-stats .diff-additions {
+  color: #4ade80;
+}
+
+.git-diff-stats .diff-deletions {
+  color: #f87171;
+}
+
+/* Imports List Styles */
+.imports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.import-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.import-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8ca1af;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.import-group-icon {
+  font-size: 10px;
+}
+
+.import-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import-item {
+  display: flex;
+  align-items: center;
+}
+
+.import-link,
+.import-static {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.import-link {
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.import-link:hover {
+  background: #121d24;
+}
+
+.import-name {
+  color: #e5edf4;
+  font-weight: 500;
+}
+
+.import-path {
+  color: #5a6b75;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-link:hover .import-path {
+  color: #8ca1af;
+}
+
+/* Exports List Styles */
+.exports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.export-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8ca1af;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.export-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.export-item {
+  display: inline-flex;
+}
+
+.export-name {
+  padding: 4px 8px;
+  background: #121d24;
+  border-radius: 4px;
+  color: #dbe7ee;
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* Related Files Styles */
+.related-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.related-file-item {
+  display: flex;
+  align-items: center;
+}
+
+.related-file-link {
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #c4b5fd;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.related-file-link:hover {
+  background: #121d24;
+  color: #ddd6fe;
+}
+
+/* Empty List */
+.empty-list {
+  color: #5a6b75;
+  font-size: 12px;
+  font-style: italic;
+  padding: 12px 0;
+}
+
+/* ============================================
    CODE MODE STYLES
    ============================================ */
 
