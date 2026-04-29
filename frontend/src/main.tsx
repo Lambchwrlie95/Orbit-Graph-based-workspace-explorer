@@ -9,6 +9,7 @@ import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
 import { AssetMode } from "./components/AssetMode";
+import { ModeSwitcher } from "./components/ModeSwitcher";
 import { useDebounce } from "./hooks/useDebounce";
 import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
 import { useViewPersistence } from "./hooks/useViewPersistence";
@@ -16,14 +17,6 @@ import { ResponsivenessWarning } from "./utils/responsiveness";
 import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus, PerformanceMetrics } from "./types";
 import { shortPath, formatDate } from "./utils";
 import "./styles.css";
-
-const modeLabels: Array<[Mode, string]> = [
-  ["graph", "Graph"],
-  ["explorer", "Explorer"],
-  ["assets", "Assets"],
-  ["code", "Code"],
-  ["search", "Search"],
-];
 
 type ExplorerViewMode = "list" | "tree" | "grid" | "columns";
 
@@ -346,17 +339,10 @@ function App() {
       </header>
 
       {/* Mode Bar */}
-      <section className="modebar">
-        {modeLabels.map(([key, label]) => (
-          <button
-            key={key}
-            className={mode === key ? "active" : ""}
-            onClick={() => setMode(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </section>
+      <ModeSwitcher
+        currentMode={mode}
+        onModeChange={setMode}
+      />
 
       {/* Main Workspace */}
       <section className="workspace">

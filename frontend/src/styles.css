@@ -1320,3 +1320,51 @@ button.secondary {
   background: #1a3a3a;
   border-color: #20b8a5;
 }
+
+/* ============================================
+   MODE SWITCHER STYLES
+   ============================================ */
+
+.mode-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #1c2831;
+  padding: 0 18px;
+  background: transparent;
+}
+
+.mode-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #8ca1af;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-button:hover {
+  color: #dbe7ee;
+  background: #121d24;
+}
+
+.mode-button.active {
+  border-color: #20b8a5;
+  background: #0f3f3b;
+  color: #effffc;
+}
+
+.mode-icon {
+  flex-shrink: 0;
+}
+
+.mode-label {
+  white-space: nowrap;
+}
