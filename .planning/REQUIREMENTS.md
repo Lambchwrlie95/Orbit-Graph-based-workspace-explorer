@@ -21,29 +21,37 @@
 
 ### Explorer
 
-- [ ] **EXPL-01**: User can browse the active workspace in a tree view.
-- [ ] **EXPL-02**: User can browse the active workspace in a list view.
-- [ ] **EXPL-03**: User can select a file or folder from explorer views.
-- [ ] **EXPL-04**: User can open a selected file externally.
+- [x] **EXPL-01**: User can browse the active workspace in a tree view.
+- [x] **EXPL-02**: User can browse the active workspace in a list view.
+- [x] **EXPL-03**: User can select a file or folder from explorer views.
+- [x] **EXPL-04**: User can open a selected file externally.
+- [x] **EXPL-05**: User can browse the active workspace in a grid view with thumbnails.
+- [ ] **EXPL-06**: User can browse the active workspace in a columns view (Miller columns).
 
-### Inspector
+### Inspector (v1.0 Complete)
 
-- [ ] **INSP-01**: User can see selected item path, type, size, and modified date.
-- [ ] **INSP-02**: User can see available actions for the selected item.
-- [ ] **INSP-03**: User can see a basic preview for supported text/image file types.
+- [x] **INSP-01**: User can see selected item path, type, size, and modified date.
+- [x] **INSP-02**: User can see available actions for the selected item.
+- [x] **INSP-03**: User can see a basic preview for supported text/image file types.
 
-### Search
+### Inspector Enhancements (v2.0)
 
-- [ ] **SRCH-01**: User can search indexed files by filename.
-- [ ] **SRCH-02**: User can select a search result and inspect or open it.
+- [ ] **INSP-04**: Inspector shows code analysis (imports, exports, git status) for code files.
+- [ ] **INSP-05**: Inspector shows image analysis (dimensions, dominant colors, similar images) for image files.
+- [ ] **INSP-06**: Inspector shows markdown analysis (links, backlinks, headings) for markdown files.
 
-### Graph
+### Search (v1.0 Complete)
 
-- [ ] **GRPH-01**: User can view a simple scoped graph for the active workspace or selected folder.
-- [ ] **GRPH-02**: Orbit renders folder/file containment relationships as graph edges.
-- [ ] **GRPH-03**: User can click a graph node to update the inspector.
-- [ ] **GRPH-04**: User can double-click a graph node to open the file or focus the folder.
-- [ ] **GRPH-05**: Orbit enforces a normal graph node cap and clusters or summarizes oversized folders.
+- [x] **SRCH-01**: User can search indexed files by filename.
+- [x] **SRCH-02**: User can select a search result and inspect or open it.
+
+### Graph (v1.0 Complete)
+
+- [x] **GRPH-01**: User can view a simple scoped graph for the active workspace or selected folder.
+- [x] **GRPH-02**: Orbit renders folder/file containment relationships as graph edges.
+- [x] **GRPH-03**: User can click a graph node to update the inspector.
+- [x] **GRPH-04**: User can double-click a graph node to open the file or focus the folder.
+- [x] **GRPH-05**: Orbit enforces a normal graph node cap and clusters or summarizes oversized folders.
 
 ### Performance
 
@@ -51,33 +59,40 @@
 - [x] **PERF-02**: Orbit remains responsive while scans run in background Rust tasks.
 - [x] **PERF-03**: Orbit caches metadata in SQLite and reuses it across app launches.
 
-## v2 Requirements
+## v2.0 Requirements
 
-### Code Mode
+### Packaging (PKG)
 
-- **CODE-01**: User can open files in Monaco tabs.
-- **CODE-02**: User can edit and save text files.
-- **CODE-03**: User can preview Markdown.
-- **CODE-04**: Orbit can extract imports and exported symbols for common code file types.
+- [x] **PKG-01**: Orbit has desktop entry in application menu.
+- [x] **PKG-02**: User can right-click folder to open in Orbit.
+- [x] **PKG-03**: AppImage builds and runs correctly.
+- [x] **PKG-04**: Orbit displays proper icon in desktop environment.
 
-### Asset Mode
+### Code Mode (CODE)
 
-- **ASET-01**: User can browse images in a thumbnail grid.
-- **ASET-02**: Orbit can extract image dimensions and dominant colors.
-- **ASET-03**: Orbit can detect duplicate images.
-- **ASET-04**: User can copy asset paths and colors.
+- [ ] **CODE-01**: User can open files in Monaco tabs.
+- [ ] **CODE-02**: User can edit and save text files.
+- [ ] **CODE-03**: User can preview Markdown.
+- [ ] **CODE-04**: Orbit extracts imports and exported symbols for common code file types.
 
-### Relationship Intelligence
+### Asset Mode (ASET)
 
-- **RELA-01**: Orbit can detect markdown links and backlinks.
-- **RELA-02**: Orbit can detect code import relationships.
-- **RELA-03**: Orbit can detect duplicate files by hash.
-- **RELA-04**: User can tag files and view same-tag relationships.
+- [ ] **ASET-01**: User can browse images in a thumbnail grid.
+- [ ] **ASET-02**: Orbit extracts image dimensions and dominant colors.
+- [ ] **ASET-03**: Orbit detects duplicate images.
+- [ ] **ASET-04**: User can copy asset paths and colors.
 
-### Advanced Search
+### Relationship Intelligence (RELA)
 
-- **SADV-01**: Orbit supports SQLite FTS5 content search for indexed text files.
-- **SADV-02**: Orbit evaluates Tantivy only after SQLite search limits are measured.
+- [ ] **RELA-01**: Orbit detects markdown links and backlinks.
+- [ ] **RELA-02**: Orbit detects code import relationships.
+- [ ] **RELA-03**: Orbit detects duplicate files by hash.
+- [ ] **RELA-04**: User can tag files and view same-tag relationships.
+
+### Advanced Search (Deferred to v2.1+)
+
+- **SADV-01**: Orbit supports SQLite FTS5 content search for indexed text files. (v2.1+)
+- **SADV-02**: Orbit evaluates Tantivy only after SQLite search limits are measured. (v2.1+)
 
 ## Out of Scope
 
@@ -91,44 +106,73 @@
 
 ## Traceability
 
+### v1.0 Requirements (Complete)
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WORK-01 | Phase 1 | Complete |
-| WORK-02 | Phase 1 | Complete |
-| WORK-03 | Phase 1 | Complete |
-| INDX-01 | Phase 1 | Complete |
-| INDX-02 | Phase 1 | Complete |
-| INDX-03 | Phase 1 | Complete |
-| INDX-04 | Phase 1 | Complete |
-| INDX-05 | Phase 1 | Complete |
-| EXPL-01 | Phase 2 | Complete |
-| EXPL-02 | Phase 2 | Complete |
-| EXPL-03 | Phase 2 | Complete |
-| EXPL-04 | Phase 2 | Complete |
-| INSP-01 | Phase 2 | Complete |
-| INSP-02 | Phase 2 | Complete |
-| INSP-03 | Phase 2 | Complete |
-| SRCH-01 | Phase 2 | Complete |
-| SRCH-02 | Phase 2 | Complete |
-| GRPH-01 | Phase 3 | Complete |
-| GRPH-02 | Phase 3 | Complete |
-| GRPH-03 | Phase 3 | Complete |
-| GRPH-04 | Phase 3 | Complete |
-| GRPH-05 | Phase 3 | Complete |
-| PERF-01 | Phase 4 | Complete |
-| PERF-02 | Phase 4 | Complete |
-| PERF-03 | Phase 4 | Complete |
+| WORK-01 | Phase 1 | ✅ Complete |
+| WORK-02 | Phase 1 | ✅ Complete |
+| WORK-03 | Phase 1 | ✅ Complete |
+| INDX-01 | Phase 1 | ✅ Complete |
+| INDX-02 | Phase 1 | ✅ Complete |
+| INDX-03 | Phase 1 | ✅ Complete |
+| INDX-04 | Phase 1 | ✅ Complete |
+| INDX-05 | Phase 1 | ✅ Complete |
+| EXPL-01 | Phase 2 | ✅ Complete |
+| EXPL-02 | Phase 2 | ✅ Complete |
+| EXPL-03 | Phase 2 | ✅ Complete |
+| EXPL-04 | Phase 2 | ✅ Complete |
+| INSP-01 | Phase 2 | ✅ Complete |
+| INSP-02 | Phase 2 | ✅ Complete |
+| INSP-03 | Phase 2 | ✅ Complete |
+| SRCH-01 | Phase 2 | ✅ Complete |
+| SRCH-02 | Phase 2 | ✅ Complete |
+| GRPH-01 | Phase 3 | ✅ Complete |
+| GRPH-02 | Phase 3 | ✅ Complete |
+| GRPH-03 | Phase 3 | ✅ Complete |
+| GRPH-04 | Phase 3 | ✅ Complete |
+| GRPH-05 | Phase 3 | ✅ Complete |
+| PERF-01 | Phase 4 | ✅ Complete |
+| PERF-02 | Phase 4 | ✅ Complete |
+| PERF-03 | Phase 4 | ✅ Complete |
 
-**Coverage:**
-- v1 requirements: 25 total
-- Implemented: 25
-- Coverage: 100%
+**v1.0 Coverage:** 25/25 requirements (100%)
 
-**Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
-- Unmapped: 0
+### v2.0 Requirements (Planned)
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PKG-01 | Phase 5 | ✅ Complete |
+| PKG-02 | Phase 5 | ✅ Complete |
+| PKG-03 | Phase 5 | ✅ Complete |
+| PKG-04 | Phase 5 | ✅ Complete |
+| EXPL-05 | Phase 6 | ✅ Complete |
+| EXPL-06 | Phase 6 | 📋 Planned |
+| ASET-01 | Phase 7 | 📋 Planned |
+| ASET-02 | Phase 7 | 📋 Planned |
+| ASET-03 | Phase 7 | 📋 Planned |
+| ASET-04 | Phase 7 | 📋 Planned |
+| CODE-01 | Phase 8 | 📋 Planned |
+| CODE-02 | Phase 8 | 📋 Planned |
+| CODE-03 | Phase 8 | 📋 Planned |
+| CODE-04 | Phase 8 | 📋 Planned |
+| RELA-01 | Phase 8 | 📋 Planned |
+| RELA-02 | Phase 8 | 📋 Planned |
+| INSP-04 | Phase 8 | 📋 Planned |
+| INSP-05 | Phase 7/8 | 📋 Planned |
+| INSP-06 | Phase 8 | 📋 Planned |
+
+**v2.0 Coverage:** 19/19 requirements (100% Planned)
+
+### Coverage Summary
+
+| Milestone | Total | Complete | Status |
+|-----------|-------|----------|--------|
+| v1.0 Foundation | 25 | 25 | ✅ 100% |
+| v2.0 Desktop Experience | 19 | 1 | 🔨 5% |
+| **Overall** | **44** | **30** | **68%** |
 
 ---
-*Requirements defined: 2026-04-29*
-*Last updated: 2026-04-29 after initialization*
+*Requirements defined: 2026-04-29*  
+*v1.0 Complete: 2026-04-29*  
+*v2.0 Planned: 2026-04-29*
