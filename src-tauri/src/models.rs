@@ -28,6 +28,7 @@ pub struct FileRecord {
     pub modified_at: Option<i64>,
     pub created_at: Option<i64>,
     pub is_dir: bool,
+    pub metadata: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]

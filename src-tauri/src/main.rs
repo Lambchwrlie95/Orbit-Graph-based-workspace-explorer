@@ -4,9 +4,11 @@ use std::time::Instant;
 
 use tauri::State;
 
+mod color_extractor;
 mod commands;
 mod db;
 mod graph;
+mod image_analyzer;
 mod logger;
 mod models;
 mod performance;
@@ -228,6 +230,8 @@ fn main() {
             check_cache_status,
             get_performance_metrics,
             reset_performance_metrics,
+            commands::image_analysis::analyze_image_file,
+            commands::image_analysis::extract_colors,
             commands::thumbnail::ensure_thumbnail,
             commands::thumbnail::get_thumbnail_info,
             commands::thumbnail::delete_thumbnails,

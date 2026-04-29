@@ -76,7 +76,8 @@ pub fn init_database(db_path: &Path) -> Result<(), String> {
           is_dir INTEGER NOT NULL DEFAULT 0,
           is_symlink INTEGER NOT NULL DEFAULT 0,
           target_path TEXT,
-          last_seen_scan_id INTEGER
+          last_seen_scan_id INTEGER,
+          metadata TEXT
         );
 
         CREATE TABLE IF NOT EXISTS edges (
@@ -233,7 +234,7 @@ pub fn children_paginated(
     let mut stmt = conn
         .prepare(
             r#"
-            SELECT id, path, name, parent_path, extension, mime_type, size_bytes, modified_at, created_at, is_dir
+            SELECT id, path, name, parent_path, extension, mime_type, size_bytes, modified_at, created_at, is_dir, metadata
             FROM files
             WHERE parent_path = ?1
             ORDER BY is_dir DESC, name COLLATE NOCASE ASC
@@ -272,7 +273,7 @@ pub fn search_files(
     let mut stmt = conn
         .prepare(
             r#"
-            SELECT id, path, name, parent_path, extension, mime_type, size_bytes, modified_at, created_at, is_dir
+            SELECT id, path, name, parent_path, extension, mime_type, size_bytes, modified_at, created_at, is_dir, metadata
             FROM files
             WHERE (path = ?1 OR path LIKE ?2 ESCAPE '\') AND name LIKE ?3
             ORDER BY is_dir DESC, name COLLATE NOCASE ASC
@@ -297,7 +298,7 @@ pub fn get_file(db_path: &Path, path: &str) -> Result<Option<FileRecord>, String
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.query_row(
         r#"
-        SELECT id, path, name, parent_path, extension, mime_type, size_bytes, modified_at, created_at, is_dir
+        SELECT id, path, name, parent_path, extension, mime_type, size_bytes, modified_at, created_at, is_dir, metadata
         FROM files
         WHERE path = ?1
         "#,
@@ -320,6 +321,7 @@ fn file_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileRecord> {
         modified_at: row.get(7)?,
         created_at: row.get(8)?,
         is_dir: row.get::<_, i64>(9)? == 1,
+        metadata: row.get(10).ok(),
     })
 }
 
@@ -450,5 +452,42 @@ pub fn delete_thumbnails_for_file(db_path: &Path, file_id: i64) -> Result<(), St
         params![file_id],
     )
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn update_file_metadata(
+    db_path: &Path,
+    file_id: i64,
+    key: &str,
+    value: &str,
+) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    // Get existing metadata
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT metadata FROM files WHERE id = ?1",
+            params![file_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    
+    // Parse existing or create new
+    let mut metadata: serde_json::Value = existing
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    
+    // Update the key
+    metadata[key] = serde_json::Value::String(value.to_string());
+    
+    // Save back
+    let metadata_str = serde_json::to_string(&metadata).unwrap_or_default();
+    conn.execute(
+        "UPDATE files SET metadata = ?1 WHERE id = ?2",
+        params![metadata_str, file_id],
+    )
+    .map_err(|e| e.to_string())?;
+    
     Ok(())
 }
