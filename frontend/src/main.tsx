@@ -102,7 +102,7 @@ function App() {
           rootPath,
           scopePath,
           mode: "workspace",
-          limit: 1500,
+          limit: 200,
         },
       });
       setGraphPayload(payload);
@@ -194,12 +194,19 @@ function App() {
   };
 
   const handleGraphNodeSelect = async (path: string) => {
+    // Handle cluster nodes - they have synthetic paths
+    if (path.includes("/__cluster__")) {
+      const folderPath = path.replace("/__cluster__", "");
+      const record = await invoke<FileRecord | null>("get_file", { path: folderPath });
+      if (record) {
+        await selectRecord(record);
+      }
+      return;
+    }
+    
     const record = await invoke<FileRecord | null>("get_file", { path });
     if (record) {
       await selectRecord(record);
-      if (record.isDir) {
-        setCurrentPath(record.path);
-      }
     }
   };
 

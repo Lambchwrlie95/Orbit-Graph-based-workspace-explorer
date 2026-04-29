@@ -62,3 +62,10 @@ export interface GraphPayload {
 }
 
 export type Mode = "graph" | "explorer" | "assets" | "code" | "search";
+
+export interface GraphRequest {
+  rootPath: string;
+  scopePath?: string;
+  mode?: string;
+  limit?: number;
+}
