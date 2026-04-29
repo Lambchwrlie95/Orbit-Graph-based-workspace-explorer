@@ -26,7 +26,7 @@
 - [x] **EXPL-03**: User can select a file or folder from explorer views.
 - [x] **EXPL-04**: User can open a selected file externally.
 - [x] **EXPL-05**: User can browse the active workspace in a grid view with thumbnails.
-- [ ] **EXPL-06**: User can browse the active workspace in a columns view (Miller columns).
+- [x] **EXPL-06**: User can browse the active workspace in a columns view (Miller columns).
 
 ### Inspector (v1.0 Complete)
 
@@ -147,7 +147,7 @@
 | PKG-03 | Phase 5 | ✅ Complete |
 | PKG-04 | Phase 5 | ✅ Complete |
 | EXPL-05 | Phase 6 | ✅ Complete |
-| EXPL-06 | Phase 6 | 📋 Planned |
+| EXPL-06 | Phase 6 | ✅ Complete |
 | ASET-01 | Phase 7 | 📋 Planned |
 | ASET-02 | Phase 7 | 📋 Planned |
 | ASET-03 | Phase 7 | 📋 Planned |
@@ -169,8 +169,8 @@
 | Milestone | Total | Complete | Status |
 |-----------|-------|----------|--------|
 | v1.0 Foundation | 25 | 25 | ✅ 100% |
-| v2.0 Desktop Experience | 19 | 1 | 🔨 5% |
-| **Overall** | **44** | **30** | **68%** |
+| v2.0 Desktop Experience | 19 | 6 | 🔨 32% |
+| **Overall** | **44** | **31** | **70%** |
 
 ---
 *Requirements defined: 2026-04-29*  
