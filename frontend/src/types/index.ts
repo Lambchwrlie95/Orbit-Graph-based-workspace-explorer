@@ -36,6 +36,7 @@ export interface GraphNode {
   isDir: boolean;
   sizeBytes: number;
   extension?: string | null;
+  parentPath?: string | null;
   isCluster: boolean;
   childCount?: number | null;
   x?: number | null;

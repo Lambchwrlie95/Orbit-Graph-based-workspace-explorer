@@ -39,6 +39,7 @@ pub struct GraphNode {
     pub is_dir: bool,
     pub size_bytes: i64,
     pub extension: Option<String>,
+    pub parent_path: Option<String>,
     pub is_cluster: bool,
     pub child_count: Option<i64>,
     pub x: Option<f64>,

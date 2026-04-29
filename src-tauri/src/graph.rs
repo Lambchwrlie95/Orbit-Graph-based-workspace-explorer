@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use rusqlite::{params, Connection};
@@ -6,7 +6,8 @@ use rusqlite::{params, Connection};
 use crate::db;
 use crate::models::{GraphEdge, GraphNode, GraphPayload};
 
-const DEFAULT_NODE_LIMIT: i64 = 1_500;
+const DEFAULT_NODE_LIMIT: i64 = 200;
+const FOLDER_CLUSTER_THRESHOLD: i64 = 50;
 
 pub fn load_graph(
     db_path: &Path,
@@ -24,6 +25,8 @@ pub fn load_graph(
 
     let node_limit = limit.unwrap_or(DEFAULT_NODE_LIMIT).clamp(100, 2_000);
     let scope_prefix = db::child_prefix(&scope);
+    
+    // Get total count for capping info
     let total_in_scope: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM files WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\'",
@@ -32,18 +35,17 @@ pub fn load_graph(
         )
         .map_err(|e| e.to_string())?;
 
+    // Query nodes with folder-first, depth-first ordering
     let mut node_stmt = conn
         .prepare(
             r#"
-            SELECT id, name, path, is_dir, size_bytes, extension
+            SELECT id, name, path, is_dir, size_bytes, extension, parent_path
             FROM files
             WHERE path = ?1 OR path LIKE ?2 ESCAPE '\'
             ORDER BY
-              CASE
-                WHEN path = ?1 THEN 0
-                ELSE length(substr(path, length(?1) + 2)) - length(replace(substr(path, length(?1) + 2), '/', '')) + 1
-              END ASC,
+              CASE WHEN path = ?1 THEN 0 ELSE 1 END ASC,
               is_dir DESC,
+              length(substr(path, length(?1) + 2)) - length(replace(substr(path, length(?1) + 2), '/', '')) + 1 ASC,
               name COLLATE NOCASE ASC
             LIMIT ?3
             "#,
@@ -52,9 +54,10 @@ pub fn load_graph(
 
     let mut nodes = Vec::new();
     let mut selected_ids = HashSet::new();
+    let mut parent_child_counts: HashMap<i64, i64> = HashMap::new();
     let node_rows = node_stmt
         .query_map(
-            params![scope, db::child_prefix(&scope), node_limit],
+            params![scope, db::child_prefix(&scope), node_limit * 2],
             |row| {
                 Ok(GraphNode {
                     id: row.get(0)?,
@@ -63,6 +66,7 @@ pub fn load_graph(
                     is_dir: row.get::<_, i64>(3)? == 1,
                     size_bytes: row.get(4)?,
                     extension: row.get(5)?,
+                    parent_path: row.get(6)?,
                     is_cluster: false,
                     child_count: None,
                     x: None,
@@ -78,29 +82,102 @@ pub fn load_graph(
         nodes.push(node);
     }
 
-    if total_in_scope > node_limit {
-        let cluster_id = -1;
-        let omitted = total_in_scope - node_limit;
-        nodes.push(GraphNode {
-            id: cluster_id,
-            label: format!("{omitted} more"),
-            path: scope.clone(),
-            is_dir: true,
-            size_bytes: 0,
-            extension: None,
-            is_cluster: true,
-            child_count: Some(omitted),
-            x: None,
-            y: None,
-        });
-        if let Some(root_node_id) = selected_ids.iter().min().copied() {
-            // Negative ID keeps the summary edge separate from persisted DB edges.
-            selected_ids.insert(cluster_id);
-            let _ = root_node_id;
+    // Count children per parent for clustering
+    for node in &nodes {
+        if let Some(parent_id) = get_parent_id(&conn, &node.path)? {
+            *parent_child_counts.entry(parent_id).or_insert(0) += 1;
         }
     }
 
+    // Apply folder clustering for folders with >50 children
+    let mut cluster_id = -1_i64;
+    let mut clustered_nodes: Vec<GraphNode> = Vec::new();
+    let mut nodes_to_hide: HashSet<i64> = HashSet::new();
+    
+    for node in &nodes {
+        if let Some(&child_count) = parent_child_counts.get(&node.id) {
+            if child_count > FOLDER_CLUSTER_THRESHOLD {
+                // This is an oversized folder - keep it but we'll add a cluster node
+                clustered_nodes.push(node.clone());
+                
+                // Count how many children are in our visible set
+                let visible_children: Vec<&GraphNode> = nodes.iter()
+                    .filter(|n| {
+                        if let Some(parent_path) = &n.parent_path {
+                            parent_path == &node.path
+                        } else {
+                            false
+                        }
+                    })
+                    .collect();
+                
+                if visible_children.len() > FOLDER_CLUSTER_THRESHOLD as usize {
+                    // Hide children beyond the first 20, add cluster node
+                    let to_show = 20;
+                    let to_hide = visible_children.len() - to_show;
+                    
+                    for (idx, child) in visible_children.iter().enumerate() {
+                        if idx >= to_show {
+                            nodes_to_hide.insert(child.id);
+                        }
+                    }
+                    
+                    // Add cluster node
+                    clustered_nodes.push(GraphNode {
+                        id: cluster_id,
+                        label: format!("+{to_hide} more"),
+                        path: format!("{}/__cluster__", node.path),
+                        is_dir: true,
+                        size_bytes: 0,
+                        extension: None,
+                        parent_path: Some(node.path.clone()),
+                        is_cluster: true,
+                        child_count: Some(to_hide as i64),
+                        x: None,
+                        y: None,
+                    });
+                    selected_ids.insert(cluster_id);
+                    cluster_id -= 1;
+                }
+            } else {
+                clustered_nodes.push(node.clone());
+            }
+        } else {
+            clustered_nodes.push(node.clone());
+        }
+    }
+    
+    // Filter out hidden nodes
+    let final_nodes: Vec<GraphNode> = clustered_nodes
+        .into_iter()
+        .filter(|n| !nodes_to_hide.contains(&n.id))
+        .take(node_limit as usize)
+        .collect();
+    
+    // Rebuild selected_ids based on final nodes
+    let final_selected_ids: HashSet<i64> = final_nodes.iter().map(|n| n.id).collect();
+
+    // Build edges: containment relationships
     let mut edges = Vec::new();
+    let mut edge_id = 1_i64;
+    
+    // Generate synthetic containment edges
+    for node in &final_nodes {
+        if let Some(parent_id) = get_parent_id(&conn, &node.path)? {
+            if final_selected_ids.contains(&parent_id) {
+                edges.push(GraphEdge {
+                    id: edge_id,
+                    source_id: parent_id,
+                    target_id: node.id,
+                    edge_type: "contains".to_string(),
+                    weight: 1.0,
+                });
+                edge_id += 1;
+            }
+        }
+    }
+    
+    // Also query explicit edges from database
     let mut edge_stmt = conn
         .prepare(
             r#"
@@ -133,7 +210,7 @@ pub fn load_graph(
 
     for row in edge_rows {
         let edge = row.map_err(|e| e.to_string())?;
-        if selected_ids.contains(&edge.source_id) && selected_ids.contains(&edge.target_id) {
+        if final_selected_ids.contains(&edge.source_id) && final_selected_ids.contains(&edge.target_id) {
             edges.push(edge);
         }
     }
@@ -141,12 +218,33 @@ pub fn load_graph(
     Ok(GraphPayload {
         root_path: root,
         mode: mode.into(),
-        nodes: with_radial_positions(nodes),
+        nodes: with_radial_positions(final_nodes),
         edges,
         capped: total_in_scope > node_limit,
         node_limit,
         total_in_scope,
     })
+}
+
+fn get_parent_id(conn: &Connection, path: &str) -> Result<Option<i64>, String> {
+    let parent_path = Path::new(path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string());
+    
+    if let Some(parent) = parent_path {
+        let result: Result<i64, rusqlite::Error> = conn.query_row(
+            "SELECT id FROM files WHERE path = ?1",
+            params![parent],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(id) => Ok(Some(id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    } else {
+        Ok(None)
+    }
 }
 
 fn with_radial_positions(mut nodes: Vec<GraphNode>) -> Vec<GraphNode> {
