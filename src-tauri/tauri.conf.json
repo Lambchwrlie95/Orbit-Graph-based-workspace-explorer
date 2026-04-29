@@ -35,11 +35,19 @@
     "category": "System",
     "shortDescription": "Graph-first file intelligence IDE",
     "longDescription": "Orbit is a graph-first file intelligence IDE that helps you understand files through relationships: folders, imports, links, tags, assets, and recent work.",
+    "publisher": "Orbit",
+    "copyright": "Copyright (c) 2026",
+    "homepage": "https://orbit-app.dev",
     "deb": {
       "desktopTemplate": "./orbit.desktop"
     },
     "rpm": {
       "desktopTemplate": "./orbit.desktop"
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
     }
   }
 }
