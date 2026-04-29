@@ -39,6 +39,8 @@ function App() {
   const [scan, setScan] = useState<ScanProgress | null>(null);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
   const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics | null>(null);
+  const [expandedGraphFolders, setExpandedGraphFolders] = useState<string[]>([]);
+  const [isGraphLoading, setIsGraphLoading] = useState(false);
 
   // UI state
   const [status, setStatus] = useState("Ready");
@@ -131,8 +133,10 @@ function App() {
     }
   };
 
-  const loadGraph = async (scopePath: string) => {
+  const loadGraph = async (scopePath: string, expanded: string[] = expandedGraphFolders) => {
     if (!rootPath) return;
+    setIsGraphLoading(true);
+    const startTime = performance.now();
     try {
       setStatus("Loading graph...");
       const payload = await invoke<GraphPayload>("load_graph", {
@@ -141,17 +145,29 @@ function App() {
           scopePath,
           mode: "workspace",
           limit: 200,
+          expandedFolders: expanded,
         },
       });
       setGraphPayload(payload);
+      const duration = Math.round(performance.now() - startTime);
       setStatus(payload.capped 
-        ? `Graph capped at ${payload.nodeLimit} nodes` 
-        : `${payload.nodes.length} graph nodes`
+        ? `Graph capped at ${payload.nodeLimit} nodes (${duration}ms)` 
+        : `${payload.nodes.length} graph nodes (${duration}ms)`
       );
     } catch (err) {
       setError(String(err));
       setStatus("Error loading graph");
+    } finally {
+      setIsGraphLoading(false);
     }
+  };
+
+  // Handle cluster expansion
+  const handleExpandCluster = async (folderPath: string) => {
+    const newExpanded = [...expandedGraphFolders, folderPath];
+    setExpandedGraphFolders(newExpanded);
+    // Reload graph with expanded folders
+    await loadGraph(currentPath || rootPath, newExpanded);
   };
 
   const runSearch = async (searchQuery: string) => {
@@ -360,6 +376,9 @@ function App() {
                 setCurrentPath(path);
                 loadGraph(path);
               }}
+              onExpandCluster={handleExpandCluster}
+              expandedFolders={expandedGraphFolders}
+              isLoading={isGraphLoading}
             />
           )}
 

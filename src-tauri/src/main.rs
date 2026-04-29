@@ -131,8 +131,9 @@ fn get_file(path: String, state: State<'_, AppState>) -> Result<Option<FileRecor
 #[tauri::command]
 fn load_graph(request: GraphRequest, state: State<'_, AppState>) -> Result<GraphPayload, String> {
     logger::log_event(format!(
-        "graph load: root={}, scope={:?}, mode={:?}, limit={:?}",
-        request.root_path, request.scope_path, request.mode, request.limit
+        "graph load: root={}, scope={:?}, mode={:?}, limit={:?}, expanded={:?}",
+        request.root_path, request.scope_path, request.mode, request.limit, 
+        request.expanded_folders.as_ref().map(|v| v.len())
     ));
     let start = std::time::Instant::now();
     let result = graph::load_graph(
@@ -141,6 +142,7 @@ fn load_graph(request: GraphRequest, state: State<'_, AppState>) -> Result<Graph
         request.scope_path.as_deref(),
         request.mode.as_deref().unwrap_or("workspace"),
         request.limit,
+        request.expanded_folders.as_deref(),
     );
     performance::record_operation("load_graph", start.elapsed().as_millis() as i64);
     result

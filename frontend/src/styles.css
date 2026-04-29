@@ -767,6 +767,23 @@ button.secondary {
   color: #8ca1af;
 }
 
+/* Graph Overlay Badges */
+.expanded-badge {
+  background: #1a3a5c;
+  color: #7dd3fc;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.loading-indicator {
+  color: #20b8a5;
+  font-size: 11px;
+  margin-left: 8px;
+  animation: scanning 1.5s ease-in-out infinite;
+}
+
 /* Performance Metrics */
 .performance-metrics {
   font-size: 11px;

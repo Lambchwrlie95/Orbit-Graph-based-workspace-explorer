@@ -9,14 +9,18 @@ interface GraphViewProps {
   onSelectPath: (path: string) => void;
   onOpenPath?: (path: string) => void;
   onFocusFolder?: (path: string) => void;
+  onExpandCluster?: (folderPath: string) => void;
+  expandedFolders?: string[];
+  isLoading?: boolean;
 }
 
-export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: GraphViewProps) {
+export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster, expandedFolders = [], isLoading }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [expandingCluster, setExpandingCluster] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -89,7 +93,7 @@ export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: 
       }
     });
 
-    // Double-click handler - open file or focus folder
+    // Double-click handler - open file, focus folder, or expand cluster
     renderer.on("doubleClickNode", ({ node }) => {
       const path = graph.getNodeAttribute(node, "path") as string;
       const isDir = graph.getNodeAttribute(node, "isDir") as boolean;
@@ -97,13 +101,18 @@ export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: 
       
       if (!path) return;
       
-      // Handle cluster nodes
+      // Handle cluster nodes - expand them
       if (isCluster) {
-        // Navigate to parent folder of cluster
-        const parentPath = path.replace("/__cluster__", "");
-        if (onFocusFolder) {
-          onFocusFolder(parentPath);
+        const folderPath = path.replace("/__cluster__", "");
+        setExpandingCluster(folderPath);
+        if (onExpandCluster) {
+          onExpandCluster(folderPath);
+        } else if (onFocusFolder) {
+          // Fallback: focus the folder
+          onFocusFolder(folderPath);
         }
+        // Clear expanding state after animation
+        setTimeout(() => setExpandingCluster(null), 500);
         return;
       }
       
@@ -178,6 +187,7 @@ export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: 
     const clusterSummary = graph.getNodeAttribute(hoveredNode, "clusterSummary") as GraphNode["clusterSummary"];
     
     if (isCluster && clusterSummary) {
+      const isExpanding = expandingCluster === graph.getNodeAttribute(hoveredNode, "path")?.replace("/__cluster__", "");
       const lines = [
         `Cluster: ${clusterSummary.totalChildren} items hidden`,
         `Files: ${clusterSummary.fileCount}, Folders: ${clusterSummary.dirCount}`,
@@ -186,7 +196,7 @@ export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: 
       if (clusterSummary.topExtensions.length > 0) {
         lines.push(`Types: ${clusterSummary.topExtensions.slice(0, 3).join(", ")}`);
       }
-      lines.push("Double-click to expand");
+      lines.push(isExpanding ? "Expanding..." : "Double-click to expand");
       return lines.join("\n");
     }
     if (isCluster) return "Click to view folder contents\nDouble-click to expand";
@@ -207,6 +217,10 @@ export function GraphView({ payload, onSelectPath, onOpenPath, onFocusFolder }: 
         ) : (
           <span>Scoped view</span>
         )}
+        {expandedFolders.length > 0 && (
+          <span className="expanded-badge">{expandedFolders.length} expanded</span>
+        )}
+        {isLoading && <span className="loading-indicator">Loading...</span>}
       </div>
 
       {/* Zoom Controls */}

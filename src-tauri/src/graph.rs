@@ -15,6 +15,7 @@ pub fn load_graph(
     scope_path: Option<&str>,
     mode: &str,
     limit: Option<i64>,
+    expanded_folders: Option<&[String]>,
 ) -> Result<GraphPayload, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let root = canonicalize(root_path);
@@ -90,6 +91,11 @@ pub fn load_graph(
         }
     }
 
+    // Build expanded folders set
+    let expanded_set: HashSet<&str> = expanded_folders
+        .map(|folders| folders.iter().map(|s| s.as_str()).collect())
+        .unwrap_or_default();
+
     // Apply folder clustering for folders with >50 children
     let mut cluster_id = -1_i64;
     let mut clustered_nodes: Vec<GraphNode> = Vec::new();
@@ -97,8 +103,8 @@ pub fn load_graph(
     
     for node in &nodes {
         if let Some(&child_count) = parent_child_counts.get(&node.id) {
-            if child_count > FOLDER_CLUSTER_THRESHOLD {
-                // This is an oversized folder - keep it but we'll add a cluster node
+            if child_count > FOLDER_CLUSTER_THRESHOLD && !expanded_set.contains(node.path.as_str()) {
+                // This is an oversized folder that's not expanded - keep it but we'll add a cluster node
                 clustered_nodes.push(node.clone());
                 
                 // Get all children for this folder (for summary)
@@ -145,6 +151,7 @@ pub fn load_graph(
                     cluster_id -= 1;
                 }
             } else {
+                // Folder is either small or expanded - show all children
                 clustered_nodes.push(node.clone());
             }
         } else {

@@ -71,6 +71,29 @@ export interface GraphRequest {
   expandedFolders?: string[];
 }
 
+export interface ClusterSummary {
+  totalChildren: number;
+  fileCount: number;
+  dirCount: number;
+  totalSize: number;
+  topExtensions: string[];
+}
+
+export interface GraphNode {
+  id: number;
+  label: string;
+  path: string;
+  isDir: boolean;
+  sizeBytes: number;
+  extension?: string | null;
+  parentPath?: string | null;
+  isCluster: boolean;
+  childCount?: number | null;
+  x?: number | null;
+  y?: number | null;
+  clusterSummary?: ClusterSummary | null;
+}
+
 export interface CacheStatus {
   rootPath: string;
   fileCount: number;
