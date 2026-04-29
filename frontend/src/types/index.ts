@@ -68,4 +68,28 @@ export interface GraphRequest {
   scopePath?: string;
   mode?: string;
   limit?: number;
+  expandedFolders?: string[];
+}
+
+export interface CacheStatus {
+  rootPath: string;
+  fileCount: number;
+  lastScanTime?: number | null;
+  isFresh: boolean;
+  isStale: boolean;
+  staleReason?: string | null;
+  sampleChecked: number;
+  sampleChanged: number;
+}
+
+export interface SlowOperation {
+  name: string;
+  durationMs: number;
+  timestamp: number;
+}
+
+export interface PerformanceMetrics {
+  operationCount: number;
+  totalDurationMs: number;
+  slowOperations: SlowOperation[];
 }

@@ -7,8 +7,8 @@ import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
 import { useDebounce } from "./hooks/useDebounce";
-import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode } from "./types";
-import { shortPath } from "./utils";
+import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus, PerformanceMetrics } from "./types";
+import { shortPath, formatDate } from "./utils";
 import "./styles.css";
 
 const modeLabels: Array<[Mode, string]> = [
@@ -37,11 +37,14 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [graphPayload, setGraphPayload] = useState<GraphPayload | null>(null);
   const [scan, setScan] = useState<ScanProgress | null>(null);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
+  const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics | null>(null);
 
   // UI state
   const [status, setStatus] = useState("Ready");
   const [error, setError] = useState<string | null>(null);
   const [logPath, setLogPath] = useState<string | null>(null);
+  const [isCheckingCache, setIsCheckingCache] = useState(false);
 
   // Debounced search query
   const debouncedQuery = useDebounce(query, 300);
@@ -52,10 +55,45 @@ function App() {
       .then((path) => {
         setRootPath(path);
         setCurrentPath(path);
+        // Check cache status after setting root
+        checkCacheStatus(path);
       })
       .catch(() => undefined);
     invoke<string | null>("get_log_path").then(setLogPath).catch(() => undefined);
+    // Load performance metrics
+    loadPerformanceMetrics();
   }, []);
+
+  // Check cache status
+  const checkCacheStatus = async (path: string) => {
+    if (!path) return;
+    setIsCheckingCache(true);
+    try {
+      const status = await invoke<CacheStatus>("check_cache_status", { rootPath: path });
+      setCacheStatus(status);
+      if (status.isStale) {
+        setStatus(`Cache stale: ${status.staleReason}`);
+      } else if (status.isFresh) {
+        setStatus(`Cache fresh: ${status.fileCount.toLocaleString()} files`);
+      } else if (status.fileCount === 0) {
+        setStatus("No cached data - scan required");
+      }
+    } catch (err) {
+      console.error("Cache check failed:", err);
+    } finally {
+      setIsCheckingCache(false);
+    }
+  };
+
+  // Load performance metrics
+  const loadPerformanceMetrics = async () => {
+    try {
+      const metrics = await invoke<PerformanceMetrics>("get_performance_metrics");
+      setPerformanceMetrics(metrics);
+    } catch (err) {
+      console.error("Failed to load performance metrics:", err);
+    }
+  };
 
   // Load children when current path changes
   useEffect(() => {
@@ -166,12 +204,15 @@ function App() {
     setPreview(null);
     setScan(null);
     setStatus("Workspace selected");
+    // Check cache for new folder
+    await checkCacheStatus(selectedFolder);
   };
 
   const scanWorkspace = async () => {
     if (!rootPath) return;
     setError(null);
     setStatus("Scanning...");
+    const scanStartTime = performance.now();
     try {
       const progress = await invoke<ScanProgress>("scan_workspace", { rootPath });
       setScan(progress);
@@ -179,7 +220,11 @@ function App() {
       setLogPath(progress.logPath ?? logPath);
       await loadChildren(progress.rootPath);
       await loadGraph(progress.rootPath);
-      setStatus(`Scanned ${progress.scanned} entries in ${progress.durationMs}ms`);
+      // Refresh cache status after scan
+      await checkCacheStatus(progress.rootPath);
+      await loadPerformanceMetrics();
+      const totalDuration = Math.round(performance.now() - scanStartTime);
+      setStatus(`Scanned ${progress.scanned.toLocaleString()} entries in ${totalDuration}ms`);
     } catch (err) {
       setError(String(err));
       setStatus("Scan failed");
@@ -292,7 +337,16 @@ function App() {
           )}
 
           <h2>Status</h2>
-          <StatusBlock status={status} scan={scan} logPath={logPath} error={error} />
+          <StatusBlock 
+            status={status} 
+            scan={scan} 
+            logPath={logPath} 
+            error={error} 
+            cacheStatus={cacheStatus}
+            isCheckingCache={isCheckingCache}
+            performanceMetrics={performanceMetrics}
+            onRefreshCache={() => rootPath && checkCacheStatus(rootPath)}
+          />
         </aside>
 
         {/* Main Surface */}
@@ -393,12 +447,72 @@ interface StatusBlockProps {
   scan: ScanProgress | null;
   logPath: string | null;
   error: string | null;
+  cacheStatus: CacheStatus | null;
+  isCheckingCache: boolean;
+  performanceMetrics: PerformanceMetrics | null;
+  onRefreshCache: () => void;
 }
 
-function StatusBlock({ status, scan, logPath, error }: StatusBlockProps) {
+function StatusBlock({ 
+  status, 
+  scan, 
+  logPath, 
+  error, 
+  cacheStatus, 
+  isCheckingCache,
+  performanceMetrics,
+  onRefreshCache 
+}: StatusBlockProps) {
+  const getCacheStatusClass = () => {
+    if (!cacheStatus || cacheStatus.fileCount === 0) return "empty";
+    if (cacheStatus.isStale) return "stale";
+    if (cacheStatus.isFresh) return "fresh";
+    return "empty";
+  };
+
+  const getCacheLabel = () => {
+    if (isCheckingCache) return "Checking...";
+    if (!cacheStatus || cacheStatus.fileCount === 0) return "No cache";
+    if (cacheStatus.isStale) return "Stale";
+    if (cacheStatus.isFresh) return "Fresh";
+    return "Unknown";
+  };
+
   return (
     <div className="status-block">
-      <strong>{status}</strong>
+      <strong className={status.toLowerCase().includes("scanning") ? "scanning-indicator" : ""}>
+        {status}
+      </strong>
+      
+      {/* Cache Status */}
+      {cacheStatus && (
+        <div className="cache-section" style={{ marginTop: 12 }}>
+          <div className={`cache-status ${getCacheStatusClass()}`}>
+            <span>Cache: {getCacheLabel()}</span>
+          </div>
+          {cacheStatus.fileCount > 0 && (
+            <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              {cacheStatus.fileCount.toLocaleString()} files
+              {cacheStatus.lastScanTime && (
+                <span> • {formatDate(cacheStatus.lastScanTime)}</span>
+              )}
+            </p>
+          )}
+          {cacheStatus.isStale && cacheStatus.staleReason && (
+            <p className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+              {cacheStatus.staleReason}
+            </p>
+          )}
+          <button 
+            onClick={onRefreshCache}
+            disabled={isCheckingCache}
+            style={{ fontSize: 11, marginTop: 6, padding: "2px 8px", height: 24 }}
+          >
+            {isCheckingCache ? "Checking..." : "Refresh Check"}
+          </button>
+        </div>
+      )}
+
       {scan && (
         <dl>
           <dt>Scanned</dt>
@@ -409,6 +523,22 @@ function StatusBlock({ status, scan, logPath, error }: StatusBlockProps) {
           <dd>{scan.skippedUnchanged.toLocaleString()}</dd>
         </dl>
       )}
+
+      {/* Performance Metrics */}
+      {performanceMetrics && performanceMetrics.operationCount > 0 && (
+        <div className="performance-metrics">
+          <div className="metric">
+            <span>Operations:</span>
+            <span>{performanceMetrics.operationCount}</span>
+          </div>
+          {performanceMetrics.slowOperations.length > 0 && (
+            <div className="performance-warning">
+              ⚠ {performanceMetrics.slowOperations.length} slow ops
+            </div>
+          )}
+        </div>
+      )}
+
       {logPath && (
         <p className="muted" title={logPath}>
           Log: {shortPath(logPath)}
