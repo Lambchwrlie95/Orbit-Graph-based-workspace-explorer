@@ -1,12 +1,12 @@
 # Orbit Workbench
 
-Updated: 2026-05-01
+Updated: 2026-05-01 (revised with unified header bar)
 
 Orbit's app shell is graph-first. The center pane belongs to the graph; file browsing, search, asset browsing, inspection, and code editing are side-panel tools around that graph.
 
 ## Layout Contract
 
-- Top menu: thin desktop-style menu inspired by `graph-file-manager`, with File, View, Run, and Panels popovers.
+- **Unified Header Bar** (28px): Single compact bar containing branding ("Orbit"), workspace title (basename), actions (Open button, Search input, Scan button), and window controls (minimize/maximize/close). No native OS menu bar.
 - Left sidebar: Explorer, Search, Assets, and Status.
 - Center pane: Graph only.
 - Right sidebar: Inspector and Code.
@@ -42,6 +42,12 @@ Orbit's app shell is graph-first. The center pane belongs to the graph; file bro
 - `TAURI_COMMANDS` must stay aligned with `tauri::generate_handler![...]` in `src-tauri/src/main.rs`.
 - Command argument and result types live in the frontend type layer so command names, payloads, and result shapes are checked by TypeScript before runtime.
 - Run `npm run commands:check` after adding or removing a Tauri command.
+
+## Help System
+
+- **About Dialog**: Shows app version, description, and links (Website, GitHub).
+- **Keyboard Shortcuts Dialog**: Lists all available keyboard shortcuts.
+- Access via header search box area or planned menu integration.
 
 ## Current Gaps
 

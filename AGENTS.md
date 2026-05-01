@@ -32,6 +32,9 @@ Read these planning files before major work:
 ## UI Direction
 
 - Build the actual working app surface first, not a landing page.
-- The primary app shape is a thin sidebar, large central graph/explorer/editor surface, right inspector, and bottom results/logs/preview/terminal area.
+- The primary app shape is a unified header bar (28px), thin sidebar, large central graph/explorer/editor surface, right inspector, and bottom results/logs/preview/terminal area.
 - Modes: Graph, Explorer, Assets, Code, Search.
+- Frameless window with custom unified header containing: branding, workspace title, actions (Open/Search/Scan), and window controls.
+- No native OS menu bar — all actions accessible via header buttons or keyboard shortcuts.
 - Keep the UI efficient, keyboard-friendly, and visually polished without sacrificing density or responsiveness.
+- Performance via React.memo and code splitting rather than warning UI.

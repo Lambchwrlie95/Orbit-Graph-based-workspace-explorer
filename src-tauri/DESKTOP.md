@@ -4,7 +4,8 @@ This directory contains desktop integration files for Orbit.
 
 ## Files
 
-- `orbit.desktop` - Desktop entry for the application
+- `orbit.desktop` - Desktop entry for the release build
+- `orbit-dev.desktop` - Desktop entry for development mode (with hot reload)
 - `orbit-folder.desktop` - Context menu entry for folders
 - `icons/` - Application icons in various sizes
 
@@ -23,6 +24,17 @@ This will:
 - Install icons to `~/.local/share/icons/hicolor/`
 - Create a symlink at `~/.local/bin/orbit`
 - Update icon cache and desktop database
+
+### Dev Desktop Entry
+
+For development work with hot reload:
+
+```bash
+cp src-tauri/orbit-dev.desktop ~/.local/share/applications/
+update-desktop-database ~/.local/share/applications/
+```
+
+The dev entry launches `npm run dev` with terminal output for debugging.
 
 ### Manual Install
 
