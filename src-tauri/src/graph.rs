@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::cmp::Reverse;
 use std::path::Path;
 
 use rusqlite::{params, Connection};
@@ -299,7 +300,7 @@ fn compute_cluster_summary(children: &[&GraphNode]) -> ClusterSummary {
     
     // Sort by count and take top 5
     let mut ext_vec: Vec<(String, i64)> = ext_counts.into_iter().collect();
-    ext_vec.sort_by(|a, b| b.1.cmp(&a.1));
+    ext_vec.sort_by_key(|(_, count)| Reverse(*count));
     let top_extensions: Vec<String> = ext_vec.into_iter()
         .take(5)
         .map(|(ext, _)| ext)

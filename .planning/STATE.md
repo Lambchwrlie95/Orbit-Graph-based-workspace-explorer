@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Orbit Desktop Experience
-status: executing
-stopped_at: Completed Phase 7 Asset Mode
-last_updated: "2026-04-29T22:30:00Z"
-last_activity: 2026-04-29
+status: stabilizing
+stopped_at: Error sweep clean; graph runtime guard added
+last_updated: "2026-04-30T00:00:00Z"
+last_activity: 2026-04-30
 progress:
   total_phases: 8
-  completed_phases: 6
-  current_phase: 7
+  completed_phases: 7
+  current_phase: 8
   total_plans: 22
   completed_plans: 19
   percent: 86
@@ -19,10 +19,10 @@ progress:
 
 ## Milestone Status
 
-**Milestone**: v2.0 — Orbit Desktop Experience  
-**Status**: 🔨 **EXECUTING**  
-**Previous**: ✅ v1.0 Orbit Foundation — COMPLETE (2026-04-29)  
-**Next**: Complete Phase 5 (Packaging & Desktop Integration)
+**Milestone**: v2.0 — Orbit Desktop Experience
+**Status**: 🔧 **STABILIZING**
+**Previous**: ✅ v1.0 Orbit Foundation — COMPLETE (2026-04-29)
+**Next**: Add smoke coverage, then execute Phase 8 Code Mode & Enhanced Inspector
 
 ---
 
@@ -46,11 +46,11 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 
 ---
 
-## v2.0 Current State (EXECUTING)
+## v2.0 Current State (STABILIZING)
 
-**Milestone**: v2.0 — Desktop Experience  
-**Phase**: 7 — Complete  
-**Status**: Asset Mode (07-01, 07-02, 07-03) ✅
+**Milestone**: v2.0 — Desktop Experience
+**Phase**: Stabilization after Phase 7
+**Status**: Build/test/clippy baseline restored; visual workbench alignment started
 
 ### v2.0 Phases Overview
 
@@ -61,19 +61,20 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 | **7** | Asset Mode | 3 | Phase 6 | ✅ Complete (07-01, 07-02, 07-03) |
 | **8** | Code Mode & Enhanced Inspector | 4 | Phase 7 | 📋 Planning Complete |
 
-**Total v2.0 Plans**: 11 plans  
-**Total Requirements**: 10 new requirements  
+**Total v2.0 Plans**: 11 plans
+**Total Requirements**: 10 new requirements
 **Estimated Completion**: TBD
 
 ---
 
 ## Current Position
 
-**Current Phase**: 7 — Asset Mode  
-**Current Activity**: Complete — Thumbnails, image analysis, duplicate detection  
-**Last activity**: 2026-04-29 — Completed Phase 7 Asset Mode
+**Current Phase**: Stabilization before Phase 8
+**Current Activity**: Frontend build, Rust tests, and clippy all-targets pass; graph surface gained layout modes, filtering, minimap, legend, focus controls, stable Sigma hover/selection reducers, duplicate-edge protection, and a graph-local error boundary. Mode navigation is now sidebar-owned: Graph/Explorer/Assets/Search on the left, Code on the right inspector sidebar.
+**Last activity**: 2026-04-30 — Moved mode navigation to sidebars, completed error sweep, hardened GraphView runtime failure handling, and verified clean frontend/Rust baseline
+**Developer handoff**: See `.planning/HANDOFF.md` for the current baseline, dirty worktree notes, graph state, and next priorities.
 
-**v1.0 Progress**: [##########] 100% COMPLETE  
+**v1.0 Progress**: [##########] 100% COMPLETE
 **v2.0 Progress**: [#########░] 86% EXECUTING (11/13 plans)
 
 ---
@@ -138,9 +139,9 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (core value and architecture)  
-See: `.planning/ROADMAP.md` (v1.0 complete, v2.0 planned)  
-See: `.planning/REQUIREMENTS.md` (25 v1.0 req complete, 16 v2.0 req planned)  
+See: `.planning/PROJECT.md` (core value and architecture)
+See: `.planning/ROADMAP.md` (v1.0 complete, v2.0 planned)
+See: `.planning/REQUIREMENTS.md` (25 v1.0 req complete, 16 v2.0 req planned)
 See: `.planning/v1.0-COMPLETION.md` (milestone summary)
 
 **Core value:** Orbit makes local files understandable and actionable by showing the relationships that matter without overwhelming the user or their machine.
@@ -197,8 +198,11 @@ See: `.planning/v1.0-COMPLETION.md` (milestone summary)
 
 ## Blockers/Concerns
 
-- None currently
-- Recommendation: Complete Phase 5 before starting Phase 6 (natural dependency)
+- Build blockers from Phase 8/analysis work were fixed on 2026-04-30.
+- `npm run frontend:build` passes.
+- `cargo test` passes 12/12 without warnings.
+- `cargo clippy --all-targets -- -D warnings` passes.
+- Smoke tests are still needed around scan, graph load, thumbnail/image commands, and UI mode flows before treating the v2.0 claims as fully validated.
 
 ---
 
@@ -229,11 +233,12 @@ See: `.planning/v1.0-COMPLETION.md` (milestone summary)
 
 ## Session Continuity
 
-Last session: 2026-04-29  
-Stopped at: Completed Phase 7 Asset Mode  
+Last session: 2026-04-29
+Stopped at: Graph polish pass with build/test green
 Resume file: `.planning/phases/07-asset-mode/07-asset-mode-SUMMARY.md`
+Handoff file: `.planning/HANDOFF.md`
 
-Next: Execute Phase 8 — Code Mode & Enhanced Inspector
+Next: Add smoke tests, then execute Phase 8 — Code Mode & Enhanced Inspector
 
 ---
 
@@ -254,7 +259,7 @@ Next: Execute Phase 8 — Code Mode & Enhanced Inspector
 
 ---
 
-*State last updated: 2026-04-29*  
-*Milestone: v2.0 — Desktop Experience — EXECUTING*  
-*Phase 6: COMPLETE ✅*  
-*Next: Execute Phase 7 — Asset Mode*
+*State last updated: 2026-04-30*
+*Milestone: v2.0 — Desktop Experience — STABILIZING*
+*Phase 7: IMPLEMENTED, UAT/SMOKE PENDING*
+*Next: Add smoke tests, then execute Phase 8 — Code Mode & Enhanced Inspector*

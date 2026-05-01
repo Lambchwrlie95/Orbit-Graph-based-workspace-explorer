@@ -368,6 +368,58 @@ fn bool_to_int(value: bool) -> i64 {
     }
 }
 
+// Code analysis storage
+pub fn store_code_analysis(
+    db_path: &Path,
+    file_id: i64,
+    imports: &serde_json::Value,
+    exports: &serde_json::Value,
+) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        r#"
+        INSERT INTO code_analysis (file_id, imports, exports, analyzed_at)
+        VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+        ON CONFLICT(file_id) DO UPDATE SET
+            imports = excluded.imports,
+            exports = excluded.exports,
+            analyzed_at = excluded.analyzed_at
+        "#,
+        params![file_id, imports.to_string(), exports.to_string()],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn get_code_analysis(db_path: &Path, file_id: i64) -> Result<Option<(String, String)>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let result: Option<(String, String)> = conn
+        .query_row(
+            "SELECT imports, exports FROM code_analysis WHERE file_id = ?1",
+            params![file_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+pub fn clear_code_analysis_for_root(db_path: &Path, root_path: &str) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        r#"
+        DELETE FROM code_analysis
+        WHERE file_id IN (
+            SELECT id FROM files
+            WHERE path = ?1 OR path LIKE ?2 ESCAPE '\'
+        )
+        "#,
+        params![root_path, super::db::child_prefix(root_path)],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // Thumbnail operations
 pub struct ThumbnailRecord {
     pub id: i64,
@@ -384,7 +436,7 @@ pub fn get_thumbnail(db_path: &Path, file_id: i64, size: i32) -> Result<Option<T
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.query_row(
         r#"
-        SELECT id, file_id, size, path, 
+        SELECT id, file_id, size, path,
                CAST(strftime('%s', generated_at) AS INTEGER),
                file_modified_at, width, height
         FROM thumbnails WHERE file_id = ?1 AND size = ?2
@@ -485,7 +537,7 @@ pub fn update_file_metadata(
     value: &str,
 ) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
+
     // Get existing metadata
     let existing: Option<String> = conn
         .query_row(
@@ -495,15 +547,15 @@ pub fn update_file_metadata(
         )
         .optional()
         .map_err(|e| e.to_string())?;
-    
+
     // Parse existing or create new
     let mut metadata: serde_json::Value = existing
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_else(|| serde_json::json!({}));
-    
+
     // Update the key
     metadata[key] = serde_json::Value::String(value.to_string());
-    
+
     // Save back
     let metadata_str = serde_json::to_string(&metadata).unwrap_or_default();
     conn.execute(
@@ -511,6 +563,6 @@ pub fn update_file_metadata(
         params![metadata_str, file_id],
     )
     .map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }

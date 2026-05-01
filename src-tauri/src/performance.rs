@@ -40,28 +40,8 @@ pub struct SlowOperation {
 pub fn check_cache_status(db_path: &Path, root_path: &str) -> Result<CacheStatus, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
-    // Get file count
-    let file_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM files WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\'",
-            params![root_path, db::child_prefix(root_path)],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-
-    // Get last scan session
-    let last_scan: Option<(i64, String)> = conn
-        .query_row(
-            "SELECT finished_at, status FROM scan_sessions 
-             WHERE root_path = ?1 AND status = 'success'
-             ORDER BY finished_at DESC LIMIT 1",
-            params![root_path],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
-
-    let (last_scan_time, _) = last_scan.unzip();
+    let file_count = get_file_count(db_path, root_path)?;
+    let last_scan_time = get_last_scan_session(db_path, root_path)?.map(|(_, finished_at, _)| finished_at);
 
     // Check if cache is potentially stale by sampling files
     let (sample_checked, sample_changed) = if file_count > 0 {
@@ -159,7 +139,7 @@ fn check_sample_for_changes(
 /// Get the last successful scan session for a root path
 pub fn get_last_scan_session(db_path: &Path, root_path: &str) -> Result<Option<(i64, i64, i64)>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
+
     conn.query_row(
         "SELECT id, finished_at, scanned_count FROM scan_sessions 
          WHERE root_path = ?1 AND status = 'success'
@@ -227,6 +207,7 @@ pub fn reset_performance_metrics() {
 }
 
 /// Get operation statistics
+#[tauri::command]
 pub fn get_operation_stats() -> HashMap<String, (i64, i64, i64)> {
     // Returns: operation_name -> (count, total_ms, avg_ms)
     let mut stats: HashMap<String, (i64, i64, i64)> = HashMap::new();

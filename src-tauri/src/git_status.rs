@@ -28,8 +28,6 @@ pub enum GitStatus {
 
 impl From<Status> for GitStatus {
     fn from(status: Status) -> Self {
-        use Status::*;
-        
         if status.is_conflicted() {
             GitStatus::Conflicted
         } else if status.is_ignored() {
@@ -54,6 +52,7 @@ impl From<Status> for GitStatus {
 
 impl GitStatus {
     /// Get a display label for the status
+    #[allow(dead_code)]
     pub fn label(&self) -> &'static str {
         match self {
             GitStatus::Current => "Current",
@@ -70,6 +69,7 @@ impl GitStatus {
     }
 
     /// Get a short status character (like git status --short)
+    #[allow(dead_code)]
     pub fn short_status(&self) -> &'static str {
         match self {
             GitStatus::Current => " ",
@@ -127,13 +127,8 @@ pub fn find_repo_root(file_path: &Path) -> Option<std::path::PathBuf> {
     }
 }
 
-/// Get git status for a file, automatically finding the repo root
-pub fn get_git_status_auto(file_path: &Path) -> Option<FileGitStatus> {
-    let repo_root = find_repo_root(file_path)?;
-    get_file_status(&repo_root, file_path)
-}
-
 /// Get status for all files in a repository (for batch operations)
+#[allow(dead_code)]
 pub fn get_repo_status(repo_path: &Path) -> Result<Vec<(std::path::PathBuf, GitStatus)>, git2::Error> {
     let repo = Repository::open(repo_path)?;
     
@@ -157,6 +152,7 @@ pub fn get_repo_status(repo_path: &Path) -> Result<Vec<(std::path::PathBuf, GitS
 }
 
 /// Check if a file is tracked by git
+#[allow(dead_code)]
 pub fn is_tracked(file_path: &Path) -> Option<bool> {
     let repo_root = find_repo_root(file_path)?;
     let status = get_file_status(&repo_root, file_path)?;
@@ -185,6 +181,7 @@ pub fn get_diff_stats(repo_path: &Path, file_path: &Path) -> Option<(u32, u32)> 
     diff.foreach(
         &mut |_delta, _progress| true,
         None,
+        None,
         Some(&mut |_delta, _hunk, line| {
             match line.origin() {
                 '+' => additions += 1,
@@ -193,7 +190,6 @@ pub fn get_diff_stats(repo_path: &Path, file_path: &Path) -> Option<(u32, u32)> 
             }
             true
         }),
-        None,
     ).ok()?;
     
     Some((additions, deletions))
@@ -237,9 +233,6 @@ mod tests {
 
     #[test]
     fn test_find_repo_root_in_non_repo() {
-        // This should return None for non-git directories
-        let result = find_repo_root(Path::new("/tmp"));
-        // May or may not find a repo depending on the system
-        // Just ensure it doesn't panic
+        let _ = find_repo_root(Path::new("/tmp"));
     }
 }

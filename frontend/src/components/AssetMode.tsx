@@ -7,6 +7,7 @@ interface AssetModeProps {
   className?: string;
   files: FileRecord[];
   currentPath: string;
+  onSelect?: (record: FileRecord) => void;
 }
 
 const SUPPORTED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
@@ -15,6 +16,7 @@ export const AssetMode: React.FC<AssetModeProps> = ({
   className,
   files,
   currentPath,
+  onSelect,
 }) => {
   const { ensureThumbnail, isLoading, thumbnails, loadingCount } = useThumbnails();
   const [selectedSize, setSelectedSize] = useState<number>(256);
@@ -52,38 +54,30 @@ export const AssetMode: React.FC<AssetModeProps> = ({
     setVisibleRange({ start, end });
   };
 
-  const columns = Math.max(1, Math.floor((typeof window !== 'undefined' ? window.innerWidth - 400 : 800) / (selectedSize + 16)));
-
   return (
-    <div className={`flex flex-col h-full ${className || ''}`}>
-      {/* Header with controls */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-800">
-        <div className="flex items-center gap-3">
-          <ImageIcon className="w-5 h-5 text-indigo-400" />
-          <h2 className="text-sm font-medium text-gray-200">Asset Mode</h2>
-          <span className="text-xs text-gray-500">
+    <div className={`asset-mode ${className || ''}`}>
+      <div className="asset-header">
+        <div className="asset-title">
+          <ImageIcon className="asset-title-icon" size={16} />
+          <h2>Assets</h2>
+          <span className="asset-count">
             {imageFiles.length} images
           </span>
           {loadingCount > 0 && (
-            <span className="text-xs text-indigo-400">
+            <span className="asset-loading">
               ({loadingCount} generating...)
             </span>
           )}
         </div>
         
-        {/* Size selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">Size:</span>
-          <div className="flex bg-gray-700 rounded overflow-hidden">
+        <div className="asset-size-control">
+          <span>Size</span>
+          <div className="segmented-control">
             {[128, 256, 512].map(size => (
               <button
                 key={size}
                 onClick={() => setSelectedSize(size)}
-                className={`px-3 py-1.5 text-xs transition-colors ${
-                  selectedSize === size
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-300 hover:text-white hover:bg-gray-600'
-                }`}
+                className={selectedSize === size ? 'active' : ''}
               >
                 {size}px
               </button>
@@ -93,19 +87,15 @@ export const AssetMode: React.FC<AssetModeProps> = ({
       </div>
 
       {/* Grid */}
-      <div 
-        className="flex-1 overflow-auto p-4"
-        onScroll={handleScroll}
-      >
+      <div className="asset-grid-scroll" onScroll={handleScroll}>
         {imageFiles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <ImageIcon className="w-16 h-16 mb-4 opacity-50" />
-            <p className="text-sm">No images in current folder</p>
-            <p className="text-xs mt-2">Images will appear here when available</p>
+          <div className="asset-empty">
+            <ImageIcon size={48} />
+            <p>No images in current folder</p>
           </div>
         ) : (
           <div 
-            className="grid gap-4"
+            className="asset-grid"
             style={{ 
               gridTemplateColumns: `repeat(auto-fill, minmax(${selectedSize}px, 1fr))`,
             }}
@@ -116,38 +106,38 @@ export const AssetMode: React.FC<AssetModeProps> = ({
               const loading = isLoading(file.id, selectedSize);
 
               return (
-                <div
+                <button
                   key={file.id}
-                  className="group relative aspect-square bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500 transition-colors"
+                  className="asset-tile"
                   style={{ 
                     opacity: index >= visibleRange.start && index < visibleRange.end ? 1 : 0.5 
                   }}
+                  title={file.path}
+                  onClick={() => onSelect?.(file)}
                 >
                   {thumbUrl ? (
                     <img
                       src={thumbUrl}
                       alt={file.name}
-                      className="w-full h-full object-cover"
                       loading="lazy"
                     />
                   ) : loading ? (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-750">
-                      <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+                    <div className="asset-placeholder">
+                      <Loader2 className="spin" size={22} />
                     </div>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-750">
-                      <ImageIcon className="w-8 h-8 text-gray-600" />
+                    <div className="asset-placeholder">
+                      <ImageIcon size={28} />
                     </div>
                   )}
                   
-                  {/* Overlay with filename */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <p className="text-xs text-white font-medium truncate">{file.name}</p>
+                  <div className="asset-tile-caption">
+                    <p>{file.name}</p>
                     {file.extension && (
-                      <p className="text-[10px] text-gray-300 uppercase">{file.extension}</p>
+                      <span>{file.extension}</span>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -155,7 +145,7 @@ export const AssetMode: React.FC<AssetModeProps> = ({
       </div>
 
       {/* Status bar */}
-      <div className="px-4 py-2 border-t border-gray-700 bg-gray-800 text-xs text-gray-500 flex justify-between">
+      <div className="asset-status">
         <span>{currentPath || 'No workspace'}</span>
         <span>{imageFiles.length} images</span>
       </div>

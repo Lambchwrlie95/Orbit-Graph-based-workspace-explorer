@@ -5,9 +5,11 @@ use crate::thumbnail_generator::{ThumbnailGenerator, get_supported_sizes};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ThumbnailInfo {
+    pub id: i64,
     pub file_id: i64,
     pub size: u32,
     pub path: String,
+    pub generated_at: i64,
     pub width: i32,
     pub height: i32,
 }
@@ -66,9 +68,11 @@ pub fn get_thumbnail_info(
     let thumbs = crate::db::get_thumbnails_for_file(&state.db_path, file_id)?;
     
     Ok(thumbs.into_iter().map(|t| ThumbnailInfo {
+        id: t.id,
         file_id: t.file_id,
         size: t.size as u32,
         path: t.path,
+        generated_at: t.generated_at,
         width: t.width.unwrap_or(0),
         height: t.height.unwrap_or(0),
     }).collect())

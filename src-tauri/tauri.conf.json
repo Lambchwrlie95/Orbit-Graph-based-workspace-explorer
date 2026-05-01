@@ -12,11 +12,13 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Orbit",
         "width": 1280,
         "height": 820,
         "minWidth": 980,
-        "minHeight": 620
+        "minHeight": 620,
+        "decorations": false
       }
     ],
     "security": {
@@ -26,28 +28,18 @@
   "bundle": {
     "active": true,
     "targets": ["appimage", "deb", "rpm"],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.png"
-    ],
     "category": "System",
     "shortDescription": "Graph-first file intelligence IDE",
     "longDescription": "Orbit is a graph-first file intelligence IDE that helps you understand files through relationships: folders, imports, links, tags, assets, and recent work.",
     "publisher": "Orbit",
     "copyright": "Copyright (c) 2026",
     "homepage": "https://orbit-app.dev",
-    "deb": {
-      "desktopTemplate": "./orbit.desktop"
-    },
-    "rpm": {
-      "desktopTemplate": "./orbit.desktop"
-    },
-    "linux": {
-      "appimage": {
-        "bundleMediaFramework": false
-      }
-    }
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/256x256.png",
+      "icons/512x512.png"
+    ]
   }
 }

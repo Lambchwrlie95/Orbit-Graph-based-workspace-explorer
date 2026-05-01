@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { FileRecord } from "../types";
 import { fileTypeLabel, formatBytes, getParentPath } from "../utils";
 import { VirtualList } from "./VirtualList";
@@ -15,7 +15,7 @@ interface ExplorerListProps {
 const VIRTUAL_SCROLL_THRESHOLD = 50; // Use virtual scrolling for lists > 50 items
 const ITEM_HEIGHT = 36; // Height of each file row in pixels
 
-export function ExplorerList({
+function ExplorerListComponent({
   currentPath,
   rootPath,
   items,
@@ -134,3 +134,5 @@ function getFileIconClass(extension?: string | null): string {
   }
   return "";
 }
+
+export const ExplorerList = memo(ExplorerListComponent);

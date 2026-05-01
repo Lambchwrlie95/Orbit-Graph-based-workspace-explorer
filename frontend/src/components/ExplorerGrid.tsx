@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import React, { memo, useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { FileRecord } from "../types";
 import { getParentPath } from "../utils";
 import { GridItem, GridParentItem, IconSize } from "./GridItem";
@@ -51,7 +51,7 @@ const ICON_SIZE_TO_ITEM_HEIGHT: Record<IconSize, number> = {
  * - Keyboard navigation (arrow keys, Enter, Home, End)
  * - Parent folder navigation
  */
-export function ExplorerGrid({
+function ExplorerGridComponent({
   currentPath,
   rootPath,
   items,
@@ -301,4 +301,5 @@ export function ExplorerGrid({
   );
 }
 
+export const ExplorerGrid = memo(ExplorerGridComponent);
 export default ExplorerGrid;

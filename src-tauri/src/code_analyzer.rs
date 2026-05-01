@@ -63,13 +63,13 @@ fn analyze_javascript(content: &str) -> Option<CodeAnalysis> {
     // import * as name from 'module'
     // import defaultExport from 'module'
     let import_re = Regex::new(
-        r"import\s+(?:(\{[^}]+\})|(\*\s+as\s+\w+)|(\w+))\s+from\s+['\"]([^'\"]+)['\"]"
+        r#"import\s+(?:(\{[^}]+\})|(\*\s+as\s+\w+)|(\w+))\s+from\s+['"]([^'"]+)['"]"#
     ).ok()?;
 
     // Require pattern for CommonJS
     // const foo = require('module')
     let require_re = Regex::new(
-        r"(?:const|let|var)\s+(?:\{?\s*([^}]+)\s*\}?|\w+)\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        r#"(?:const|let|var)\s+(?:\{?\s*([^}]+)\s*\}?|\w+)\s*=\s*require\s*\(\s*['"]([^'"]+)['"]\s*\)"#
     ).ok()?;
 
     // Export patterns
@@ -158,8 +158,6 @@ fn analyze_javascript(content: &str) -> Option<CodeAnalysis> {
 fn classify_js_import(path: &str) -> ImportType {
     if path.starts_with('.') {
         ImportType::Local
-    } else if path.starts_with('@') || !path.contains('/') {
-        ImportType::Package
     } else if path.starts_with("node:") {
         ImportType::Std
     } else {
@@ -376,7 +374,7 @@ fn analyze_java(content: &str) -> Option<CodeAnalysis> {
         // Match imports
         if let Some(cap) = import_re.captures(line) {
             let full_path = cap.get(1)?.as_str();
-            let name = full_path.split('.').last()?.to_string();
+            let name = full_path.split('.').next_back()?.to_string();
             let import_type = classify_java_import(full_path);
 
             imports.push(Import {
@@ -434,7 +432,7 @@ fn analyze_go(content: &str) -> Option<CodeAnalysis> {
     // import "package"
     // import alias "package"
     // import ( ... )
-    let import_single_re = Regex::new(r"import\s+(?:\(\s*)?(?:(\w+)\s+)?[\"]([^\"]+)[\"]").ok()?;
+    let import_single_re = Regex::new(r#"import\s+(?:\(\s*)?(?:(\w+)\s+)?["]([^"]+)["]"#).ok()?;
 
     // Go exports (capitalized identifiers at package level)
     // func FuncName
@@ -465,7 +463,7 @@ fn analyze_go(content: &str) -> Option<CodeAnalysis> {
                 let path = cap.get(2)?.as_str().to_string();
                 let name = cap.get(1)
                     .map(|m| m.as_str().to_string())
-                    .or_else(|| path.split('/').last().map(|s| s.to_string()))
+                    .or_else(|| path.split('/').next_back().map(|s| s.to_string()))
                     .unwrap_or_else(|| path.clone());
                 
                 let import_type = classify_go_import(&path);

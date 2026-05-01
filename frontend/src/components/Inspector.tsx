@@ -1,8 +1,8 @@
-import React from "react";
-import { FileRecord, PreviewPayload } from "../types";
+import React, { memo } from "react";
+import { FileCode } from "lucide-react";
+import { FileRecord, Mode, PreviewPayload } from "../types";
+import { ModeSwitcher } from "./ModeSwitcher";
 import { formatBytes, formatDate, isTextFile, isImageFile } from "../utils";
-import { CodeAnalysisPanel } from "./inspector/CodeAnalysisPanel";
-import { isCodeFile } from "../hooks/useCodeAnalysis";
 
 interface InspectorProps {
   record: FileRecord | null;
@@ -10,12 +10,164 @@ interface InspectorProps {
   isLoadingPreview?: boolean;
   onOpen: (path: string) => void;
   onNavigate?: (path: string) => void;
+  onEdit?: (record: FileRecord) => void;
+  currentMode: Mode;
+  onModeChange: (mode: Mode) => void;
 }
 
-export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigate, onEdit }: InspectorProps) {
+// Text/code file extensions that can be edited
+const EDITABLE_EXTENSIONS = new Set([
+  // TypeScript/JavaScript
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  // Python
+  '.py', '.pyw', '.pyi',
+  // Rust
+  '.rs',
+  // Go
+  '.go',
+  // Java
+  '.java', '.kt', '.scala',
+  // C/C++
+  '.c', '.cpp', '.cc', '.h', '.hpp',
+  // C#
+  '.cs',
+  // Ruby
+  '.rb',
+  // PHP
+  '.php',
+  // Swift
+  '.swift',
+  // Shell
+  '.sh', '.bash', '.zsh',
+  // Config/Data
+  '.json', '.yaml', '.yml', '.toml', '.xml', '.ini', '.conf', '.cfg',
+  // Markdown
+  '.md', '.mdx',
+  // CSS/SCSS
+  '.css', '.scss', '.sass', '.less',
+  // HTML
+  '.html', '.htm', '.svg',
+  // SQL
+  '.sql',
+  // GraphQL
+  '.graphql', '.gql',
+  // Lua
+  '.lua',
+  // Perl
+  '.pl',
+  // R
+  '.r', '.R',
+  // Julia
+  '.jl',
+  // Dart
+  '.dart',
+  // Elixir
+  '.ex', '.exs',
+  // Erlang
+  '.erl',
+  // Haskell
+  '.hs',
+  // Clojure
+  '.clj', '.cljs',
+  // F#
+  '.fs',
+  // PowerShell
+  '.ps1', '.psm1',
+  // Batch
+  '.bat', '.cmd',
+  // Log/Text
+  '.log', '.txt',
+]);
+
+// Files without extensions that can be edited
+const EDITABLE_FILENAMES = new Set([
+  'dockerfile',
+  'makefile',
+  'makefile.am',
+  'makefile.in',
+  'cmakelists.txt',
+  'license',
+  'readme',
+  'changelog',
+  'authors',
+  'contributors',
+  'copying',
+  'install',
+  'configure',
+  'rakefile',
+  'gemfile',
+  'procfile',
+  '.gitignore',
+  '.gitattributes',
+  '.dockerignore',
+  '.editorconfig',
+  '.eslintignore',
+  '.prettierignore',
+  '.npmignore',
+  '.yarnignore',
+  '.nvmrc',
+  '.node-version',
+  '.python-version',
+  '.ruby-version',
+  '.tool-versions',
+  'manifest',
+  'robots.txt',
+  'humans.txt',
+  'sitemap.xml',
+]);
+
+/**
+ * Check if a file can be edited in the code editor
+ */
+function isEditableFile(file: FileRecord): boolean {
+  if (file.isDir) {
+    return false;
+  }
+
+  const fileName = file.name.toLowerCase();
+
+  // Check for editable filenames (no extension or special names)
+  if (EDITABLE_FILENAMES.has(fileName)) {
+    return true;
+  }
+
+  // Check extension
+  const lastDotIndex = file.name.lastIndexOf('.');
+  if (lastDotIndex === -1) {
+    // No extension - allow editing (likely a script)
+    return true;
+  }
+
+  const extension = file.name.slice(lastDotIndex).toLowerCase();
+  return EDITABLE_EXTENSIONS.has(extension);
+}
+
+function InspectorComponent({
+  record,
+  preview,
+  isLoadingPreview,
+  onOpen,
+  onNavigate,
+  onEdit,
+  currentMode,
+  onModeChange,
+}: InspectorProps) {
+  const codeTab = (
+    <>
+      <h2>Code</h2>
+      <ModeSwitcher
+        currentMode={currentMode}
+        onModeChange={onModeChange}
+        modes={["code"]}
+        className="inspector-nav"
+      />
+    </>
+  );
+
   if (!record) {
     return (
       <aside className="inspector">
+        {codeTab}
         <h2>Inspector</h2>
         <div className="empty-state small">Select a file or folder to view details</div>
       </aside>
@@ -26,6 +178,7 @@ export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigat
 
   return (
     <aside className="inspector">
+      {codeTab}
       <h2>Inspector</h2>
 
       <div className="record-header">
@@ -76,12 +229,12 @@ export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigat
             {record.isDir ? "Open Folder" : "Open File"}
           </button>
           {!record.isDir && onEdit && isEditableFile(record) && (
-            <button 
+            <button
               className="secondary"
               onClick={() => onEdit(record)}
               title="Edit in Code Mode"
             >
-              <FileCode size={14} style={{ marginRight: '4px' }} />
+              <FileCode size={14} style={{ marginRight: '4px', display: 'inline' }} />
               Edit
             </button>
           )}
@@ -110,14 +263,6 @@ export function Inspector({ record, preview, isLoadingPreview, onOpen, onNavigat
         ) : preview ? (
           <PreviewSection preview={preview} />
         ) : null
-      )}
-
-      {/* Code Analysis Panel */}
-      {record && !record.isDir && isCodeFile(record.path) && (
-        <CodeAnalysisPanel
-          filePath={record.path}
-          onOpenFile={onOpen}
-        />
       )}
     </aside>
   );
@@ -162,3 +307,6 @@ function PreviewSection({ preview }: PreviewSectionProps) {
     </div>
   );
 }
+
+export const Inspector = memo(InspectorComponent);
+export default Inspector;

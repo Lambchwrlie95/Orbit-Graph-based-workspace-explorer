@@ -8,16 +8,17 @@ import { ExplorerColumns } from "./components/ExplorerColumns";
 import { SearchPanel } from "./components/SearchPanel";
 import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AssetMode } from "./components/AssetMode";
 import { CodeMode, isEditableFile } from "./components/CodeMode";
 import { useEditorStore } from "./stores/editorStore";
 import { useOpenFiles } from "./hooks/useOpenFiles";
 import { ModeSwitcher } from "./components/ModeSwitcher";
+import { TitleBar } from "./components/TitleBar";
 import { useDebounce } from "./hooks/useDebounce";
-import { usePerformanceMonitor } from "./hooks/usePerformanceMonitor";
 import { useViewPersistence } from "./hooks/useViewPersistence";
-import { ResponsivenessWarning } from "./utils/responsiveness";
-import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus, PerformanceMetrics } from "./types";
+import { FolderOpen } from "lucide-react";
+import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus } from "./types";
 import { shortPath, formatDate } from "./utils";
 import "./styles.css";
 
@@ -47,7 +48,6 @@ function App() {
   const [graphPayload, setGraphPayload] = useState<GraphPayload | null>(null);
   const [scan, setScan] = useState<ScanProgress | null>(null);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
-  const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetrics | null>(null);
   const [expandedGraphFolders, setExpandedGraphFolders] = useState<string[]>([]);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -80,25 +80,7 @@ function App() {
     }
   }, [openFileInEditor]);
 
-  // Performance monitoring (only in graph mode)
-  const { fps, isPoorPerformance, slowRenderCount, resetMetrics } = usePerformanceMonitor({
-    monitorFps: mode === "graph",
-    monitorLongTasks: true,
-    slowRenderThreshold: 100,
-    onLowFps: (lowFps) => {
-      console.warn(`[Performance] Low FPS detected: ${lowFps}`);
-    },
-    onSlowRender: (duration, component) => {
-      console.warn(`[Performance] Slow render in ${component}: ${duration}ms`);
-    },
-  });
 
-  // Reset metrics when switching to graph mode
-  useEffect(() => {
-    if (mode === "graph") {
-      resetMetrics();
-    }
-  }, [mode, resetMetrics]);
 
   // Initialize
   useEffect(() => {
@@ -111,8 +93,6 @@ function App() {
       })
       .catch(() => undefined);
     invoke<string | null>("get_log_path").then(setLogPath).catch(() => undefined);
-    // Load performance metrics
-    loadPerformanceMetrics();
   }, []);
 
   // Check cache status
@@ -133,16 +113,6 @@ function App() {
       console.error("Cache check failed:", err);
     } finally {
       setIsCheckingCache(false);
-    }
-  };
-
-  // Load performance metrics
-  const loadPerformanceMetrics = async () => {
-    try {
-      const metrics = await invoke<PerformanceMetrics>("get_performance_metrics");
-      setPerformanceMetrics(metrics);
-    } catch (err) {
-      console.error("Failed to load performance metrics:", err);
     }
   };
 
@@ -297,7 +267,6 @@ function App() {
       await loadGraph(progress.rootPath);
       // Refresh cache status after scan
       await checkCacheStatus(progress.rootPath);
-      await loadPerformanceMetrics();
       const totalDuration = Math.round(performance.now() - scanStartTime);
       setStatus(`Scanned ${progress.scanned.toLocaleString()} entries in ${totalDuration}ms`);
     } catch (err) {
@@ -312,6 +281,9 @@ function App() {
       setMode("search");
     }
   };
+
+  const isTauriRuntime =
+    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
   const handleGraphNodeSelect = async (path: string) => {
     // Handle cluster nodes - they have synthetic paths
@@ -330,8 +302,14 @@ function App() {
     }
   };
 
+  // Extract workspace name from rootPath
+  const workspaceName = rootPath ? rootPath.split("/").pop() || rootPath : undefined;
+
   return (
     <main className="app-shell">
+      {/* Title Bar */}
+      <TitleBar workspaceName={workspaceName} />
+
       {/* Top Bar */}
       <header className="topbar">
         <div className="brand">
@@ -341,7 +319,11 @@ function App() {
             <p>{rootPath ? shortPath(rootPath) : "No workspace"}</p>
           </div>
         </div>
+        {isTauriRuntime ? <div className="topbar-drag-fill" data-tauri-drag-region /> : null}
         <div className="top-actions">
+          <button type="button" onClick={chooseFolder}>
+            Open Folder
+          </button>
           <input
             className="search-input"
             value={query}
@@ -354,37 +336,46 @@ function App() {
             }}
             placeholder="Search files..."
           />
-          <button onClick={() => setMode("search")}>Search</button>
-          <button onClick={chooseFolder}>Open Folder</button>
-          <button className="primary" onClick={scanWorkspace}>Scan</button>
+          <button type="button" className="primary" onClick={scanWorkspace}>
+            Scan
+          </button>
         </div>
       </header>
-
-      {/* Mode Bar */}
-      <ModeSwitcher
-        currentMode={mode}
-        onModeChange={setMode}
-      />
 
       {/* Main Workspace */}
       <section className="workspace">
         {/* Sidebar */}
         <aside className="sidebar">
           <h2>Workspace</h2>
-          <button
-            className="path-chip"
-            onClick={() => rootPath && setCurrentPath(rootPath)}
-          >
-            {shortPath(rootPath) || "Choose folder"}
-          </button>
-
-          <h2>Current</h2>
-          <button
-            className="path-chip"
-            onClick={() => currentPath && setMode("explorer")}
-          >
-            {shortPath(currentPath) || "—"}
-          </button>
+          <div className="sidebar-mode-row">
+            <ModeSwitcher
+              currentMode={mode}
+              onModeChange={setMode}
+              modes={["graph", "explorer", "assets", "search"]}
+              variant="toolbar"
+              className="sidebar-mode-toolbar"
+              toolbarLeading={
+                <button
+                  type="button"
+                  className="sidebar-workspace-folder"
+                  onClick={() => {
+                    if (rootPath) setCurrentPath(rootPath);
+                    else void chooseFolder();
+                  }}
+                  title={
+                    rootPath
+                      ? `${shortPath(rootPath)} — workspace root (click)`
+                      : "Choose folder"
+                  }
+                  aria-label={
+                    rootPath ? "Go to workspace root" : "Choose folder"
+                  }
+                >
+                  <FolderOpen className="sidebar-workspace-folder-icon" size={14} strokeWidth={1.75} aria-hidden />
+                </button>
+              }
+            />
+          </div>
 
           <h2>View</h2>
           {mode === "explorer" && (
@@ -417,34 +408,43 @@ function App() {
           )}
 
           <h2>Status</h2>
-          <StatusBlock 
-            status={status} 
-            scan={scan} 
-            logPath={logPath} 
-            error={error} 
+          <StatusBlock
+            status={status}
+            scan={scan}
+            logPath={logPath}
+            error={error}
             cacheStatus={cacheStatus}
             isCheckingCache={isCheckingCache}
-            performanceMetrics={performanceMetrics}
             onRefreshCache={() => rootPath && checkCacheStatus(rootPath)}
-            fps={mode === "graph" ? fps : null}
           />
         </aside>
 
         {/* Main Surface */}
         <section className="main-surface">
           {mode === "graph" && (
-            <GraphView
-              payload={graphPayload}
-              onSelectPath={handleGraphNodeSelect}
-              onOpenPath={openPath}
-              onFocusFolder={(path) => {
-                setCurrentPath(path);
-                loadGraph(path);
-              }}
-              onExpandCluster={handleExpandCluster}
-              expandedFolders={expandedGraphFolders}
-              isLoading={isGraphLoading}
-            />
+            <ErrorBoundary
+              fallbackTitle="Graph unavailable"
+              resetKey={[
+                currentPath,
+                graphPayload?.nodes.length ?? 0,
+                graphPayload?.edges.length ?? 0,
+                expandedGraphFolders.join("|"),
+              ].join(":")}
+            >
+              <GraphView
+                payload={graphPayload}
+                selectedPath={selected?.path}
+                onSelectPath={handleGraphNodeSelect}
+                onOpenPath={openPath}
+                onFocusFolder={(path) => {
+                  setCurrentPath(path);
+                  loadGraph(path);
+                }}
+                onExpandCluster={handleExpandCluster}
+                expandedFolders={expandedGraphFolders}
+                isLoading={isGraphLoading}
+              />
+            </ErrorBoundary>
           )}
 
           {mode === "explorer" && (
@@ -537,12 +537,12 @@ function App() {
             <AssetMode
               files={children}
               currentPath={currentPath}
-              className="flex-1"
+              onSelect={selectRecord}
             />
           )}
 
           {mode === "code" && (
-            <CodeMode className="flex-1" />
+            <CodeMode />
           )}
         </section>
 
@@ -554,21 +554,19 @@ function App() {
           onOpen={openPath}
           onNavigate={setCurrentPath}
           onEdit={handleOpenInEditor}
+          currentMode={mode}
+          onModeChange={setMode}
         />
       </section>
 
-      {/* Performance Warning */}
-      <ResponsivenessWarning
-        fps={fps}
-        slowRenderCount={slowRenderCount}
-        onOptimize={() => {
-          // Reset graph view to improve performance
-          setExpandedGraphFolders([]);
-          if (currentPath) {
-            loadGraph(currentPath, []);
-          }
-        }}
-      />
+      <footer className="statusbar">
+        <span>{mode}</span>
+        <span title={status}>{status}</span>
+        <span>{selected ? selected.name : "No selection"}</span>
+        <span>{cacheStatus?.fileCount ? `${cacheStatus.fileCount.toLocaleString()} indexed` : "No cache"}</span>
+        {logPath && <span title={logPath}>Log {shortPath(logPath)}</span>}
+      </footer>
+
     </main>
   );
 }
@@ -580,21 +578,17 @@ interface StatusBlockProps {
   error: string | null;
   cacheStatus: CacheStatus | null;
   isCheckingCache: boolean;
-  performanceMetrics: PerformanceMetrics | null;
   onRefreshCache: () => void;
-  fps: number | null;
 }
 
-function StatusBlock({ 
-  status, 
-  scan, 
-  logPath, 
-  error, 
-  cacheStatus, 
+function StatusBlock({
+  status,
+  scan,
+  logPath,
+  error,
+  cacheStatus,
   isCheckingCache,
-  performanceMetrics,
   onRefreshCache,
-  fps,
 }: StatusBlockProps) {
   const getCacheStatusClass = () => {
     if (!cacheStatus || cacheStatus.fileCount === 0) return "empty";
@@ -655,31 +649,6 @@ function StatusBlock({
           <dt>Skipped</dt>
           <dd>{scan.skippedUnchanged.toLocaleString()}</dd>
         </dl>
-      )}
-
-      {/* Performance Metrics */}
-      {performanceMetrics && performanceMetrics.operationCount > 0 && (
-        <div className="performance-metrics">
-          <div className="metric">
-            <span>Operations:</span>
-            <span>{performanceMetrics.operationCount}</span>
-          </div>
-          {performanceMetrics.slowOperations.length > 0 && (
-            <div className="performance-warning">
-              ⚠ {performanceMetrics.slowOperations.length} slow ops
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* FPS Counter (Graph Mode) */}
-      {fps !== null && (
-        <div className="performance-metrics">
-          <div className="metric">
-            <span>FPS:</span>
-            <span style={{ color: fps < 30 ? '#fbbf24' : '#86efac' }}>{fps}</span>
-          </div>
-        </div>
       )}
 
       {logPath && (

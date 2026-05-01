@@ -1,14 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-/**
- * File editing commands for the Monaco Editor integration
- * 
- * Provides safe file read/write operations with:
- * - Path validation to prevent directory traversal
- * - Workspace scope enforcement
- * - Error handling with descriptive messages
- */
+// File editing commands for the Monaco Editor integration.
+// These provide scoped validation and descriptive errors for Monaco reads/writes.
 
 /// Read file content for editing
 /// 

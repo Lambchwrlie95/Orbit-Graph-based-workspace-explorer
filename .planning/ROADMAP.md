@@ -4,6 +4,8 @@
 
 Orbit v1 builds the real foundation for a graph-first file intelligence IDE. The path starts with a reliable Tauri/Rust/SQLite scanner, then adds practical explorer/search/inspector workflows, then ships a scoped Sigma/Graphology graph, and finally hardens performance safeguards so large local folders do not break the experience.
 
+**Developer handoff:** current implementation status, validation commands, dirty worktree notes, and next priorities are summarized in `.planning/HANDOFF.md`.
+
 ## Phases
 
 **Phase Numbering:**
@@ -114,7 +116,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 All 4 phases of Orbit v1.0 Foundation have been completed:
 - ✅ **25/25 requirements** implemented across all phases
 - ✅ **11/11 plans** executed and committed
-- ✅ All success criteria verified
+- Historical phase artifacts claim success criteria were verified. Current baseline was rechecked on 2026-04-30 with `npm run frontend:build` and `cargo test`; deeper UAT/smoke coverage is still pending.
 
 ### Next Steps
 1. ~~Manual UAT (User Acceptance Testing)~~
@@ -135,7 +137,7 @@ All 4 phases of Orbit v1.0 Foundation have been completed:
 |-------|------|------|--------|
 | **5** | Packaging & Desktop Integration | Desktop entries, AppImage, Linux integration | ✅ Complete |
 | **6** | Explorer Enhancements | Grid view, Columns view, view persistence | ✅ Complete |
-| **7** | Asset Mode | Thumbnails, colors, duplicate detection | Ready to Execute |
+| **7** | Asset Mode | Thumbnails, colors, duplicate detection | Implemented; UAT/Smoke Pending |
 | **8** | Code Mode & Enhanced Inspector | Monaco editing, code analysis, markdown backlinks | Planning |
 
 ---
@@ -301,7 +303,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 |-------|-------|--------|------------|
 | 5. Packaging & Desktop Integration | 2 | ✅ Complete | 2026-04-29 |
 | 6. Explorer Enhancements | 2 | ✅ Complete | 2026-04-29 |
-| 7. Asset Mode | 3 | ✅ Complete | 2026-04-29 |
+| 7. Asset Mode | 3 | Implemented; UAT/Smoke Pending | 2026-04-29 |
 | 8. Code Mode & Enhanced Inspector | 4 | 📋 Planned | Ready |
 
 **Total v2.0 Plans**: 11 plans

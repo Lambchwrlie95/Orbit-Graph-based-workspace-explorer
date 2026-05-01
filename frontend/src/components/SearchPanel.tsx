@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { memo, useMemo } from "react";
 import { FileRecord } from "../types";
 import { fileTypeLabel, formatBytes, shortPath } from "../utils";
 
@@ -13,7 +13,7 @@ interface SearchPanelProps {
   onOpen: (record: FileRecord) => void;
 }
 
-export function SearchPanel({
+function SearchPanelComponent({
   rootPath,
   query,
   results,
@@ -111,3 +111,5 @@ function getFileIconClass(extension?: string | null): string {
   }
   return "";
 }
+
+export const SearchPanel = memo(SearchPanelComponent);

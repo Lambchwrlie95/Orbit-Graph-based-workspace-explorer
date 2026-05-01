@@ -1,0 +1,12 @@
+{
+  "sessions": [
+    {
+      "id": "dc46a7a0",
+      "created_at": "2026-04-29T23:11:14.469694210Z",
+      "updated_at": "2026-04-29T23:11:15.927647194Z",
+      "model": "gemini-2.5-flash",
+      "summary": "proceed",
+      "message_count": 2
+    }
+  ]
+}

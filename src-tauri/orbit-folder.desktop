@@ -2,7 +2,7 @@
 Name=Open Folder in Orbit
 Comment=Open selected folder in Orbit file intelligence IDE
 Exec=orbit --folder %f
-Icon=orbit
+Icon=/home/lamb/Projects/Orbit-Graph-based-workspace-explorer/src-tauri/icons/128x128.png
 Type=Application
 Terminal=false
 Categories=System;FileTools;FileManager;Development;

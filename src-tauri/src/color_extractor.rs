@@ -11,16 +11,6 @@ pub struct Color {
     pub percentage: f32,
 }
 
-impl Color {
-    pub fn to_hex(&self) -> String {
-        format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
-    }
-    
-    pub fn to_rgb_string(&self) -> String {
-        format!("rgb({}, {}, {})", self.r, self.g, self.b)
-    }
-}
-
 // Simple k-means implementation for color extraction
 pub fn extract_dominant_colors(
     path: &Path,
@@ -63,7 +53,11 @@ pub fn extract_dominant_colors(
         .collect();
     
     // Sort by percentage descending
-    colors.sort_by(|a, b| b.percentage.partial_cmp(&a.percentage).unwrap());
+    colors.sort_by(|a, b| {
+        b.percentage
+            .partial_cmp(&a.percentage)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     
     // Merge similar colors (simple clustering)
     let mut merged_colors: Vec<Color> = Vec::new();

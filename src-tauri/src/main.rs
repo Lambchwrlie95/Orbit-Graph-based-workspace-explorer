@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tauri::State;
+use tauri::{State, Manager, WebviewWindow, Wry, menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem}, Emitter};
 
 mod code_analyzer;
 mod color_extractor;
@@ -16,7 +16,6 @@ mod models;
 mod performance;
 mod preview;
 mod scanner;
-mod services;
 
 // Keep backward compatibility with existing thumbnail_generator at root
 mod thumbnail_generator;
@@ -31,12 +30,6 @@ const MAX_SCAN_ENTRIES: usize = 120_000;
 struct AppState {
     db_path: PathBuf,
     db_write_lock: Arc<Mutex<()>>,
-}
-
-impl AppState {
-    fn db_path(&self) -> &std::path::Path {
-        &self.db_path
-    }
 }
 
 #[tauri::command]
@@ -72,6 +65,7 @@ async fn scan_workspace(
 
     let (inserted_or_updated, skipped_unchanged) = {
         let _guard = state.db_write_lock.lock().map_err(|e| e.to_string())?;
+        db::clear_code_analysis_for_root(&state.db_path, &root)?;
         db::index_rows(&state.db_path, &root, &rows)?
     };
 
@@ -203,6 +197,97 @@ fn app_data_dir() -> Result<PathBuf, String> {
         .ok_or_else(|| "Could not resolve local data directory".to_string())
 }
 
+fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+
+    // File menu items
+    let open_folder = MenuItemBuilder::with_id("open_folder", "Open Folder...")
+        .accelerator("CmdOrCtrl+O")
+        .build(app)
+        .unwrap();
+    let new_window = MenuItemBuilder::with_id("new_window", "New Window")
+        .accelerator("CmdOrCtrl+N")
+        .build(app)
+        .unwrap();
+    let close_window = PredefinedMenuItem::close_window(app, Some("Close Window")).unwrap();
+    let quit = PredefinedMenuItem::quit(app, Some("Quit")).unwrap();
+
+    let file_menu = MenuBuilder::new(app, "File")
+        .item(&open_folder)
+        .item(&new_window)
+        .separator()
+        .item(&close_window)
+        .separator()
+        .item(&quit)
+        .build()
+        .unwrap();
+
+    // Edit menu items
+    let undo = PredefinedMenuItem::undo(app, None).unwrap();
+    let redo = PredefinedMenuItem::redo(app, None).unwrap();
+    let cut = PredefinedMenuItem::cut(app, None).unwrap();
+    let copy = PredefinedMenuItem::copy(app, None).unwrap();
+    let paste = PredefinedMenuItem::paste(app, None).unwrap();
+    let select_all = PredefinedMenuItem::select_all(app, None).unwrap();
+
+    let edit_menu = MenuBuilder::new(app, "Edit")
+        .item(&undo)
+        .item(&redo)
+        .separator()
+        .item(&cut)
+        .item(&copy)
+        .item(&paste)
+        .separator()
+        .item(&select_all)
+        .build()
+        .unwrap();
+
+    // View menu items
+    let reload = MenuItemBuilder::with_id("reload", "Reload")
+        .accelerator("CmdOrCtrl+R")
+        .build(app)
+        .unwrap();
+    let toggle_fullscreen = PredefinedMenuItem::fullscreen(app, None).unwrap();
+    let toggle_devtools = MenuItemBuilder::with_id("toggle_devtools", "Toggle Developer Tools")
+        .accelerator("CmdOrCtrl+Shift+I")
+        .build(app)
+        .unwrap();
+
+    let view_menu = MenuBuilder::new(app, "View")
+        .item(&reload)
+        .item(&toggle_fullscreen)
+        .separator()
+        .item(&toggle_devtools)
+        .build()
+        .unwrap();
+
+    // Help menu items
+    let about = MenuItemBuilder::with_id("about", "About Orbit")
+        .build(app)
+        .unwrap();
+    let documentation = MenuItemBuilder::with_id("documentation", "Documentation")
+        .build(app)
+        .unwrap();
+    let keyboard_shortcuts = MenuItemBuilder::with_id("keyboard_shortcuts", "Keyboard Shortcuts")
+        .accelerator("CmdOrCtrl+?")
+        .build(app)
+        .unwrap();
+
+    let help_menu = MenuBuilder::new(app, "Help")
+        .item(&about)
+        .item(&documentation)
+        .separator()
+        .item(&keyboard_shortcuts)
+        .build()
+        .unwrap();
+
+    // Main menu bar
+    MenuBuilder::new(app, "Menu")
+        .items(&[&file_menu, &edit_menu, &view_menu, &help_menu])
+        .build()
+        .unwrap()
+}
+
 fn main() {
     let app_dir = app_data_dir().expect("app data directory");
     std::fs::create_dir_all(&app_dir).expect("app data directory exists");
@@ -214,12 +299,58 @@ fn main() {
     let thumbnail_generator = ThumbnailGenerator::new(&app_dir);
 
     tauri::Builder::default()
+        .setup(|app| {
+            // Build and set the menu
+            let menu = build_menu(app);
+            app.set_menu(menu)?;
+
+            // Handle menu events
+            app.on_menu_event(|app, event| {
+                match event.id().as_ref() {
+                    "open_folder" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("menu-open-folder", ());
+                        }
+                    }
+                    "new_window" => {
+                        // TODO: Implement new window
+                        println!("New Window clicked");
+                    }
+                    "reload" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.eval("window.location.reload()");
+                        }
+                    }
+                    "toggle_devtools" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.open_devtools();
+                        }
+                    }
+                    "about" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("menu-about", ());
+                        }
+                    }
+                    "documentation" => {
+                        let _ = open::that("https://orbit-app.dev/docs");
+                    }
+                    "keyboard_shortcuts" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("menu-keyboard-shortcuts", ());
+                        }
+                    }
+                    _ => {}
+                }
+            });
+
+            Ok(())
+        })
         .manage(AppState {
             db_path,
             db_write_lock: Arc::new(Mutex::new(())),
         })
         .manage(thumbnail_generator)
-.invoke_handler(tauri::generate_handler![
+        .invoke_handler(tauri::generate_handler![
             choose_folder,
             default_root_path,
             scan_workspace,
@@ -234,9 +365,14 @@ fn main() {
             get_log_path,
             check_cache_status,
             get_performance_metrics,
+            performance::get_operation_stats,
             reset_performance_metrics,
+            commands::file::read_file_for_edit,
+            commands::file::save_file,
             commands::analysis::analyze_code_file,
+            commands::analysis::batch_analyze_code_files,
             commands::analysis::get_file_git_status,
+            commands::analysis::get_files_git_status,
             commands::analysis::get_related_files,
             commands::analysis::is_analyzable_code_file,
             commands::analysis::get_supported_code_extensions,

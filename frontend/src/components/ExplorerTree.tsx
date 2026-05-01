@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { memo, useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FileRecord } from "../types";
 import { fileTypeLabel } from "../utils";
@@ -14,7 +14,7 @@ interface TreeNodeProps {
   isLoading: boolean;
 }
 
-function TreeNode({
+const TreeNode = memo(function TreeNodeComponent({
   record,
   level,
   selectedPath,
@@ -93,7 +93,7 @@ function TreeNode({
       )}
     </div>
   );
-}
+});
 
 interface LazyTreeNodeProps {
   record: FileRecord;
@@ -153,7 +153,7 @@ interface ExplorerTreeProps {
   onNavigate: (path: string) => void;
 }
 
-export function ExplorerTree({
+function ExplorerTreeComponent({
   rootPath,
   selectedPath,
   onSelect,
@@ -206,3 +206,5 @@ export function ExplorerTree({
     </div>
   );
 }
+
+export const ExplorerTree = memo(ExplorerTreeComponent);

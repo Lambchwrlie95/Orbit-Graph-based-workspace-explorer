@@ -61,7 +61,3 @@ pub fn analyze_image(path: &Path) -> Result<ImageAnalysis, String> {
         aspect_ratio: width as f32 / height as f32,
     })
 }
-
-pub fn get_image_dimensions(path: &Path) -> Result<(u32, u32), String> {
-    analyze_image(path).map(|a| (a.width, a.height))
-}

@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor, { OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 
 /**
@@ -201,9 +201,9 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const language = detectLanguage(filePath);
   
   // Handle editor mount
-  const handleEditorDidMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: typeof import('monaco-editor')) => {
+  const handleEditorDidMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
-    monacoRef.current = monaco;
+    monacoRef.current = monaco as unknown as typeof import('monaco-editor');
     setIsReady(true);
     
     // Add keyboard shortcut for save (Ctrl+S / Cmd+S)

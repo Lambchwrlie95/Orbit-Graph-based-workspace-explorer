@@ -12,6 +12,9 @@ export function useFrameRateMonitor() {
   const rafId = useRef<number | null>(null);
 
   useEffect(() => {
+    let lastUpdate = 0;
+    const UPDATE_INTERVAL = 500; // Update state max every 500ms
+
     const measureFrame = () => {
       const now = performance.now();
       const frameTime = now - lastFrameTime.current;
@@ -22,11 +25,16 @@ export function useFrameRateMonitor() {
         frameTimes.current.shift();
       }
 
-      const avgFrameTime = frameTimes.current.reduce((a, b) => a + b, 0) / frameTimes.current.length;
-      const currentFps = Math.round(1000 / avgFrameTime);
-      
-      setFps(currentFps);
-      setIsPoorPerformance(currentFps < 30);
+      // Only update React state periodically, not every frame
+      if (now - lastUpdate >= UPDATE_INTERVAL) {
+        lastUpdate = now;
+
+        const avgFrameTime = frameTimes.current.reduce((a, b) => a + b, 0) / frameTimes.current.length;
+        const currentFps = Math.round(1000 / avgFrameTime);
+        
+        setFps(currentFps);
+        setIsPoorPerformance(currentFps < 30);
+      }
 
       rafId.current = requestAnimationFrame(measureFrame);
     };
@@ -74,98 +82,6 @@ export function useLongTaskDetector(thresholdMs: number = 100) {
   }, [thresholdMs]);
 
   return { longTaskCount, lastLongTask };
-}
-
-/**
- * Component that shows a warning when performance is poor
- */
-export interface ResponsivenessWarningProps {
-  fps: number;
-  slowRenderCount: number;
-  onDismiss?: () => void;
-  onOptimize?: () => void;
-}
-
-export function ResponsivenessWarning({
-  fps,
-  slowRenderCount,
-  onDismiss,
-  onOptimize,
-}: ResponsivenessWarningProps) {
-  const [isDismissed, setIsDismissed] = useState(false);
-
-  if (isDismissed) return null;
-  if (fps >= 30 && slowRenderCount === 0) return null;
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 20,
-        right: 20,
-        background: "#3a2a1a",
-        border: "1px solid #fbbf24",
-        borderRadius: 8,
-        padding: 16,
-        maxWidth: 300,
-        zIndex: 1000,
-        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 20 }}>⚠️</span>
-        <strong style={{ color: "#fbbf24" }}>Performance Warning</strong>
-      </div>
-      
-      {fps < 30 && (
-        <p style={{ margin: "0 0 8px", fontSize: 13, color: "#e5edf4" }}>
-          Low frame rate detected ({fps} FPS)
-        </p>
-      )}
-      
-      {slowRenderCount > 0 && (
-        <p style={{ margin: "0 0 12px", fontSize: 13, color: "#e5edf4" }}>
-          {slowRenderCount} slow renders detected
-        </p>
-      )}
-
-      <div style={{ display: "flex", gap: 8 }}>
-        {onOptimize && (
-          <button
-            onClick={onOptimize}
-            style={{
-              padding: "6px 12px",
-              fontSize: 12,
-              background: "#fbbf24",
-              color: "#1a1a1a",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-            }}
-          >
-            Optimize
-          </button>
-        )}
-        <button
-          onClick={() => {
-            setIsDismissed(true);
-            onDismiss?.();
-          }}
-          style={{
-            padding: "6px 12px",
-            fontSize: 12,
-            background: "transparent",
-            color: "#8ca1af",
-            border: "1px solid #3d596c",
-            borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
-          Dismiss
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -227,7 +143,6 @@ export function useRenderTime(componentName: string, thresholdMs: number = 50) {
 export default {
   useFrameRateMonitor,
   useLongTaskDetector,
-  ResponsivenessWarning,
   debounce,
   throttle,
   useRenderTime,

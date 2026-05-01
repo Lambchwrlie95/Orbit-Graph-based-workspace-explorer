@@ -3,6 +3,8 @@
 **Defined:** 2026-04-29
 **Core Value:** Orbit must make local files understandable and actionable by showing the relationships that matter without overwhelming the user or their machine.
 
+> Status note, 2026-04-30: completion markings below are implementation/planning status, not full UAT validation. Current verified baseline is `npm run frontend:build` passing and `cargo test` passing 12/12. Smoke tests are still needed for scan, graph load, thumbnail/image commands, and UI mode flows.
+
 ## v1 Requirements
 
 ### Workspace

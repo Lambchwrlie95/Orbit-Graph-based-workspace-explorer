@@ -115,7 +115,6 @@ impl ThumbnailGenerator {
         
         // Load and resize image
         let img = image::open(source_path).map_err(|e| e.to_string())?;
-        let (orig_width, orig_height) = (img.width(), img.height());
         
         // Resize maintaining aspect ratio, fitting within size x size
         let thumbnail = img.resize(size, size, FilterType::Lanczos3);
