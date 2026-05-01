@@ -3060,3 +3060,219 @@ dt {
     display: none;
   }
 }
+
+/* Dialog Overlay */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: dialog-fade-in 0.2s ease;
+}
+
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dialog-content {
+  background: linear-gradient(180deg, #131a20 0%, #0f1519 100%);
+  border: 1px solid #2a3a47;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  min-width: 400px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: hidden;
+  animation: dialog-slide-in 0.2s ease;
+}
+
+@keyframes dialog-slide-in {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a3a47;
+}
+
+.dialog-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e5edf4;
+  margin: 0;
+}
+
+.dialog-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #8ca1af;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.dialog-close:hover {
+  background: rgba(61, 89, 108, 0.3);
+  color: #e5edf4;
+}
+
+.dialog-body {
+  padding: 24px;
+}
+
+/* About Dialog */
+.about-dialog {
+  text-align: center;
+}
+
+.about-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.about-logo-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #20b8a5, #15a090);
+  border-radius: 12px;
+  color: #0b0f12;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.about-logo h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #e5edf4;
+  margin: 0;
+}
+
+.about-version {
+  font-size: 13px;
+  color: #8ca1af;
+  margin: 0;
+}
+
+.about-description {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b0c4d0;
+  margin: 0 0 24px;
+  max-width: 400px;
+}
+
+.about-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(32, 184, 165, 0.1);
+  border: 1px solid rgba(32, 184, 165, 0.3);
+  border-radius: 6px;
+  color: #20b8a5;
+  font-size: 13px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.about-link:hover {
+  background: rgba(32, 184, 165, 0.2);
+  border-color: rgba(32, 184, 165, 0.5);
+}
+
+.about-copyright {
+  font-size: 12px;
+  color: #5a7a8a;
+  margin: 0;
+}
+
+/* Keyboard Shortcuts Dialog */
+.shortcuts-dialog {
+  min-width: 350px;
+}
+
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(42, 58, 71, 0.5);
+}
+
+.shortcut-item:last-child {
+  border-bottom: none;
+}
+
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  padding: 6px 12px;
+  background: #1a252d;
+  border: 1px solid #2a3a47;
+  border-radius: 6px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: #20b8a5;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.shortcut-description {
+  font-size: 14px;
+  color: #b0c4d0;
+}
+
+.shortcuts-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid #2a3a47;
+  font-size: 12px;
+  color: #5a7a8a;
+}

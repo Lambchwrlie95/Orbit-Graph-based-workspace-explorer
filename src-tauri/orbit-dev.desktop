@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=Orbit (Dev)
+Comment=Orbit file intelligence IDE - Development version
+Exec=bash -c "cd /home/lamb/Projects/Orbit-Graph-based-workspace-explorer && npm run dev"
+Icon=/home/lamb/Projects/Orbit-Graph-based-workspace-explorer/src-tauri/icons/128x128.png
+Type=Application
+Terminal=true
+Categories=System;FileTools;FileManager;Development;IDE;
+StartupNotify=true
+StartupWMClass=orbit
+Keywords=file;manager;graph;ide;code;explorer;dev;
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=Open New Dev Window
+Exec=bash -c "cd /home/lamb/Projects/Orbit-Graph-based-workspace-explorer && npm run dev"

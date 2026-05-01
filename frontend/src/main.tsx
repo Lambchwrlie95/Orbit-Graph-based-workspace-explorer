@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { ExplorerList } from "./components/ExplorerList";
 import { ExplorerTree } from "./components/ExplorerTree";
 import { ExplorerGrid } from "./components/ExplorerGrid";
@@ -15,6 +16,7 @@ import { useEditorStore } from "./stores/editorStore";
 import { useOpenFiles } from "./hooks/useOpenFiles";
 import { ModeSwitcher } from "./components/ModeSwitcher";
 import { TitleBar } from "./components/TitleBar";
+import { HelpMenuDialogs } from "./components/HelpDialogs";
 import { useDebounce } from "./hooks/useDebounce";
 import { useViewPersistence } from "./hooks/useViewPersistence";
 import { FolderOpen } from "lucide-react";
@@ -252,6 +254,23 @@ function App() {
     // Check cache for new folder
     await checkCacheStatus(selectedFolder);
   };
+
+  // Listen for menu events from Tauri
+  useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [];
+
+    // Open Folder menu item
+    unlisteners.push(
+      listen("menu-open-folder", () => {
+        chooseFolder();
+      })
+    );
+
+    // Cleanup
+    return () => {
+      unlisteners.forEach((u) => u.then((fn) => fn()));
+    };
+  }, [chooseFolder]);
 
   const scanWorkspace = async () => {
     if (!rootPath) return;
@@ -567,6 +586,8 @@ function App() {
         {logPath && <span title={logPath}>Log {shortPath(logPath)}</span>}
       </footer>
 
+      {/* Help Menu Dialogs */}
+      <HelpMenuDialogs />
     </main>
   );
 }

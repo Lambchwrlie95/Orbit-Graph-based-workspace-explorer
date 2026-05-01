@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tauri::{State, Manager, WebviewWindow, Wry, menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem}, Emitter};
+use tauri::{State, Manager, Emitter};
 
 mod code_analyzer;
 mod color_extractor;
@@ -198,9 +198,9 @@ fn app_data_dir() -> Result<PathBuf, String> {
 }
 
 fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
-    use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+    use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 
-    // File menu items
+    // File menu
     let open_folder = MenuItemBuilder::with_id("open_folder", "Open Folder...")
         .accelerator("CmdOrCtrl+O")
         .build(app)
@@ -212,7 +212,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
     let close_window = PredefinedMenuItem::close_window(app, Some("Close Window")).unwrap();
     let quit = PredefinedMenuItem::quit(app, Some("Quit")).unwrap();
 
-    let file_menu = MenuBuilder::new(app, "File")
+    let file_menu = SubmenuBuilder::new(app, "File")
         .item(&open_folder)
         .item(&new_window)
         .separator()
@@ -222,7 +222,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
         .build()
         .unwrap();
 
-    // Edit menu items
+    // Edit menu
     let undo = PredefinedMenuItem::undo(app, None).unwrap();
     let redo = PredefinedMenuItem::redo(app, None).unwrap();
     let cut = PredefinedMenuItem::cut(app, None).unwrap();
@@ -230,7 +230,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
     let paste = PredefinedMenuItem::paste(app, None).unwrap();
     let select_all = PredefinedMenuItem::select_all(app, None).unwrap();
 
-    let edit_menu = MenuBuilder::new(app, "Edit")
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
         .item(&undo)
         .item(&redo)
         .separator()
@@ -242,7 +242,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
         .build()
         .unwrap();
 
-    // View menu items
+    // View menu
     let reload = MenuItemBuilder::with_id("reload", "Reload")
         .accelerator("CmdOrCtrl+R")
         .build(app)
@@ -253,7 +253,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
         .build(app)
         .unwrap();
 
-    let view_menu = MenuBuilder::new(app, "View")
+    let view_menu = SubmenuBuilder::new(app, "View")
         .item(&reload)
         .item(&toggle_fullscreen)
         .separator()
@@ -261,7 +261,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
         .build()
         .unwrap();
 
-    // Help menu items
+    // Help menu
     let about = MenuItemBuilder::with_id("about", "About Orbit")
         .build(app)
         .unwrap();
@@ -273,7 +273,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
         .build(app)
         .unwrap();
 
-    let help_menu = MenuBuilder::new(app, "Help")
+    let help_menu = SubmenuBuilder::new(app, "Help")
         .item(&about)
         .item(&documentation)
         .separator()
@@ -282,7 +282,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::menu::Menu<R> {
         .unwrap();
 
     // Main menu bar
-    MenuBuilder::new(app, "Menu")
+    MenuBuilder::new(app)
         .items(&[&file_menu, &edit_menu, &view_menu, &help_menu])
         .build()
         .unwrap()
@@ -323,7 +323,8 @@ fn main() {
                     }
                     "toggle_devtools" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.open_devtools();
+                            // Toggle devtools by emitting to frontend
+                            let _ = window.emit("menu-toggle-devtools", ());
                         }
                     }
                     "about" => {
