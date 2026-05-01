@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
+import { Maximize, Target } from "lucide-react";
 import { GraphEdge, GraphNode, GraphPayload } from "../types";
 import { formatBytes } from "../utils";
 
@@ -15,6 +16,8 @@ interface GraphViewProps {
   onFocusFolder?: (path: string) => void;
   onExpandCluster?: (folderPath: string) => void;
   expandedFolders?: string[];
+  navHistory?: string[]; // Breadcrumb paths for navigation
+  breadcrumbNodes?: GraphNode[]; // Parent folder nodes to keep visible
   isLoading?: boolean;
 }
 
@@ -26,6 +29,8 @@ function GraphViewComponent({
   onFocusFolder,
   onExpandCluster,
   expandedFolders = [],
+  navHistory = [],
+  breadcrumbNodes = [],
   isLoading,
 }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -33,6 +38,8 @@ function GraphViewComponent({
   const graphRef = useRef<Graph | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
   const selectedNodeRef = useRef<string | null>(null);
+  const navHistoryRef = useRef<string[]>(navHistory);
+  const breadcrumbNodesRef = useRef<GraphNode[]>(breadcrumbNodes);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("orbit");
   const [showLabels, setShowLabels] = useState(true);
   const [showFiles, setShowFiles] = useState(true);
@@ -40,6 +47,7 @@ function GraphViewComponent({
   const [dimUnrelated, setDimUnrelated] = useState(true);
   const [graphFilter, setGraphFilter] = useState("");
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [visibleTypes, setVisibleTypes] = useState<Set<NodeType>>(new Set(['folder', 'code', 'image', 'config', 'text', 'web', 'document', 'other', 'cluster']));
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [expandingCluster, setExpandingCluster] = useState<string | null>(null);
@@ -61,19 +69,40 @@ function GraphViewComponent({
     setZoomLevel(Math.round((1 / ratio) * 100) / 100);
   };
 
+  const toggleNodeType = (type: NodeType) => {
+    setVisibleTypes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(type)) {
+        newSet.delete(type);
+      } else {
+        newSet.add(type);
+      }
+      return newSet;
+    });
+  };
+
+  const setAllVisibleTypes = (types: Set<NodeType>) => {
+    setVisibleTypes(types);
+  };
+
   const displayPayload = useMemo(() => {
     if (!payload) return null;
     const query = graphFilter.trim().toLowerCase();
     const nodes = payload.nodes.filter((node) => {
       if (!showFolders && node.isDir) return false;
       if (!showFiles && !node.isDir) return false;
+      const nodeType = getNodeType(node);
+      if (!visibleTypes.has(nodeType)) return false;
       if (!query) return true;
       return node.label.toLowerCase().includes(query) || node.path.toLowerCase().includes(query);
     });
-    const ids = new Set(nodes.map((node) => node.id));
+    // Merge breadcrumb nodes (parent folders from navigation history)
+    const breadcrumbNodesFiltered = breadcrumbNodes.filter(bn => !nodes.some(n => n.path === bn.path));
+    const allNodes = [...nodes, ...breadcrumbNodesFiltered];
+    const ids = new Set(allNodes.map((node) => node.id));
     const edges = dedupeGraphEdges(payload.edges.filter((edge) => ids.has(edge.sourceId) && ids.has(edge.targetId)));
-    return { ...payload, nodes, edges };
-  }, [payload, graphFilter, showFiles, showFolders]);
+    return { ...payload, nodes: allNodes, edges };
+  }, [payload, graphFilter, showFiles, showFolders, visibleTypes, breadcrumbNodes]);
 
   const displayNodes = useMemo(() => {
     if (!displayPayload) return [];
@@ -84,6 +113,12 @@ function GraphViewComponent({
   const nodeById = useMemo(() => new Map(displayNodes.map((node) => [String(node.id), node])), [displayNodes]);
   const graphStats = useMemo(() => computeStats(displayNodes, displayPayload?.edges ?? []), [displayNodes, displayPayload]);
   const minimapNodes = useMemo(() => minimapPoints(displayNodes), [displayNodes]);
+
+  useEffect(() => {
+    navHistoryRef.current = navHistory;
+    breadcrumbNodesRef.current = breadcrumbNodes;
+    rendererRef.current?.scheduleRefresh();
+  }, [navHistory, breadcrumbNodes]);
 
   useEffect(() => {
     const selected = selectedPath ? nodeByPath.get(selectedPath) : null;
@@ -159,7 +194,7 @@ function GraphViewComponent({
       zIndex: true,
       minCameraRatio: 0.03,
       maxCameraRatio: 8,
-      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated),
+      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current),
       edgeReducer: (edge, data) => reduceEdge(edge, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated),
     });
 
@@ -318,15 +353,6 @@ function GraphViewComponent({
           ))}
         </div>
 
-        <div className="graph-search">
-          <input
-            value={graphFilter}
-            onChange={(event) => setGraphFilter(event.target.value)}
-            placeholder="Filter graph..."
-            aria-label="Filter graph"
-          />
-        </div>
-
         <div className="graph-switches">
           <button className={showFolders ? "active" : ""} onClick={() => setShowFolders((value) => !value)}>
             Folders
@@ -356,13 +382,12 @@ function GraphViewComponent({
         {isLoading && <span className="loading-indicator">Loading...</span>}
       </div>
 
-      <div className="graph-legend">
-        <span><i className="legend-dot folder" />Folder</span>
-        <span><i className="legend-dot code" />Code</span>
-        <span><i className="legend-dot image" />Image</span>
-        <span><i className="legend-dot config" />Config</span>
-        <span><i className="legend-dot cluster" />Cluster</span>
-      </div>
+      <GraphLegend
+        visibleTypes={visibleTypes}
+        onToggleType={toggleNodeType}
+        onSetAllTypes={setAllVisibleTypes}
+        stats={graphStats}
+      />
 
       {displayNodes.length > 0 && (
         <div className="graph-minimap" title="Graph minimap">
@@ -375,18 +400,12 @@ function GraphViewComponent({
       )}
 
       <div className="graph-controls">
-        <button type="button" className="graph-zoom-btn" onClick={zoomGraphIn} title="Zoom in">
-          +
-        </button>
         <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-        <button type="button" className="graph-zoom-btn" onClick={zoomGraphOut} title="Zoom out">
-          -
+        <button type="button" className="graph-icon-btn" onClick={fitGraph} title="Fit graph">
+          <Maximize size={14} strokeWidth={1.8} />
         </button>
-        <button type="button" className="graph-text-btn" onClick={fitGraph} title="Fit graph">
-          Fit
-        </button>
-        <button type="button" className="graph-text-btn" onClick={focusSelected} disabled={!selectedNode} title="Focus selected">
-          Sel
+        <button type="button" className="graph-icon-btn" onClick={focusSelected} disabled={!selectedNode} title="Focus selected">
+          <Target size={14} strokeWidth={1.8} />
         </button>
       </div>
 
@@ -476,7 +495,10 @@ function placeOrbit(
   if (!node || placed.has(id)) return;
   const kids = tree.children.get(id) ?? [];
   const angle = (start + end) / 2;
-  const radius = depth === 0 ? 0 : 78 + depth * 82 + Math.min(40, kids.length * 1.5);
+  // Increase spacing between rings to prevent node overlap (was 82)
+  const baseRadius = 100;
+  const depthSpacing = 110;
+  const radius = depth === 0 ? 0 : baseRadius + depth * depthSpacing + Math.min(30, kids.length * 1.2);
   placed.set(id, { ...node, x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, depth, childCount: kids.length });
 
   if (!kids.length) return;
@@ -630,11 +652,17 @@ function reduceNode(
   hovered: string | null,
   selected: string | null,
   dimUnrelated: boolean,
+  navHistory: string[] = [],
+  breadcrumbNodes: GraphNode[] = [],
 ) {
   const isHovered = hovered === node;
   const isSelected = selected === node;
   const baseSize = Number(data.baseSize ?? data.size ?? 5);
   const connectedToActive = (hovered || selected) ? isConnected(graph, node, hovered ?? selected!) : false;
+  const nodePath = data.path as string;
+  const isInNavHistory = navHistory.includes(nodePath);
+  const isBreadcrumbNode = breadcrumbNodes.some(bn => bn.path === nodePath);
+  const isBreadcrumb = (isInNavHistory || isBreadcrumbNode) && !isSelected;
 
   // Determine target values
   let targetColor = data.baseColor as string;
@@ -647,6 +675,13 @@ function reduceNode(
     targetLabel = "";
     targetZIndex = 0;
     targetSize = Math.max(2, baseSize * 0.72);
+  }
+
+  // Style breadcrumb nodes (in nav history but not selected)
+  if (isBreadcrumb && !dimUnrelated) {
+    targetColor = adjustColorBrightness(targetColor, 0.6); // Darken
+    targetSize = baseSize * 0.85; // Smaller
+    targetZIndex = 5; // Lower z-index
   }
 
   if (connectedToActive) {
@@ -730,11 +765,41 @@ function isConnected(graph: Graph, node: string, active: string) {
   }
 }
 
+// Helper to darken/lighten a hex color
+function adjustColorBrightness(hex: string, factor: number): string {
+  // Remove # if present
+  hex = hex.replace(/^#/, '');
+
+  // Parse RGB
+  let r = parseInt(hex.substring(0, 2), 16);
+  let g = parseInt(hex.substring(2, 4), 16);
+  let b = parseInt(hex.substring(4, 6), 16);
+
+  // Adjust brightness
+  r = Math.floor(r * factor);
+  g = Math.floor(g * factor);
+  b = Math.floor(b * factor);
+
+  // Clamp to 0-255
+  r = Math.min(255, Math.max(0, r));
+  g = Math.min(255, Math.max(0, g));
+  b = Math.min(255, Math.max(0, b));
+
+  // Convert back to hex
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
 function getNodeSize(node: GraphDisplayNode): number {
-  if (node.isCluster) return 17;
-  if (node.isDir) return Math.min(18, 8 + Math.log2(node.childCount + 2) * 2);
-  const sizeBoost = node.sizeBytes > 0 ? Math.min(3.5, Math.log10(node.sizeBytes + 1) * 0.42) : 0;
-  return 5.5 + sizeBoost;
+  if (node.isCluster) return 14;
+  if (node.isDir) {
+    // Smaller base size and gentler growth for folders
+    const baseSize = 6;
+    const maxSize = 12; // Reduced from 18
+    const growth = Math.log2(Math.min(node.childCount, 50) + 2) * 0.8;
+    return Math.min(maxSize, baseSize + growth);
+  }
+  const sizeBoost = node.sizeBytes > 0 ? Math.min(2.5, Math.log10(node.sizeBytes + 1) * 0.35) : 0;
+  return 4 + sizeBoost;
 }
 
 function getNodeColor(node: GraphNode): string {
@@ -760,6 +825,117 @@ function colorForExtension(extension?: string | null): string {
   if (["css", "scss", "sass", "less", "html", "htm"].includes(ext)) return "#f472b6";
   if (["pdf", "doc", "docx"].includes(ext)) return "#fb923c";
   return "#94a3b8";
+}
+
+type NodeType = 'folder' | 'code' | 'image' | 'text' | 'config' | 'web' | 'document' | 'other' | 'cluster';
+
+function getNodeType(node: GraphNode): NodeType {
+  if (node.isCluster) return 'cluster';
+  if (node.isDir) return 'folder';
+  const ext = node.extension?.toLowerCase() || '';
+  if (["png", "jpg", "jpeg", "svg", "webp", "gif", "bmp", "ico"].includes(ext)) return 'image';
+  if (["rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "cpp", "c", "h", "hpp"].includes(ext)) return 'code';
+  if (["md", "txt", "rtf"].includes(ext)) return 'text';
+  if (["json", "toml", "yaml", "yml", "xml", "ini", "conf"].includes(ext)) return 'config';
+  if (["css", "scss", "sass", "less", "html", "htm"].includes(ext)) return 'web';
+  if (["pdf", "doc", "docx"].includes(ext)) return 'document';
+  return 'other';
+}
+
+const NODE_TYPE_CONFIG: Record<NodeType, { label: string; color: string }> = {
+  folder: { label: 'Folder', color: '#73c991' },
+  code: { label: 'Code', color: '#a78bfa' },
+  image: { label: 'Image', color: '#38bdf8' },
+  text: { label: 'Text', color: '#d4d4d4' },
+  config: { label: 'Config', color: '#f5c542' },
+  web: { label: 'Web', color: '#f472b6' },
+  document: { label: 'Doc', color: '#fb923c' },
+  other: { label: 'Other', color: '#94a3b8' },
+  cluster: { label: 'Cluster', color: '#f59e0b' },
+};
+
+interface GraphLegendProps {
+  visibleTypes: Set<NodeType>;
+  onToggleType: (type: NodeType) => void;
+  onSetAllTypes: (types: Set<NodeType>) => void;
+  stats: ReturnType<typeof computeStats>;
+}
+
+function GraphLegend({ visibleTypes, onToggleType, onSetAllTypes }: GraphLegendProps) {
+  const types: NodeType[] = ['folder', 'code', 'image', 'config', 'text', 'web', 'document', 'other', 'cluster'];
+  const [lastClickTime, setLastClickTime] = useState<number>(0);
+  const [lastClickedType, setLastClickedType] = useState<NodeType | null>(null);
+  const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleItemClick = (type: NodeType, e: React.MouseEvent) => {
+    const now = Date.now();
+    const timeDiff = now - lastClickTime;
+
+    if (timeDiff < 300 && lastClickedType === type) {
+      // Double-click detected - cancel pending single click
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+      }
+
+      e.stopPropagation();
+      const allTypes = new Set<NodeType>(types);
+
+      // Check if this type is currently isolated
+      // We need to check the state BEFORE any toggle happened
+      // Since single click was delayed, visibleTypes still has original state
+      const isCurrentlyIsolated = visibleTypes.size === 1 && visibleTypes.has(type);
+
+      if (isCurrentlyIsolated) {
+        onSetAllTypes(allTypes); // Show all
+      } else {
+        onSetAllTypes(new Set<NodeType>([type])); // Isolate this type
+      }
+    } else {
+      // Single click - delay the toggle to allow double-click detection
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+
+      clickTimeoutRef.current = setTimeout(() => {
+        onToggleType(type);
+        clickTimeoutRef.current = null;
+      }, 300);
+    }
+
+    setLastClickTime(now);
+    setLastClickedType(type);
+  };
+
+  return (
+    <div className="graph-legend">
+      {types.map((type) => {
+        const config = NODE_TYPE_CONFIG[type];
+        const isVisible = visibleTypes.has(type);
+
+        return (
+          <button
+            key={type}
+            className={`legend-item ${isVisible ? '' : 'hidden'}`}
+            onClick={(e) => handleItemClick(type, e)}
+            title={`${isVisible ? 'Hide' : 'Show'} ${config.label} (double-click to isolate/restore all)`}
+          >
+            <i className="legend-dot" style={{ background: isVisible ? config.color : '#555' }} />
+            <span>{config.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function computeStats(nodes: GraphDisplayNode[], edges: GraphEdge[]) {

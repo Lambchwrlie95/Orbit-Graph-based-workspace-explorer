@@ -1,0 +1,246 @@
+{
+  "_meta": {
+    "updated_at": "2026-05-01T08:25:37Z",
+    "version": 1
+  },
+  "entries": {
+    "choose_folder": {
+      "method": "TAURI_COMMAND",
+      "path": "choose_folder",
+      "params": [],
+      "file": "src-tauri/src/main.rs",
+      "description": "Open native file dialog to select a folder"
+    },
+    "default_root_path": {
+      "method": "TAURI_COMMAND",
+      "path": "default_root_path",
+      "params": [],
+      "file": "src-tauri/src/main.rs",
+      "description": "Get the current working directory as default root"
+    },
+    "scan_workspace": {
+      "method": "TAURI_COMMAND",
+      "path": "scan_workspace",
+      "params": ["root_path"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Scan workspace directory and index files to SQLite"
+    },
+    "list_children": {
+      "method": "TAURI_COMMAND",
+      "path": "list_children",
+      "params": ["parent_path"],
+      "file": "src-tauri/src/main.rs",
+      "description": "List child files/folders of a directory"
+    },
+    "list_children_paginated": {
+      "method": "TAURI_COMMAND",
+      "path": "list_children_paginated",
+      "params": ["parent_path", "offset", "limit"],
+      "file": "src-tauri/src/main.rs",
+      "description": "List children with pagination support"
+    },
+    "get_children_count": {
+      "method": "TAURI_COMMAND",
+      "path": "get_children_count",
+      "params": ["parent_path"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Get count of children in a directory"
+    },
+    "search_files": {
+      "method": "TAURI_COMMAND",
+      "path": "search_files",
+      "params": ["root_path", "query"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Search files by name within root path"
+    },
+    "get_file": {
+      "method": "TAURI_COMMAND",
+      "path": "get_file",
+      "params": ["path"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Get file record by path"
+    },
+    "load_graph": {
+      "method": "TAURI_COMMAND",
+      "path": "load_graph",
+      "params": ["request"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Load graph data for visualization with scope and clustering"
+    },
+    "get_preview": {
+      "method": "TAURI_COMMAND",
+      "path": "get_preview",
+      "params": ["path"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Get file preview data with metadata"
+    },
+    "open_path": {
+      "method": "TAURI_COMMAND",
+      "path": "open_path",
+      "params": ["path"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Open file/directory with system default application"
+    },
+    "get_log_path": {
+      "method": "TAURI_COMMAND",
+      "path": "get_log_path",
+      "params": [],
+      "file": "src-tauri/src/main.rs",
+      "description": "Get path to application log file"
+    },
+    "check_cache_status": {
+      "method": "TAURI_COMMAND",
+      "path": "check_cache_status",
+      "params": ["root_path"],
+      "file": "src-tauri/src/main.rs",
+      "description": "Check if cached data is fresh or stale"
+    },
+    "get_performance_metrics": {
+      "method": "TAURI_COMMAND",
+      "path": "get_performance_metrics",
+      "params": [],
+      "file": "src-tauri/src/main.rs",
+      "description": "Get performance metrics for operations"
+    },
+    "get_operation_stats": {
+      "method": "TAURI_COMMAND",
+      "path": "get_operation_stats",
+      "params": [],
+      "file": "src-tauri/src/performance.rs",
+      "description": "Get operation timing statistics"
+    },
+    "reset_performance_metrics": {
+      "method": "TAURI_COMMAND",
+      "path": "reset_performance_metrics",
+      "params": [],
+      "file": "src-tauri/src/main.rs",
+      "description": "Reset performance metrics"
+    },
+    "read_file_for_edit": {
+      "method": "TAURI_COMMAND",
+      "path": "read_file_for_edit",
+      "params": ["path"],
+      "file": "src-tauri/src/commands/file.rs",
+      "description": "Read file content for Monaco editor"
+    },
+    "save_file": {
+      "method": "TAURI_COMMAND",
+      "path": "save_file",
+      "params": ["path", "content"],
+      "file": "src-tauri/src/commands/file.rs",
+      "description": "Save file content from Monaco editor"
+    },
+    "analyze_code_file": {
+      "method": "TAURI_COMMAND",
+      "path": "analyze_code_file",
+      "params": ["path"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Analyze code file for imports and exports"
+    },
+    "batch_analyze_code_files": {
+      "method": "TAURI_COMMAND",
+      "path": "batch_analyze_code_files",
+      "params": ["paths"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Batch analyze multiple code files"
+    },
+    "get_file_git_status": {
+      "method": "TAURI_COMMAND",
+      "path": "get_file_git_status",
+      "params": ["path"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Get git status for a single file"
+    },
+    "get_files_git_status": {
+      "method": "TAURI_COMMAND",
+      "path": "get_files_git_status",
+      "params": ["paths"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Get git status for multiple files"
+    },
+    "get_related_files": {
+      "method": "TAURI_COMMAND",
+      "path": "get_related_files",
+      "params": ["path"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Get files related to current file (imports/importers)"
+    },
+    "is_analyzable_code_file": {
+      "method": "TAURI_COMMAND",
+      "path": "is_analyzable_code_file",
+      "params": ["path"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Check if file can be analyzed as code"
+    },
+    "get_supported_code_extensions": {
+      "method": "TAURI_COMMAND",
+      "path": "get_supported_code_extensions",
+      "params": [],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Get list of supported code file extensions"
+    },
+    "find_git_repo_root": {
+      "method": "TAURI_COMMAND",
+      "path": "find_git_repo_root",
+      "params": ["path"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Find git repository root for a path"
+    },
+    "is_in_git_repo": {
+      "method": "TAURI_COMMAND",
+      "path": "is_in_git_repo",
+      "params": ["path"],
+      "file": "src-tauri/src/commands/analysis.rs",
+      "description": "Check if path is inside a git repository"
+    },
+    "analyze_image_file": {
+      "method": "TAURI_COMMAND",
+      "path": "analyze_image_file",
+      "params": ["file_id", "file_path"],
+      "file": "src-tauri/src/commands/image_analysis.rs",
+      "description": "Analyze image file metadata (dimensions, format)"
+    },
+    "extract_colors": {
+      "method": "TAURI_COMMAND",
+      "path": "extract_colors",
+      "params": ["file_id", "file_path", "color_count"],
+      "file": "src-tauri/src/commands/image_analysis.rs",
+      "description": "Extract dominant colors from image"
+    },
+    "ensure_thumbnail": {
+      "method": "TAURI_COMMAND",
+      "path": "ensure_thumbnail",
+      "params": ["request"],
+      "file": "src-tauri/src/commands/thumbnail.rs",
+      "description": "Generate or retrieve cached thumbnail"
+    },
+    "get_thumbnail_info": {
+      "method": "TAURI_COMMAND",
+      "path": "get_thumbnail_info",
+      "params": ["file_id"],
+      "file": "src-tauri/src/commands/thumbnail.rs",
+      "description": "Get thumbnail metadata for a file"
+    },
+    "delete_thumbnails": {
+      "method": "TAURI_COMMAND",
+      "path": "delete_thumbnails",
+      "params": ["file_id"],
+      "file": "src-tauri/src/commands/thumbnail.rs",
+      "description": "Delete thumbnails for a file"
+    },
+    "get_supported_thumbnail_sizes": {
+      "method": "TAURI_COMMAND",
+      "path": "get_supported_thumbnail_sizes",
+      "params": [],
+      "file": "src-tauri/src/commands/thumbnail.rs",
+      "description": "Get available thumbnail sizes"
+    },
+    "get_thumbnail_base_path": {
+      "method": "TAURI_COMMAND",
+      "path": "get_thumbnail_base_path",
+      "params": [],
+      "file": "src-tauri/src/commands/thumbnail.rs",
+      "description": "Get base directory for thumbnails"
+    }
+  }
+}

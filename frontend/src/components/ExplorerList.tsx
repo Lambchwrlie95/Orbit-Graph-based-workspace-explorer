@@ -1,6 +1,6 @@
 import React, { memo, useMemo, useState } from "react";
 import { FileRecord } from "../types";
-import { fileTypeLabel, formatBytes, getParentPath } from "../utils";
+import { fileTypeLabel, formatBytes, relativeDate } from "../utils";
 import { VirtualList } from "./VirtualList";
 
 interface ExplorerListProps {
@@ -16,15 +16,11 @@ const VIRTUAL_SCROLL_THRESHOLD = 50; // Use virtual scrolling for lists > 50 ite
 const ITEM_HEIGHT = 36; // Height of each file row in pixels
 
 function ExplorerListComponent({
-  currentPath,
-  rootPath,
   items,
   selectedPath,
   onSelect,
   onNavigate,
 }: ExplorerListProps) {
-  const parentPath = useMemo(() => getParentPath(currentPath), [currentPath]);
-  const canGoUp = parentPath !== null && currentPath !== rootPath;
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
   const sortedItems = useMemo(() => {
@@ -62,7 +58,9 @@ function ExplorerListComponent({
       </span>
       <span className="file-name">{item.name}</span>
       <span className="file-meta">
-        {item.isDir ? "folder" : formatBytes(item.sizeBytes)}
+        {item.isDir
+          ? (item.sizeBytes > 0 ? formatBytes(item.sizeBytes) : "folder")
+          : relativeDate(item.modifiedAt ?? item.createdAt)}
       </span>
     </button>
   );
@@ -82,19 +80,6 @@ function ExplorerListComponent({
           )}
         </span>
       </div>
-      
-      {/* Parent navigation row (always shown outside virtual list) */}
-      {canGoUp && (
-        <button
-          className="file-row parent-row"
-          onClick={() => parentPath && onNavigate(parentPath)}
-          title="Go to parent folder"
-        >
-          <span className="file-icon folder">↑</span>
-          <span className="file-name">..</span>
-          <span className="file-meta">parent</span>
-        </button>
-      )}
 
       {/* File list - virtual or standard */}
       {useVirtualScroll ? (
@@ -103,7 +88,7 @@ function ExplorerListComponent({
           renderItem={renderFileRow}
           itemHeight={ITEM_HEIGHT}
           overscan={5}
-          height={`calc(100% - ${canGoUp ? ITEM_HEIGHT + 40 : 40}px)`}
+          height="calc(100% - 40px)"
           selectedIndex={currentSelectedIndex >= 0 ? currentSelectedIndex : selectedIndex}
           onSelectIndex={handleSelectIndex}
         />
@@ -114,7 +99,7 @@ function ExplorerListComponent({
               {renderFileRow(item)}
             </React.Fragment>
           ))}
-          {items.length === 0 && !canGoUp && (
+          {items.length === 0 && (
             <div className="empty-state small">This folder is empty</div>
           )}
         </div>

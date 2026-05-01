@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { tauriInvoke } from "../lib/tauriCommands";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Window } from "@tauri-apps/api/window";
 import {
   BookmarkPlus,
+  ChevronRight,
   Copy,
   FolderOpen,
+  Home,
   Maximize2,
   Minus,
   PanelLeft,
@@ -22,6 +25,7 @@ function getTauriWindow(): Window | null {
 
 interface UnifiedHeaderProps {
   workspacePath?: string;
+  currentPath?: string;
   selectedPath?: string | null;
   leftCollapsed: boolean;
   rightCollapsed: boolean;
@@ -35,14 +39,14 @@ interface UnifiedHeaderProps {
   onAddBookmark: () => void;
   onShowExplorer: () => void;
   onShowSearch: () => void;
-  onShowAssets: () => void;
-  onShowStatus: () => void;
   onShowInspector: () => void;
   onShowCode: () => void;
+  onNavigateToPath?: (path: string) => void;
 }
 
 export function UnifiedHeader({
   workspacePath,
+  currentPath,
   selectedPath,
   leftCollapsed,
   rightCollapsed,
@@ -56,15 +60,73 @@ export function UnifiedHeader({
   onAddBookmark,
   onShowExplorer,
   onShowSearch,
-  onShowAssets,
-  onShowStatus,
   onShowInspector,
   onShowCode,
+  onNavigateToPath,
 }: UnifiedHeaderProps) {
   const win = useMemo(() => getTauriWindow(), []);
   const [openMenu, setOpenMenu] = useState<"file" | "view" | "run" | "panels" | null>(null);
+  const [isEditingPath, setIsEditingPath] = useState(false);
+  const [pathInput, setPathInput] = useState(currentPath || workspacePath || "");
+  const pathInputRef = useRef<HTMLInputElement>(null);
   const workspaceName = workspacePath ? workspacePath.split("/").pop() || workspacePath : "No workspace";
   const hasSelection = Boolean(selectedPath);
+  const displayPath = currentPath || workspacePath || "";
+
+  // Update path input when currentPath changes
+  useEffect(() => {
+    if (!isEditingPath) {
+      setPathInput(displayPath);
+    }
+  }, [displayPath, isEditingPath]);
+
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (isEditingPath && pathInputRef.current) {
+      pathInputRef.current.focus();
+      pathInputRef.current.select();
+    }
+  }, [isEditingPath]);
+
+  const handlePathSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pathInput.trim() && onNavigateToPath) {
+      onNavigateToPath(pathInput.trim());
+    }
+    setIsEditingPath(false);
+  };
+
+  const handlePathKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setPathInput(displayPath);
+      setIsEditingPath(false);
+    }
+  };
+
+  const handleBreadcrumbClick = (path: string) => {
+    console.log("[UnifiedHeader] Breadcrumb clicked:", path);
+    if (onNavigateToPath && path) {
+      onNavigateToPath(path);
+    }
+  };
+
+  // Generate breadcrumb segments from path
+  const breadcrumbs = useMemo(() => {
+    if (!displayPath) return [];
+    const parts = displayPath.split("/").filter(Boolean);
+    const segments: { label: string; path: string }[] = [];
+    let currentSegment = "";
+
+    parts.forEach((part, index) => {
+      currentSegment += `/${part}`;
+      segments.push({
+        label: part,
+        path: currentSegment,
+      });
+    });
+
+    return segments;
+  }, [displayPath]);
 
   useEffect(() => {
     if (!openMenu) return undefined;
@@ -87,6 +149,16 @@ export function UnifiedHeader({
   return (
     <header className="top-menu" data-tauri-drag-region>
       <div className="menu-left">
+        <button
+          type="button"
+          id="toggleLeftBtn"
+          className="sidebar-toggle"
+          onClick={onToggleLeft}
+          title={leftCollapsed ? "Show left sidebar" : "Hide left sidebar"}
+          aria-pressed={!leftCollapsed}
+        >
+          <PanelLeft size={14} strokeWidth={1.8} />
+        </button>
         <button
           type="button"
           className={`menu-trigger ${openMenu === "file" ? "active" : ""}`}
@@ -117,20 +189,56 @@ export function UnifiedHeader({
         </button>
       </div>
 
-      <div className="menu-title" data-tauri-drag-region title={workspacePath}>
-        Orbit / {workspaceName}
+      <div className="menu-path-bar" data-tauri-drag-region>
+        {isEditingPath ? (
+          <form onSubmit={handlePathSubmit} className="path-edit-form">
+            <input
+              ref={pathInputRef}
+              type="text"
+              value={pathInput}
+              onChange={(e) => setPathInput(e.target.value)}
+              onKeyDown={handlePathKeyDown}
+              onBlur={() => {
+                setPathInput(displayPath);
+                setIsEditingPath(false);
+              }}
+              className="path-input"
+              placeholder="Enter path..."
+            />
+          </form>
+        ) : (
+          <div className="path-breadcrumbs">
+            <button
+              className="breadcrumb-home"
+              onClick={() => workspacePath && handleBreadcrumbClick(workspacePath)}
+              title={workspacePath || "No workspace"}
+            >
+              <Home size={12} />
+            </button>
+            {breadcrumbs.map((segment, index) => (
+              <React.Fragment key={segment.path}>
+                <ChevronRight size={12} className="breadcrumb-separator" />
+                <button
+                  className="breadcrumb-segment"
+                  onClick={() => handleBreadcrumbClick(segment.path)}
+                  title={segment.path}
+                >
+                  {segment.label}
+                </button>
+              </React.Fragment>
+            ))}
+            <button
+              className="path-edit-btn"
+              onClick={() => setIsEditingPath(true)}
+              title="Edit path (Ctrl+L)"
+            >
+              <FolderOpen size={12} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="menu-right">
-        <button
-          type="button"
-          id="toggleLeftBtn"
-          onClick={onToggleLeft}
-          title={leftCollapsed ? "Show left sidebar" : "Hide left sidebar"}
-          aria-pressed={!leftCollapsed}
-        >
-          <PanelLeft size={13} strokeWidth={1.8} />
-        </button>
         <button
           type="button"
           id="toggleRightBtn"
@@ -138,19 +246,10 @@ export function UnifiedHeader({
           title={rightCollapsed ? "Show right sidebar" : "Hide right sidebar"}
           aria-pressed={!rightCollapsed}
         >
-          <PanelRight size={13} strokeWidth={1.8} />
-        </button>
-        <button type="button" onClick={onOpenFolder} title="Open folder">
-          <FolderOpen size={13} strokeWidth={1.8} />
+          <PanelRight size={14} strokeWidth={1.8} />
         </button>
         <button type="button" onClick={onScan} title="Scan workspace">
           <RefreshCcw size={13} strokeWidth={1.8} />
-        </button>
-        <button type="button" onClick={onShowSearch} title="Search side panel">
-          <Search size={13} strokeWidth={1.8} />
-        </button>
-        <button type="button" onClick={onAddBookmark} title="Bookmark current workspace">
-          <BookmarkPlus size={13} strokeWidth={1.8} />
         </button>
         <button type="button" onClick={onCopySelected} title="Copy selected path" disabled={!hasSelection}>
           <Copy size={13} strokeWidth={1.8} />
@@ -190,8 +289,6 @@ export function UnifiedHeader({
               <MenuSeparator />
               <MenuItem label="Explorer" onClick={() => runMenuAction(onShowExplorer)} />
               <MenuItem label="Search" onClick={() => runMenuAction(onShowSearch)} />
-              <MenuItem label="Assets" onClick={() => runMenuAction(onShowAssets)} />
-              <MenuItem label="Status" onClick={() => runMenuAction(onShowStatus)} />
             </>
           )}
 

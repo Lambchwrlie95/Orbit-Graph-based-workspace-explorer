@@ -45,6 +45,26 @@ export function formatDate(timestamp?: number | null): string {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+export function relativeDate(timestamp?: number | null): string {
+  if (!timestamp) return "-";
+  const now = Date.now();
+  const then = timestamp * 1000;
+  const diff = now - then;
+
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+
+  if (seconds < 60) return "just now";
+  if (minutes < 60) return `${minutes}m`;
+  if (hours < 24) return `${hours}h`;
+  if (days < 7) return `${days}d`;
+  if (weeks < 5) return `${weeks}w`;
+  return formatDate(timestamp);
+}
+
 export function isTextFile(extension?: string | null): boolean {
   if (!extension) return false;
   return [

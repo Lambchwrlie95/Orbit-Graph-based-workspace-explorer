@@ -1,0 +1,233 @@
+{
+  "_meta": {
+    "updated_at": "2026-05-01T08:25:37Z",
+    "version": 1
+  },
+  "entries": {
+    "src-tauri/src/main.rs": {
+      "exports": ["main", "choose_folder", "default_root_path", "scan_workspace", "list_children", "list_children_paginated", "get_children_count", "search_files", "get_file", "load_graph", "get_preview", "open_path", "get_log_path", "check_cache_status", "get_performance_metrics", "reset_performance_metrics"],
+      "imports": ["tauri", "std::path", "std::sync", "std::time", "models", "performance", "thumbnail_generator", "commands"],
+      "type": "entry-point"
+    },
+    "src-tauri/src/models.rs": {
+      "exports": ["ScannedEntry", "FileRecord", "ClusterSummary", "GraphNode", "GraphEdge", "GraphPayload", "ScanProgress", "PreviewMetaItem", "PreviewPayload", "GraphRequest"],
+      "imports": ["serde"],
+      "type": "module"
+    },
+    "src-tauri/src/scanner.rs": {
+      "exports": ["scan_root"],
+      "imports": ["std::ffi", "std::fs", "std::path", "std::time", "jwalk", "models::ScannedEntry"],
+      "type": "module"
+    },
+    "src-tauri/src/graph.rs": {
+      "exports": ["load_graph"],
+      "imports": ["std::collections", "std::cmp", "std::path", "rusqlite", "db", "models"],
+      "type": "module"
+    },
+    "src-tauri/src/db.rs": {
+      "exports": ["init_database", "index_rows", "children", "children_paginated", "get_children_count", "search_files", "get_file", "get_code_analysis", "store_code_analysis", "clear_code_analysis_for_root", "child_prefix"],
+      "imports": ["std::path", "rusqlite", "models::FileRecord"],
+      "type": "module"
+    },
+    "src-tauri/src/commands/mod.rs": {
+      "exports": ["file", "analysis", "image_analysis", "thumbnail"],
+      "imports": [],
+      "type": "module"
+    },
+    "src-tauri/src/commands/file.rs": {
+      "exports": ["read_file_for_edit", "save_file"],
+      "imports": ["std::fs", "std::path"],
+      "type": "module"
+    },
+    "src-tauri/src/commands/analysis.rs": {
+      "exports": ["analyze_code_file", "get_file_git_status", "get_related_files", "batch_analyze_code_files", "is_analyzable_code_file", "get_supported_code_extensions", "get_files_git_status", "find_git_repo_root", "is_in_git_repo"],
+      "imports": ["code_analyzer", "git_status", "AppState", "std::path", "tauri::State"],
+      "type": "module"
+    },
+    "src-tauri/src/commands/image_analysis.rs": {
+      "exports": ["analyze_image_file", "extract_colors"],
+      "imports": ["image_analyzer", "color_extractor", "AppState", "std::path", "tauri::State"],
+      "type": "module"
+    },
+    "src-tauri/src/commands/thumbnail.rs": {
+      "exports": ["ensure_thumbnail", "get_thumbnail_info", "delete_thumbnails", "get_supported_thumbnail_sizes", "get_thumbnail_base_path"],
+      "imports": ["thumbnail_generator", "models", "AppState", "tauri::State"],
+      "type": "module"
+    },
+    "src-tauri/src/code_analyzer.rs": {
+      "exports": ["analyze_file", "is_code_file", "CodeAnalysis", "Import", "Export", "ImportType"],
+      "imports": ["std::path", "regex"],
+      "type": "module"
+    },
+    "src-tauri/src/git_status.rs": {
+      "exports": ["find_repo_root", "get_file_status", "get_diff_stats", "FileGitStatus", "GitStatus"],
+      "imports": ["git2", "std::path"],
+      "type": "module"
+    },
+    "src-tauri/src/image_analyzer.rs": {
+      "exports": ["analyze_image"],
+      "imports": ["image", "std::path", "std::fs"],
+      "type": "module"
+    },
+    "src-tauri/src/color_extractor.rs": {
+      "exports": ["extract_colors"],
+      "imports": ["image"],
+      "type": "module"
+    },
+    "src-tauri/src/thumbnail_generator.rs": {
+      "exports": ["ThumbnailGenerator"],
+      "imports": ["image", "std::path", "std::collections::HashMap", "std::sync"],
+      "type": "module"
+    },
+    "src-tauri/src/preview.rs": {
+      "exports": ["build_preview"],
+      "imports": ["models::PreviewPayload", "std::path", "std::fs"],
+      "type": "module"
+    },
+    "src-tauri/src/performance.rs": {
+      "exports": ["record_operation", "get_performance_metrics", "reset_performance_metrics", "get_operation_stats", "CacheStatus", "PerformanceMetrics", "SlowOperation"],
+      "imports": ["std::collections", "std::path", "chrono", "rusqlite"],
+      "type": "module"
+    },
+    "src-tauri/src/logger.rs": {
+      "exports": ["log_event", "log_path"],
+      "imports": ["std::path", "std::fs", "chrono", "dirs"],
+      "type": "module"
+    },
+    "frontend/src/main.tsx": {
+      "exports": ["App"],
+      "imports": ["react", "react-dom", "@tauri-apps/api/event", "lucide-react", "./components/*", "./hooks/*", "./lib/tauriCommands", "./types", "./utils", "./styles.css"],
+      "type": "entry-point"
+    },
+    "frontend/src/lib/tauriCommands.ts": {
+      "exports": ["tauriInvoke", "TAURI_COMMANDS"],
+      "imports": ["@tauri-apps/api/core", "../types"],
+      "type": "module"
+    },
+    "frontend/src/types/index.ts": {
+      "exports": ["FileRecord", "ScanProgress", "PreviewPayload", "GraphEdge", "GraphPayload", "Mode", "GraphRequest", "ClusterSummary", "GraphNode", "CacheStatus", "PerformanceMetrics", "CodeAnalysis", "GitStatus", "FileGitStatus"],
+      "imports": [],
+      "type": "type-def"
+    },
+    "frontend/src/stores/editorStore.ts": {
+      "exports": ["useEditorStore"],
+      "imports": ["zustand", "../types"],
+      "type": "module"
+    },
+    "frontend/src/components/GraphView.tsx": {
+      "exports": ["GraphView"],
+      "imports": ["react", "graphology", "sigma", "../types", "../utils"],
+      "type": "module"
+    },
+    "frontend/src/components/ExplorerList.tsx": {
+      "exports": ["ExplorerList"],
+      "imports": ["react", "lucide-react", "../types", "../utils"],
+      "type": "module"
+    },
+    "frontend/src/components/ExplorerTree.tsx": {
+      "exports": ["ExplorerTree"],
+      "imports": ["react", "lucide-react", "../types", "../utils"],
+      "type": "module"
+    },
+    "frontend/src/components/ExplorerGrid.tsx": {
+      "exports": ["ExplorerGrid"],
+      "imports": ["react", "../types", "../utils", "./GridItem"],
+      "type": "module"
+    },
+    "frontend/src/components/ExplorerColumns.tsx": {
+      "exports": ["ExplorerColumns"],
+      "imports": ["react", "../types", "./Column"],
+      "type": "module"
+    },
+    "frontend/src/components/CodeMode.tsx": {
+      "exports": ["CodeMode", "isEditableFile"],
+      "imports": ["react", "../stores/editorStore", "./MonacoEditor", "./EditorTabs"],
+      "type": "module"
+    },
+    "frontend/src/components/AssetMode.tsx": {
+      "exports": ["AssetMode"],
+      "imports": ["react", "../types", "../hooks/useThumbnails"],
+      "type": "module"
+    },
+    "frontend/src/components/Inspector.tsx": {
+      "exports": ["Inspector"],
+      "imports": ["react", "lucide-react", "../types", "../utils", "./inspector/*"],
+      "type": "module"
+    },
+    "frontend/src/components/SearchPanel.tsx": {
+      "exports": ["SearchPanel"],
+      "imports": ["react", "lucide-react", "../types", "../utils"],
+      "type": "module"
+    },
+    "frontend/src/components/UnifiedHeader.tsx": {
+      "exports": ["UnifiedHeader"],
+      "imports": ["react", "lucide-react"],
+      "type": "module"
+    },
+    "frontend/src/components/ModeSwitcher.tsx": {
+      "exports": ["ModeSwitcher"],
+      "imports": ["react"],
+      "type": "module"
+    },
+    "frontend/src/hooks/useOpenFiles.ts": {
+      "exports": ["useOpenFiles"],
+      "imports": ["react", "../stores/editorStore", "../types"],
+      "type": "module"
+    },
+    "frontend/src/hooks/useDebounce.ts": {
+      "exports": ["useDebounce"],
+      "imports": ["react"],
+      "type": "module"
+    },
+    "frontend/src/hooks/useThumbnails.ts": {
+      "exports": ["useThumbnails"],
+      "imports": ["react", "../lib/tauriCommands"],
+      "type": "module"
+    },
+    "frontend/src/hooks/useViewPersistence.ts": {
+      "exports": ["useViewPersistence"],
+      "imports": ["react"],
+      "type": "module"
+    },
+    "frontend/src/hooks/useVirtualScroll.ts": {
+      "exports": ["useVirtualScroll"],
+      "imports": ["react"],
+      "type": "module"
+    },
+    "frontend/src/hooks/useCodeAnalysis.ts": {
+      "exports": ["useCodeAnalysis"],
+      "imports": ["react", "../lib/tauriCommands"],
+      "type": "module"
+    },
+    "frontend/src/hooks/useImageAnalysis.ts": {
+      "exports": ["useImageAnalysis"],
+      "imports": ["react", "../lib/tauriCommands"],
+      "type": "module"
+    },
+    "frontend/src/utils.ts": {
+      "exports": ["formatBytes", "formatDate", "shortPath"],
+      "imports": [],
+      "type": "module"
+    },
+    "frontend/vite.config.ts": {
+      "exports": ["default"],
+      "imports": ["vite", "@vitejs/plugin-react"],
+      "type": "config"
+    },
+    "package.json": {
+      "exports": [],
+      "imports": [],
+      "type": "config"
+    },
+    "src-tauri/Cargo.toml": {
+      "exports": [],
+      "imports": [],
+      "type": "config"
+    },
+    "frontend/package.json": {
+      "exports": [],
+      "imports": [],
+      "type": "config"
+    }
+  }
+}

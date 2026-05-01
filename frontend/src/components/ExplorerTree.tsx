@@ -1,7 +1,7 @@
 import React, { memo, useState, useCallback, useEffect } from "react";
 import { FileRecord } from "../types";
 import { tauriInvoke } from "../lib/tauriCommands";
-import { fileTypeLabel } from "../utils";
+import { fileTypeLabel, formatBytes } from "../utils";
 
 interface TreeNodeProps {
   record: FileRecord;
@@ -65,6 +65,7 @@ const TreeNode = memo(function TreeNodeComponent({
           {record.isDir ? "D" : fileTypeLabel(record)}
         </span>
         <span className="tree-label">{record.name}</span>
+        {record.sizeBytes > 0 && <span className="tree-meta">{formatBytes(record.sizeBytes)}</span>}
       </button>
       {isExpanded && hasChildren && (
         <div className="tree-children">

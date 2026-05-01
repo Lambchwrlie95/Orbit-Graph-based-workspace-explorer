@@ -1,41 +1,36 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { listen } from "@tauri-apps/api/event";
 import {
   Activity,
-  Columns3,
-  FolderOpen,
-  Grid3X3,
-  ImageIcon,
+  Folder,
   Info,
   List,
-  Search,
+  Network,
+  Search as SearchIcon,
   SquareCode,
-  TreePine,
 } from "lucide-react";
-import { AssetMode } from "./components/AssetMode";
 import { BookmarksPanel } from "./components/BookmarksPanel";
 import { CodeMode, isEditableFile } from "./components/CodeMode";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { ExplorerColumns } from "./components/ExplorerColumns";
-import { ExplorerGrid } from "./components/ExplorerGrid";
 import { ExplorerList } from "./components/ExplorerList";
 import { ExplorerTree } from "./components/ExplorerTree";
 import { GraphView } from "./components/GraphView";
 import { HelpMenuDialogs } from "./components/HelpDialogs";
 import { Inspector } from "./components/Inspector";
 import { SearchPanel } from "./components/SearchPanel";
+import { Splitter } from "./components/Splitter";
 import { UnifiedHeader } from "./components/UnifiedHeader";
 import { useDebounce } from "./hooks/useDebounce";
 import { useOpenFiles } from "./hooks/useOpenFiles";
 import { useViewPersistence } from "./hooks/useViewPersistence";
 import { tauriInvoke } from "./lib/tauriCommands";
-import { CacheStatus, FileRecord, GraphPayload, PreviewPayload, ScanProgress } from "./types";
+import { CacheStatus, FileRecord, GraphNode, GraphPayload, PreviewPayload, ScanProgress } from "./types";
 import { formatDate, shortPath } from "./utils";
 import "./styles.css";
 
-type ExplorerViewMode = "list" | "tree" | "grid" | "columns";
-type LeftPanel = "explorer" | "search" | "assets" | "status";
+type ExplorerViewMode = "list" | "tree";
+type LeftPanel = "explorer" | "search";
 type RightPanel = "inspector" | "code";
 
 const BOOKMARKS_KEY = "orbit:bookmarks";
@@ -46,15 +41,16 @@ function App() {
   const [rightPanel, setRightPanel] = useState<RightPanel>("inspector");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(280);
+  const [rightWidth, setRightWidth] = useState(340);
   const [rootPath, setRootPath] = useState("");
   const [currentPath, setCurrentPath] = useState("");
   const [bookmarks, setBookmarks] = useState<string[]>([]);
+  const bookmarksLoadedRef = useRef(false);
 
   const {
     viewMode: explorerViewMode,
     setViewMode: setExplorerViewMode,
-    iconSize: gridIconSize,
-    setIconSize: setGridIconSize,
     sortBy,
     setSortBy,
     sortDirection,
@@ -71,6 +67,8 @@ function App() {
   const [scan, setScan] = useState<ScanProgress | null>(null);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
   const [expandedGraphFolders, setExpandedGraphFolders] = useState<string[]>([]);
+  const [graphNavHistory, setGraphNavHistory] = useState<string[]>([]); // Breadcrumb trail for graph navigation
+  const [breadcrumbNodes, setBreadcrumbNodes] = useState<GraphNode[]>([]); // Parent folder nodes to keep visible
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
@@ -122,7 +120,11 @@ function App() {
   }, []);
 
   const loadGraph = useCallback(async (scopePath: string, expanded: string[] = expandedGraphFolders) => {
-    if (!rootPath) return;
+    console.log("[Main] loadGraph called for path:", scopePath);
+    if (!rootPath) {
+      console.log("[Main] loadGraph aborted - no rootPath");
+      return;
+    }
     setIsGraphLoading(true);
     const startTime = performance.now();
     try {
@@ -136,6 +138,7 @@ function App() {
           expandedFolders: expanded,
         },
       });
+      console.log("[Main] loadGraph received payload:", payload?.nodes?.length, "nodes");
       setGraphPayload(payload);
       const duration = Math.round(performance.now() - startTime);
       setStatus(
@@ -144,6 +147,7 @@ function App() {
           : `${payload.nodes.length} graph nodes (${duration}ms)`
       );
     } catch (err) {
+      console.error("[Main] loadGraph error:", err);
       setError(String(err));
       setStatus("Error loading graph");
     } finally {
@@ -298,7 +302,10 @@ function App() {
 
   useEffect(() => {
     const saved = localStorage.getItem(BOOKMARKS_KEY);
-    if (!saved) return;
+    if (!saved) {
+      bookmarksLoadedRef.current = true;
+      return;
+    }
     try {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
@@ -307,9 +314,11 @@ function App() {
     } catch {
       setBookmarks([]);
     }
+    bookmarksLoadedRef.current = true;
   }, []);
 
   useEffect(() => {
+    if (!bookmarksLoadedRef.current) return;
     localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
   }, [bookmarks]);
 
@@ -369,17 +378,50 @@ function App() {
     };
   }, [chooseFolder]);
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl+B - toggle left sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === "b" && !e.shiftKey) {
+        e.preventDefault();
+        setLeftCollapsed((v) => !v);
+      }
+      // Cmd/Ctrl+Shift+B - toggle right sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === "b" && e.shiftKey) {
+        e.preventDefault();
+        setRightCollapsed((v) => !v);
+      }
+      // Cmd/Ctrl+J - toggle bottom panel (placeholder for future)
+      if ((e.metaKey || e.ctrlKey) && e.key === "j" && !e.shiftKey) {
+        e.preventDefault();
+        // Future: toggle bottom panel
+      }
+      // Cmd/Ctrl+1-2 - switch left panel tabs
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === "1" || e.key === "2")) {
+        e.preventDefault();
+        const panels: LeftPanel[] = ["explorer", "search"];
+        const index = parseInt(e.key, 10) - 1;
+        if (panels[index]) {
+          showLeftPanel(panels[index]);
+          setLeftCollapsed(false);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const leftPanelLabel = {
     explorer: "Explorer",
     search: "Search",
-    assets: "Assets",
-    status: "Status",
   }[leftPanel];
 
   return (
     <main className="app-shell">
       <UnifiedHeader
         workspacePath={rootPath}
+        currentPath={currentPath || rootPath}
         selectedPath={selected?.path}
         leftCollapsed={leftCollapsed}
         rightCollapsed={rightCollapsed}
@@ -393,39 +435,23 @@ function App() {
         onAddBookmark={addCurrentBookmark}
         onShowExplorer={() => showLeftPanel("explorer")}
         onShowSearch={() => showLeftPanel("search")}
-        onShowAssets={() => showLeftPanel("assets")}
-        onShowStatus={() => showLeftPanel("status")}
         onShowInspector={() => showRightPanel("inspector")}
         onShowCode={() => showRightPanel("code")}
+        onNavigateToPath={(path) => {
+          console.log("[Main] onNavigateToPath called:", path);
+          setCurrentPath(path);
+          void loadGraph(path);
+        }}
       />
 
-      <section className={`workbench ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
+      <section
+        className={`workbench ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}
+        style={{ "--left-width": `${leftWidth}px`, "--right-width": `${rightWidth}px` } as React.CSSProperties}
+      >
         <aside className="pane left-pane">
-          <div className="explorer-header">
-            <button
-              type="button"
-              className="explorer-root"
-              onClick={() => rootPath ? setCurrentPath(rootPath) : void chooseFolder()}
-              title={rootPath || "Choose folder"}
-            >
-              <FolderOpen size={14} strokeWidth={1.75} />
-              <span className="explorer-root-name">{rootPath ? shortPath(rootPath) : "No workspace"}</span>
-            </button>
-            <span className="explorer-header-actions">
-              <button type="button" onClick={chooseFolder} title="Open folder">
-                <FolderOpen size={14} strokeWidth={1.75} />
-              </button>
-              <button type="button" onClick={scanWorkspace} title="Scan workspace">
-                <Activity size={14} strokeWidth={1.75} />
-              </button>
-            </span>
-          </div>
-
           <div className="side-nav" aria-label="Left panel">
-            <PanelButton active={leftPanel === "explorer"} label="Explorer" onClick={() => setLeftPanel("explorer")} icon={<TreePine size={15} />} />
-            <PanelButton active={leftPanel === "search"} label="Search" onClick={() => setLeftPanel("search")} icon={<Search size={15} />} />
-            <PanelButton active={leftPanel === "assets"} label="Assets" onClick={() => setLeftPanel("assets")} icon={<ImageIcon size={15} />} />
-            <PanelButton active={leftPanel === "status"} label="Status" onClick={() => setLeftPanel("status")} icon={<Info size={15} />} />
+            <PanelButton active={leftPanel === "explorer"} label="Explorer" onClick={() => setLeftPanel("explorer")} icon={<Folder size={15} />} />
+            <PanelButton active={leftPanel === "search"} label="Search" onClick={() => setLeftPanel("search")} icon={<SearchIcon size={15} />} />
           </div>
 
           <div className="side-panel-title">
@@ -443,12 +469,6 @@ function App() {
                 selectedPath={selected?.path}
                 selectRecord={selectRecord}
                 setCurrentPath={setCurrentPath}
-                gridIconSize={gridIconSize}
-                setGridIconSize={setGridIconSize}
-                sortBy={sortBy}
-                setSortBy={setSortBy}
-                sortDirection={sortDirection}
-                setSortDirection={setSortDirection}
               />
             )}
 
@@ -471,26 +491,6 @@ function App() {
                 }}
               />
             )}
-
-            {leftPanel === "assets" && (
-              <AssetMode
-                files={children}
-                currentPath={currentPath}
-                onSelect={selectRecord}
-              />
-            )}
-
-            {leftPanel === "status" && (
-              <StatusBlock
-                status={status}
-                scan={scan}
-                logPath={logPath}
-                error={error}
-                cacheStatus={cacheStatus}
-                isCheckingCache={isCheckingCache}
-                onRefreshCache={() => rootPath && void checkCacheStatus(rootPath)}
-              />
-            )}
           </div>
 
           <BookmarksPanel
@@ -501,6 +501,14 @@ function App() {
             onOpenBookmark={openBookmark}
           />
         </aside>
+
+        <Splitter
+          side="left"
+          size={leftCollapsed ? 0 : leftWidth}
+          onSizeChange={setLeftWidth}
+          onToggle={() => setLeftCollapsed(!leftCollapsed)}
+          collapsed={leftCollapsed}
+        />
 
         <section className="pane center-pane">
           <ErrorBoundary
@@ -518,16 +526,51 @@ function App() {
               onSelectPath={selectPathInsideOrbit}
               onOpenPath={openPath}
               onFocusFolder={(path) => {
+                // Build breadcrumb trail: keep history of visited folders
+                if (currentPath && currentPath !== path && selected) {
+                  // Check if we're navigating back to a previous folder
+                  const existingIndex = graphNavHistory.indexOf(path);
+                  if (existingIndex !== -1) {
+                    // Navigating back - truncate history to that point
+                    setGraphNavHistory(graphNavHistory.slice(0, existingIndex));
+                    // Remove breadcrumb nodes that are now forward in the trail
+                    setBreadcrumbNodes(breadcrumbNodes.filter(n => !graphNavHistory.slice(existingIndex).includes(n.path)));
+                  } else {
+                    // Navigating forward - add current folder node to breadcrumbs
+                    const currentNode: GraphNode = {
+                      id: Date.now() + Math.random(), // temporary unique id
+                      path: currentPath,
+                      label: currentPath.split('/').pop() || currentPath,
+                      isDir: true,
+                      sizeBytes: 0,
+                      childCount: 0,
+                      extension: null,
+                      isCluster: false,
+                    };
+                    setGraphNavHistory([...graphNavHistory, currentPath]);
+                    setBreadcrumbNodes([...breadcrumbNodes, currentNode]);
+                  }
+                }
                 setCurrentPath(path);
                 showLeftPanel("explorer");
                 void loadGraph(path);
               }}
               onExpandCluster={handleExpandCluster}
               expandedFolders={expandedGraphFolders}
+              navHistory={graphNavHistory}
+              breadcrumbNodes={breadcrumbNodes}
               isLoading={isGraphLoading}
             />
           </ErrorBoundary>
         </section>
+
+        <Splitter
+          side="right"
+          size={rightCollapsed ? 0 : rightWidth}
+          onSizeChange={setRightWidth}
+          onToggle={() => setRightCollapsed(!rightCollapsed)}
+          collapsed={rightCollapsed}
+        />
 
         <aside className="pane right-pane">
           <div className="right-tabs" aria-label="Right panel">
@@ -571,12 +614,12 @@ function App() {
 
 interface PanelButtonProps {
   active: boolean;
-  icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  icon: React.ReactNode;
 }
 
-function PanelButton({ active, icon, label, onClick }: PanelButtonProps) {
+function PanelButton({ active, label, onClick, icon }: PanelButtonProps) {
   return (
     <button
       type="button"
@@ -600,12 +643,6 @@ interface ExplorerSidePanelProps {
   selectedPath?: string;
   selectRecord: (record: FileRecord) => Promise<void>;
   setCurrentPath: (path: string) => void;
-  gridIconSize: 48 | 64 | 96 | 128;
-  setGridIconSize: (size: 48 | 64 | 96 | 128) => void;
-  sortBy: "name" | "size" | "modified";
-  setSortBy: (sort: "name" | "size" | "modified") => void;
-  sortDirection: "asc" | "desc";
-  setSortDirection: (dir: "asc" | "desc") => void;
 }
 
 function ExplorerSidePanel({
@@ -617,12 +654,6 @@ function ExplorerSidePanel({
   selectedPath,
   selectRecord,
   setCurrentPath,
-  gridIconSize,
-  setGridIconSize,
-  sortBy,
-  setSortBy,
-  sortDirection,
-  setSortDirection,
 }: ExplorerSidePanelProps) {
   return (
     <div className="side-explorer">
@@ -631,43 +662,14 @@ function ExplorerSidePanel({
           <List size={13} />
         </button>
         <button className={explorerViewMode === "tree" ? "active" : ""} onClick={() => setExplorerViewMode("tree")} title="Tree">
-          <TreePine size={13} />
-        </button>
-        <button className={explorerViewMode === "grid" ? "active" : ""} onClick={() => setExplorerViewMode("grid")} title="Grid">
-          <Grid3X3 size={13} />
-        </button>
-        <button className={explorerViewMode === "columns" ? "active" : ""} onClick={() => setExplorerViewMode("columns")} title="Columns">
-          <Columns3 size={13} />
+          <Network size={13} />
         </button>
       </div>
 
       <div className="side-path" title={currentPath}>{currentPath || rootPath}</div>
 
       <div className="side-explorer-body">
-        {explorerViewMode === "columns" ? (
-          <ExplorerColumns
-            rootPath={rootPath}
-            currentPath={currentPath}
-            selectedPath={selectedPath}
-            onSelect={selectRecord}
-            onNavigate={setCurrentPath}
-          />
-        ) : explorerViewMode === "grid" ? (
-          <ExplorerGrid
-            currentPath={currentPath}
-            rootPath={rootPath}
-            items={children}
-            selectedPath={selectedPath}
-            onSelect={selectRecord}
-            onNavigate={setCurrentPath}
-            iconSize={gridIconSize}
-            onIconSizeChange={setGridIconSize}
-            sortBy={sortBy}
-            onSortByChange={setSortBy}
-            sortDirection={sortDirection}
-            onSortDirectionChange={setSortDirection}
-          />
-        ) : explorerViewMode === "list" ? (
+        {explorerViewMode === "list" ? (
           <ExplorerList
             currentPath={currentPath}
             rootPath={rootPath}
@@ -685,89 +687,6 @@ function ExplorerSidePanel({
           />
         )}
       </div>
-    </div>
-  );
-}
-
-interface StatusBlockProps {
-  status: string;
-  scan: ScanProgress | null;
-  logPath: string | null;
-  error: string | null;
-  cacheStatus: CacheStatus | null;
-  isCheckingCache: boolean;
-  onRefreshCache: () => void;
-}
-
-function StatusBlock({
-  status,
-  scan,
-  logPath,
-  error,
-  cacheStatus,
-  isCheckingCache,
-  onRefreshCache,
-}: StatusBlockProps) {
-  const getCacheStatusClass = () => {
-    if (!cacheStatus || cacheStatus.fileCount === 0) return "empty";
-    if (cacheStatus.isStale) return "stale";
-    if (cacheStatus.isFresh) return "fresh";
-    return "empty";
-  };
-
-  const getCacheLabel = () => {
-    if (isCheckingCache) return "Checking...";
-    if (!cacheStatus || cacheStatus.fileCount === 0) return "No cache";
-    if (cacheStatus.isStale) return "Stale";
-    if (cacheStatus.isFresh) return "Fresh";
-    return "Unknown";
-  };
-
-  return (
-    <div className="status-block">
-      <strong className={status.toLowerCase().includes("scanning") ? "scanning-indicator" : ""}>
-        {status}
-      </strong>
-
-      {cacheStatus && (
-        <div className="cache-section">
-          <div className={`cache-status ${getCacheStatusClass()}`}>
-            <span>Cache: {getCacheLabel()}</span>
-          </div>
-          {cacheStatus.fileCount > 0 && (
-            <p className="muted">
-              {cacheStatus.fileCount.toLocaleString()} files
-              {cacheStatus.lastScanTime && (
-                <span> | {formatDate(cacheStatus.lastScanTime)}</span>
-              )}
-            </p>
-          )}
-          {cacheStatus.isStale && cacheStatus.staleReason && (
-            <p className="muted">{cacheStatus.staleReason}</p>
-          )}
-          <button onClick={onRefreshCache} disabled={isCheckingCache}>
-            {isCheckingCache ? "Checking..." : "Refresh Check"}
-          </button>
-        </div>
-      )}
-
-      {scan && (
-        <dl>
-          <dt>Scanned</dt>
-          <dd>{scan.scanned.toLocaleString()}</dd>
-          <dt>Changed</dt>
-          <dd>{scan.insertedOrUpdated.toLocaleString()}</dd>
-          <dt>Skipped</dt>
-          <dd>{scan.skippedUnchanged.toLocaleString()}</dd>
-        </dl>
-      )}
-
-      {logPath && (
-        <p className="muted" title={logPath}>
-          Log: {shortPath(logPath)}
-        </p>
-      )}
-      {error && <p className="error">{error}</p>}
     </div>
   );
 }

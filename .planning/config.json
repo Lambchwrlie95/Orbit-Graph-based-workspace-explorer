@@ -14,5 +14,8 @@
   "planning": {
     "commit_docs": true,
     "sub_repos": []
+  },
+  "intel": {
+    "enabled": true
   }
 }
