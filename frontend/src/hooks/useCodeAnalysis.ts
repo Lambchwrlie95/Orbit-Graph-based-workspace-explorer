@@ -1,27 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { tauriInvoke } from '../lib/tauriCommands';
+import type { CodeAnalysis, FileGitStatus, Import } from '../types';
 
-export interface Import {
-  name: string;
-  path: string;
-  import_type: 'local' | 'package' | 'std';
-}
-
-export interface Export {
-  name: string;
-  export_type: string;
-}
-
-export interface CodeAnalysis {
-  imports: Import[];
-  exports: Export[];
-}
-
-export interface FileGitStatus {
-  status: 'current' | 'modified' | 'staged' | 'staged_modified' | 'new' | 'deleted' | 'renamed' | 'ignored' | 'conflicted' | 'unknown';
-  additions?: number;
-  deletions?: number;
-}
+export type { CodeAnalysis, Export, FileGitStatus, Import } from '../types';
 
 export interface UseCodeAnalysisReturn {
   analysis: CodeAnalysis | null;
@@ -58,17 +39,17 @@ export function useCodeAnalysis(filePath: string | null): UseCodeAnalysisReturn 
 
     try {
       // Check if it's a code file first
-      const isCode = await invoke<boolean>('is_analyzable_code_file', { path: filePath });
+      const isCode = await tauriInvoke('is_analyzable_code_file', { path: filePath });
       setIsCodeFile(isCode);
 
       // Check if in git repo
-      const inRepo = await invoke<boolean>('is_in_git_repo', { path: filePath });
+      const inRepo = await tauriInvoke('is_in_git_repo', { path: filePath });
       setInGitRepo(inRepo);
 
       // Fetch code analysis if it's a code file
       if (isCode) {
         try {
-          const analysisResult = await invoke<CodeAnalysis | null>('analyze_code_file', { path: filePath });
+          const analysisResult = await tauriInvoke('analyze_code_file', { path: filePath });
           setAnalysis(analysisResult);
         } catch (analysisErr) {
           console.warn('Failed to analyze code file:', analysisErr);
@@ -81,7 +62,7 @@ export function useCodeAnalysis(filePath: string | null): UseCodeAnalysisReturn 
       // Fetch git status
       if (inRepo) {
         try {
-          const gitResult = await invoke<FileGitStatus>('get_file_git_status', { path: filePath });
+          const gitResult = await tauriInvoke('get_file_git_status', { path: filePath });
           setGitStatus(gitResult);
         } catch (gitErr) {
           console.warn('Failed to get git status:', gitErr);
@@ -93,7 +74,7 @@ export function useCodeAnalysis(filePath: string | null): UseCodeAnalysisReturn 
 
       // Fetch related files (always try, even for non-code files)
       try {
-        const related = await invoke<string[]>('get_related_files', { path: filePath });
+        const related = await tauriInvoke('get_related_files', { path: filePath });
         setRelatedFiles(related);
       } catch (relatedErr) {
         console.warn('Failed to get related files:', relatedErr);
@@ -129,7 +110,7 @@ export function useSupportedCodeExtensions(): string[] {
   ]);
 
   useEffect(() => {
-    invoke<string[]>('get_supported_code_extensions')
+    tauriInvoke('get_supported_code_extensions')
       .then(setExtensions)
       .catch(console.error);
   }, []);

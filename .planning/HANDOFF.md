@@ -1,16 +1,18 @@
 # Orbit Developer Handoff
 
-**Updated:** 2026-04-30  
-**Status:** Stabilizing before Phase 8  
+**Updated:** 2026-05-01
+**Status:** Stabilizing after graph-first workbench, Phase 8 inspector integration, and typed command-boundary cleanup
 **Current call:** Keep investing in Orbit as the product, using `/home/lamb/Projects/graph-file-manager` as the reliability/UI reference.
 
 ## Current Baseline
 
-- `npm run frontend:build` passes.
-- `cargo test` passes 12/12 without warnings.
+- `npm run commands:check` passes and confirms the frontend command catalog matches Rust `generate_handler`.
+- `npm run frontend:smoke` passes against `http://127.0.0.1:1420/`.
+- `npm run frontend:build` passes after the graph-only workbench refactor and command-boundary cleanup.
+- `cargo test` passes 12/12.
 - `cargo clippy --all-targets -- -D warnings` passes.
-- Frontend dev server was started on `http://127.0.0.1:1421/` because port `1420` was already in use.
-- Wide and narrow Chromium screenshots were checked after the UI/graph changes.
+- Headless Chromium screenshot at 1440x900 confirms the current layout: top menu, left tool/bookmark sidebar, graph-only center, and right inspector/code sidebar.
+- Frontend dev server was started on `http://127.0.0.1:1420/` for the Chromium smoke screenshot.
 - Recent `~/.local/share/orbit/app.log` entries were checked after the error sweep; no new runtime error lines were present in the tail, only startup, graph load, and scan activity.
 
 ## What Changed In The Latest Passes
@@ -22,10 +24,15 @@
 - Replaced the old graph component with a richer graph-first surface in `frontend/src/components/GraphView.tsx`.
 - Fixed a runtime Graphology crash where duplicate edges for the same source/target pair caused `Graph.addEdgeWithKey` to throw; `GraphView.tsx` now deduplicates visible edge pairs and defensively skips already-added pairs.
 - Added `frontend/src/components/ErrorBoundary.tsx` and wrapped the graph surface so a future graph render/runtime exception shows a recoverable graph error panel instead of crashing the whole React tree.
-- Moved mode navigation out of the central/top bar:
-  - Graph, Explorer, Assets, and Search now live in the left sidebar.
-  - Code now lives as a code tab in the right inspector sidebar.
-  - The main surface is reserved for the active work view, with no mode tabs in the middle.
+- Reworked the app shell around the graph-file-manager reference:
+  - `frontend/src/components/UnifiedHeader.tsx` now provides a thin top menu with File/View/Run/Panels popovers and compact right-side controls.
+  - `frontend/src/main.tsx` keeps the center pane graph-only. Explorer, Search, Assets, and Status live in the left sidebar; Inspector and Code live in the right sidebar.
+  - Graph node folder focus and search-result folder open now route to the Explorer side panel instead of replacing the graph center.
+  - `frontend/src/components/BookmarksPanel.tsx` restores workspace bookmarks with basename-only labels, internal full-path values, localStorage persistence, and a 12-item cap.
+  - `frontend/src/components/Inspector.tsx` owns preview actions, image previews, line-numbered text/code previews, code analysis, and image analysis in the right sidebar.
+  - `frontend/src/hooks/useImageAnalysis.ts` and `frontend/src/components/inspector/ImageAnalysisPanel.tsx` call the existing image metadata/color commands and display dimensions, aspect, format, size, and dominant colors.
+  - `frontend/src/components/CodeMode.tsx` had a `humans.txt` editable-file typo fixed.
+  - `frontend/src/types/index.ts` no longer declares `GraphNode` twice.
 - Completed a Rust error sweep:
   - Registered the file edit, batch code analysis, git status, and operation stats Tauri commands that frontend/Phase 8 code can call.
   - Wired `analyze_code_file` through SQLite-backed cached analysis when a file has already been indexed.
@@ -33,6 +40,11 @@
   - Cleared stale code-analysis rows during workspace scans before re-indexing.
   - Removed or justified unused/dead backend paths until `clippy --all-targets -- -D warnings` is clean.
 - Updated planning docs so completion claims are more honest: build/test is green, but smoke/UAT coverage is still pending.
+- Added `frontend/src/lib/tauriCommands.ts` as the typed frontend boundary for every Tauri command used by Orbit.
+- Migrated raw frontend `invoke(...)` calls to `tauriInvoke(...)` so command names, arguments, and results are checked in one place.
+- Extended `frontend/src/types/index.ts` with shared command-result types for code analysis, git status, image analysis, thumbnails, and operation stats.
+- Added `scripts/check-tauri-commands.mjs` and `npm run commands:check` to catch frontend/Rust command registration drift.
+- Added `scripts/smoke-frontend.mjs` and `npm run frontend:smoke` for a baseline Chromium render check of the workbench shell.
 
 ## Graph State
 
@@ -65,10 +77,14 @@ Next graph priorities:
 ## Important Files
 
 - `frontend/src/components/GraphView.tsx` - primary graph UI and interaction surface.
-- `frontend/src/components/ModeSwitcher.tsx` - reusable sidebar mode switcher with a filtered mode list.
-- `frontend/src/main.tsx` - app shell, graph loading, selected path propagation, status bar.
-- `frontend/src/components/Inspector.tsx` - right sidebar details and Code mode entry.
+- `frontend/src/components/UnifiedHeader.tsx` - reference-style top menu and compact panel/file actions.
+- `frontend/src/components/BookmarksPanel.tsx` - local workspace bookmarks.
+- `frontend/src/main.tsx` - app shell, graph-only center, left/right side-panel routing, graph loading, selected path propagation, status bar.
+- `frontend/src/components/Inspector.tsx` - right sidebar details, previews, image analysis, and code analysis.
+- `frontend/src/lib/tauriCommands.ts` - typed frontend Tauri command catalog and wrapper.
 - `frontend/src/styles.css` - workbench and graph styling.
+- `scripts/check-tauri-commands.mjs` - command catalog drift check.
+- `scripts/smoke-frontend.mjs` - baseline browser smoke check.
 - `src-tauri/src/graph.rs` - graph query, caps, clustering, backend positions.
 - `src-tauri/src/code_analyzer.rs` - code import/export extraction; recently fixed compile/test issues.
 - `src-tauri/src/git_status.rs` - git status helper; recently fixed git2 API/test issues.
@@ -79,19 +95,19 @@ Next graph priorities:
 
 The worktree contains changes from before and during the latest pass. Do not reset blindly.
 
-Known dirty areas include:
+Known dirty areas after this pass:
 
-- UI/frontend: `AssetMode.tsx`, `GraphView.tsx`, `Inspector.tsx`, `MonacoEditor.tsx`, `main.tsx`, `styles.css`.
-- Packages/config: `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`.
-- Backend: `code_analyzer.rs`, `db.rs`, `git_status.rs`.
-- Planning: `STATE.md`, `REQUIREMENTS.md`, `ROADMAP.md`, plus this handoff.
-- Untracked local automation artifacts: `.aionrs/`.
-- Untracked Phase 7 summary: `.planning/phases/07-asset-mode/07-03-SUMMARY.md`.
+- UI/frontend: `Inspector.tsx`, `main.tsx`, `styles.css`, `UnifiedHeader.tsx`, `BookmarksPanel.tsx`, image-analysis hook/panel, and existing frontend changes from earlier passes.
+- Types/editor cleanup: `frontend/src/types/index.ts` and `frontend/src/components/CodeMode.tsx`.
+- Command boundary and checks: `frontend/src/lib/tauriCommands.ts`, migrated frontend invoke sites, `scripts/check-tauri-commands.mjs`, `scripts/smoke-frontend.mjs`, and `package.json`.
+- Planning/docs: `STATE.md`, `REQUIREMENTS.md`, `ROADMAP.md`, this handoff, and `docs/WORKBENCH.md`.
+- Untracked `docs/.codex` is present in the workspace and was not edited in this pass.
+- Do not reset blindly; inspect `git status --short` first.
 
 ## Next Best Work
 
-1. Add smoke tests around scan, graph load, thumbnail/image commands, and UI mode flows.
+1. Add deeper smoke tests around scan, graph load, thumbnail/image commands, bookmarks persistence, top-menu actions, and side-panel routing.
 2. Run the app against a real project root and inspect graph quality after scanning.
-3. Continue graph polish with real data: relationship edges, clustering behavior, selection routing, minimap usefulness.
-4. Persist graph preferences: layout, labels, focus mode, filters.
-5. Then execute Phase 8 Code Mode & Enhanced Inspector from a green baseline.
+3. Finish Phase 8 markdown analysis: links, backlinks, heading outline, and markdown preview split behavior.
+4. Continue graph polish with real data: relationship edges, clustering behavior, selection routing, minimap usefulness.
+5. Persist graph preferences: layout, labels, focus mode, filters.

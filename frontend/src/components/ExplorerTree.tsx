@@ -1,6 +1,6 @@
 import React, { memo, useState, useCallback, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { FileRecord } from "../types";
+import { tauriInvoke } from "../lib/tauriCommands";
 import { fileTypeLabel } from "../utils";
 
 interface TreeNodeProps {
@@ -119,7 +119,7 @@ function LazyTreeNode({
   useEffect(() => {
     if (isExpanded && record.isDir && children.length === 0) {
       setIsLoading(true);
-      invoke<FileRecord[]>("list_children", { parentPath: record.path })
+      tauriInvoke("list_children", { parentPath: record.path })
         .then((result) => {
           setChildren(result);
         })
@@ -163,7 +163,7 @@ function ExplorerTreeComponent({
 
   useEffect(() => {
     if (rootPath) {
-      invoke<FileRecord | null>("get_file", { path: rootPath })
+      tauriInvoke("get_file", { path: rootPath })
         .then((record) => {
           if (record) {
             setRootRecord(record);

@@ -9,6 +9,7 @@ export interface FileRecord {
   modifiedAt?: number | null;
   createdAt?: number | null;
   isDir: boolean;
+  metadata?: string | null;
 }
 
 export interface ScanProgress {
@@ -27,20 +28,6 @@ export interface PreviewPayload {
   summary: string;
   content?: string | null;
   metadata: Array<{ key: string; value: string }>;
-}
-
-export interface GraphNode {
-  id: number;
-  label: string;
-  path: string;
-  isDir: boolean;
-  sizeBytes: number;
-  extension?: string | null;
-  parentPath?: string | null;
-  isCluster: boolean;
-  childCount?: number | null;
-  x?: number | null;
-  y?: number | null;
 }
 
 export interface GraphEdge {
@@ -115,4 +102,92 @@ export interface PerformanceMetrics {
   operationCount: number;
   totalDurationMs: number;
   slowOperations: SlowOperation[];
+}
+
+export type OperationStats = Record<string, [number, number, number]>;
+
+export type ImportType = "local" | "package" | "std";
+
+export interface Import {
+  name: string;
+  path: string;
+  import_type: ImportType;
+}
+
+export interface Export {
+  name: string;
+  export_type: string;
+}
+
+export interface CodeAnalysis {
+  imports: Import[];
+  exports: Export[];
+}
+
+export type GitStatus =
+  | "current"
+  | "modified"
+  | "staged"
+  | "staged_modified"
+  | "new"
+  | "deleted"
+  | "renamed"
+  | "ignored"
+  | "conflicted"
+  | "unknown";
+
+export interface FileGitStatus {
+  status: GitStatus;
+  additions?: number;
+  deletions?: number;
+}
+
+export interface ImageAnalysisData {
+  width: number;
+  height: number;
+  format: string | Record<string, string>;
+  aspect_ratio: number;
+  aspectRatio?: number;
+}
+
+export interface ImageColor {
+  r: number;
+  g: number;
+  b: number;
+  percentage: number;
+}
+
+export interface ImageMetadataResult {
+  file_id: number;
+  analysis: ImageAnalysisData;
+  cached: boolean;
+}
+
+export interface ColorExtractionResult {
+  file_id: number;
+  colors: ImageColor[];
+  cached: boolean;
+}
+
+export interface ThumbnailRequest {
+  file_id: number;
+  file_path: string;
+  file_modified_at: number;
+  size: number;
+}
+
+export interface ThumbnailResponse {
+  path?: string | null;
+  status: "ready" | "generating" | "error";
+  error?: string | null;
+}
+
+export interface ThumbnailInfo {
+  id: number;
+  file_id: number;
+  size: number;
+  path: string;
+  generated_at: number;
+  width: number;
+  height: number;
 }

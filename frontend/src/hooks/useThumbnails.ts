@@ -1,26 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-
-interface ThumbnailRequest {
-  file_id: number;
-  file_path: string;
-  file_modified_at: number;
-  size: number;
-}
-
-interface ThumbnailResponse {
-  path?: string;
-  status: 'ready' | 'generating' | 'error';
-  error?: string;
-}
-
-interface ThumbnailInfo {
-  file_id: number;
-  size: number;
-  path: string;
-  width: number;
-  height: number;
-}
+import { tauriInvoke } from '../lib/tauriCommands';
+import type { ThumbnailInfo, ThumbnailResponse } from '../types';
 
 export function useThumbnails() {
   const [loading, setLoading] = useState<Set<string>>(new Set());
@@ -53,7 +33,7 @@ export function useThumbnails() {
     setLoading(prev => new Set(prev).add(key));
     
     try {
-      const response = await invoke<ThumbnailResponse>('ensure_thumbnail', {
+      const response: ThumbnailResponse = await tauriInvoke('ensure_thumbnail', {
         request: {
           file_id: fileId,
           file_path: filePath,
@@ -96,7 +76,7 @@ export function useThumbnails() {
 
   const getThumbnailInfo = useCallback(async (fileId: number): Promise<ThumbnailInfo[]> => {
     try {
-      return await invoke<ThumbnailInfo[]>('get_thumbnail_info', { fileId });
+      return await tauriInvoke('get_thumbnail_info', { fileId });
     } catch (err) {
       console.error('Failed to get thumbnail info:', err);
       return [];

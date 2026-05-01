@@ -4,7 +4,7 @@
 
 Orbit v1 builds the real foundation for a graph-first file intelligence IDE. The path starts with a reliable Tauri/Rust/SQLite scanner, then adds practical explorer/search/inspector workflows, then ships a scoped Sigma/Graphology graph, and finally hardens performance safeguards so large local folders do not break the experience.
 
-**Developer handoff:** current implementation status, validation commands, dirty worktree notes, and next priorities are summarized in `.planning/HANDOFF.md`.
+**Developer handoff:** current implementation status, validation commands, dirty worktree notes, typed Tauri command-boundary notes, and next priorities are summarized in `.planning/HANDOFF.md`.
 
 ## Phases
 
@@ -137,8 +137,8 @@ All 4 phases of Orbit v1.0 Foundation have been completed:
 |-------|------|------|--------|
 | **5** | Packaging & Desktop Integration | Desktop entries, AppImage, Linux integration | ✅ Complete |
 | **6** | Explorer Enhancements | Grid view, Columns view, view persistence | ✅ Complete |
-| **7** | Asset Mode | Thumbnails, colors, duplicate detection | Implemented; UAT/Smoke Pending |
-| **8** | Code Mode & Enhanced Inspector | Monaco editing, code analysis, markdown backlinks | Planning |
+| **7** | Asset Mode | Thumbnails, colors, duplicate detection | Partial implementation; duplicate grouping pending |
+| **8** | Code Mode & Enhanced Inspector | Monaco editing, code analysis, markdown backlinks | Partial implementation; markdown/backlinks pending |
 
 ---
 
@@ -231,11 +231,11 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] **07-01** — Thumbnail generation system (Rust backend)
+- [x] **07-01** — Thumbnail generation system (Rust backend)
   - ThumbnailGenerator service with 128/256/512px sizes
   - SQLite schema for thumbnail metadata
   - AssetMode shell component with mode switching
-- [ ] **07-02** — Asset grid and image analysis
+- [x] **07-02** — Asset grid and image analysis
   - Virtual scrolling AssetGrid component
   - Image dimension extraction and display
   - Dominant color extraction with k-means
@@ -276,10 +276,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] **08-01** — Monaco Editor integration with tabs, file read/save commands, editor state management
-- [ ] **08-02** — Code analysis (import/export detection) and git status integration
+- [x] **08-01** — Monaco Editor integration with tabs, file read/save commands, editor state management
+- [x] **08-02** — Code analysis (import/export detection) and git status integration
 - [ ] **08-03** — Markdown analysis (links, backlinks, outline) and preview rendering
-- [ ] **08-04** — Image analysis integration in inspector (dimensions, colors, similar images)
+- [ ] **08-04** — Image analysis integration in inspector (dimensions, colors, similar images). **Partial:** dimensions, format, aspect, size, and dominant colors are integrated in the right inspector; similar-image grouping remains pending.
 
 **Artifacts**:
 - `.planning/phases/08-code-mode-enhanced-inspector/08-CONTEXT.md`
@@ -291,6 +291,12 @@ Plans:
 - Code analysis engine with regex parsers
 - Markdown link indexer and backlink database
 - Git status integration with git2 crate
+- Graph-first workbench routing added on 2026-05-01:
+  - center pane is graph-only
+  - left sidebar owns Explorer/Search/Assets/Status
+  - right sidebar owns Inspector/Code
+  - top menu follows the graph-file-manager reference
+  - bookmarks and preview analysis are restored in side panels
 
 ---
 
@@ -303,8 +309,8 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 |-------|-------|--------|------------|
 | 5. Packaging & Desktop Integration | 2 | ✅ Complete | 2026-04-29 |
 | 6. Explorer Enhancements | 2 | ✅ Complete | 2026-04-29 |
-| 7. Asset Mode | 3 | Implemented; UAT/Smoke Pending | 2026-04-29 |
-| 8. Code Mode & Enhanced Inspector | 4 | 📋 Planned | Ready |
+| 7. Asset Mode | 3 | 🔨 Partial implementation | 2026-04-29 |
+| 8. Code Mode & Enhanced Inspector | 4 | 🔨 Partial implementation | Started |
 
 **Total v2.0 Plans**: 11 plans
 **Requirements**: 10 new requirements
@@ -369,4 +375,4 @@ v2.0 is structured as **4 sequential phases** rather than parallel waves because
 
 *Roadmap v2.0 created: 2026-04-29*  
 *v1.0 Complete: 2026-04-29*  
-*v2.0 Status: Planning Phase*
+*v2.0 Status: Partial implementation and stabilization*

@@ -382,10 +382,10 @@ function GraphViewComponent({
         <button type="button" className="graph-zoom-btn" onClick={zoomGraphOut} title="Zoom out">
           -
         </button>
-        <button type="button" onClick={fitGraph} title="Fit graph">
+        <button type="button" className="graph-text-btn" onClick={fitGraph} title="Fit graph">
           Fit
         </button>
-        <button type="button" onClick={focusSelected} disabled={!selectedNode} title="Focus selected">
+        <button type="button" className="graph-text-btn" onClick={focusSelected} disabled={!selectedNode} title="Focus selected">
           Sel
         </button>
       </div>

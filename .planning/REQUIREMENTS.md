@@ -3,7 +3,7 @@
 **Defined:** 2026-04-29
 **Core Value:** Orbit must make local files understandable and actionable by showing the relationships that matter without overwhelming the user or their machine.
 
-> Status note, 2026-04-30: completion markings below are implementation/planning status, not full UAT validation. Current verified baseline is `npm run frontend:build` passing and `cargo test` passing 12/12. Smoke tests are still needed for scan, graph load, thumbnail/image commands, and UI mode flows.
+> Status note, 2026-05-01: completion markings below are implementation/planning status, not full UAT validation. Current verified baseline includes `npm run commands:check`, `npm run frontend:smoke`, `npm run frontend:build`, `cargo test` passing 12/12, and a 1440x900 Chromium smoke screenshot confirming the graph-only center with left/right side panels. Deeper smoke tests are still needed for scan, graph load with real data, thumbnail/image commands, bookmarks persistence, top-menu actions, and UI side-panel flows.
 
 ## v1 Requirements
 
@@ -38,8 +38,8 @@
 
 ### Inspector Enhancements (v2.0)
 
-- [ ] **INSP-04**: Inspector shows code analysis (imports, exports, git status) for code files.
-- [ ] **INSP-05**: Inspector shows image analysis (dimensions, dominant colors, similar images) for image files.
+- [x] **INSP-04**: Inspector shows code analysis (imports, exports, git status) for code files.
+- [ ] **INSP-05**: Inspector shows image analysis (dimensions, dominant colors, similar images) for image files. **Partial 2026-05-01:** dimensions, aspect ratio, format, size, and dominant colors are surfaced in the right inspector; similar-image grouping still needs completion.
 - [ ] **INSP-06**: Inspector shows markdown analysis (links, backlinks, headings) for markdown files.
 
 ### Search (v1.0 Complete)
@@ -72,17 +72,17 @@
 
 ### Code Mode (CODE)
 
-- [ ] **CODE-01**: User can open files in Monaco tabs.
-- [ ] **CODE-02**: User can edit and save text files.
+- [x] **CODE-01**: User can open files in Monaco tabs.
+- [x] **CODE-02**: User can edit and save text files.
 - [ ] **CODE-03**: User can preview Markdown.
-- [ ] **CODE-04**: Orbit extracts imports and exported symbols for common code file types.
+- [x] **CODE-04**: Orbit extracts imports and exported symbols for common code file types.
 
 ### Asset Mode (ASET)
 
-- [ ] **ASET-01**: User can browse images in a thumbnail grid.
-- [ ] **ASET-02**: Orbit extracts image dimensions and dominant colors.
+- [x] **ASET-01**: User can browse images in a thumbnail grid.
+- [x] **ASET-02**: Orbit extracts image dimensions and dominant colors.
 - [ ] **ASET-03**: Orbit detects duplicate images.
-- [ ] **ASET-04**: User can copy asset paths and colors.
+- [ ] **ASET-04**: User can copy asset paths and colors. **Partial 2026-05-01:** colors are copyable from the inspector image analysis panel; asset-mode path/color copy affordances still need completion.
 
 ### Relationship Intelligence (RELA)
 
@@ -150,31 +150,31 @@
 | PKG-04 | Phase 5 | ✅ Complete |
 | EXPL-05 | Phase 6 | ✅ Complete |
 | EXPL-06 | Phase 6 | ✅ Complete |
-| ASET-01 | Phase 7 | 📋 Planned |
-| ASET-02 | Phase 7 | 📋 Planned |
+| ASET-01 | Phase 7 | ✅ Implemented; UAT pending |
+| ASET-02 | Phase 7 | ✅ Implemented; UAT pending |
 | ASET-03 | Phase 7 | 📋 Planned |
-| ASET-04 | Phase 7 | 📋 Planned |
-| CODE-01 | Phase 8 | 📋 Planned |
-| CODE-02 | Phase 8 | 📋 Planned |
+| ASET-04 | Phase 7 | 🔨 Partial: inspector color copy done |
+| CODE-01 | Phase 8 | ✅ Implemented; UAT pending |
+| CODE-02 | Phase 8 | ✅ Implemented; UAT pending |
 | CODE-03 | Phase 8 | 📋 Planned |
-| CODE-04 | Phase 8 | 📋 Planned |
+| CODE-04 | Phase 8 | ✅ Implemented; UAT pending |
 | RELA-01 | Phase 8 | 📋 Planned |
-| RELA-02 | Phase 8 | 📋 Planned |
-| INSP-04 | Phase 8 | 📋 Planned |
-| INSP-05 | Phase 7/8 | 📋 Planned |
+| RELA-02 | Phase 8 | 🔨 Partial code-analysis groundwork |
+| INSP-04 | Phase 8 | ✅ Implemented; UAT pending |
+| INSP-05 | Phase 7/8 | 🔨 Partial: dimensions/colors done, similar images pending |
 | INSP-06 | Phase 8 | 📋 Planned |
 
-**v2.0 Coverage:** 19/19 requirements (100% Planned)
+**v2.0 Coverage:** Mixed implementation status; planned items remain for duplicate/similar images, markdown analysis, and relationship graph integration.
 
 ### Coverage Summary
 
 | Milestone | Total | Complete | Status |
 |-----------|-------|----------|--------|
 | v1.0 Foundation | 25 | 25 | ✅ 100% |
-| v2.0 Desktop Experience | 19 | 6 | 🔨 32% |
-| **Overall** | **44** | **31** | **70%** |
+| v2.0 Desktop Experience | 19+ tracked items | 12 complete, 3 partial | 🔨 In progress |
+| **Overall** | **44+ tracked items** | **37 complete, 3 partial** | **In progress** |
 
 ---
 *Requirements defined: 2026-04-29*  
 *v1.0 Complete: 2026-04-29*  
-*v2.0 Planned: 2026-04-29*
+*v2.0 Updated: 2026-05-01*

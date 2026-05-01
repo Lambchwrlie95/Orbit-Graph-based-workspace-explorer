@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   useCodeAnalysis,
-  CodeAnalysis as CodeAnalysisType,
   Import,
   Export,
   FileGitStatus,

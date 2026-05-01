@@ -1,46 +1,66 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import {
+  Activity,
+  Columns3,
+  FolderOpen,
+  Grid3X3,
+  ImageIcon,
+  Info,
+  List,
+  Search,
+  SquareCode,
+  TreePine,
+} from "lucide-react";
+import { AssetMode } from "./components/AssetMode";
+import { BookmarksPanel } from "./components/BookmarksPanel";
+import { CodeMode, isEditableFile } from "./components/CodeMode";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ExplorerColumns } from "./components/ExplorerColumns";
+import { ExplorerGrid } from "./components/ExplorerGrid";
 import { ExplorerList } from "./components/ExplorerList";
 import { ExplorerTree } from "./components/ExplorerTree";
-import { ExplorerGrid } from "./components/ExplorerGrid";
-import { ExplorerColumns } from "./components/ExplorerColumns";
-import { SearchPanel } from "./components/SearchPanel";
-import { Inspector } from "./components/Inspector";
 import { GraphView } from "./components/GraphView";
-import { ErrorBoundary } from "./components/ErrorBoundary";
-import { AssetMode } from "./components/AssetMode";
-import { CodeMode, isEditableFile } from "./components/CodeMode";
-import { useEditorStore } from "./stores/editorStore";
-import { useOpenFiles } from "./hooks/useOpenFiles";
-import { ModeSwitcher } from "./components/ModeSwitcher";
-import { TitleBar } from "./components/TitleBar";
 import { HelpMenuDialogs } from "./components/HelpDialogs";
+import { Inspector } from "./components/Inspector";
+import { SearchPanel } from "./components/SearchPanel";
+import { UnifiedHeader } from "./components/UnifiedHeader";
 import { useDebounce } from "./hooks/useDebounce";
+import { useOpenFiles } from "./hooks/useOpenFiles";
 import { useViewPersistence } from "./hooks/useViewPersistence";
-import { FolderOpen } from "lucide-react";
-import { FileRecord, ScanProgress, PreviewPayload, GraphPayload, Mode, CacheStatus } from "./types";
-import { shortPath, formatDate } from "./utils";
+import { tauriInvoke } from "./lib/tauriCommands";
+import { CacheStatus, FileRecord, GraphPayload, PreviewPayload, ScanProgress } from "./types";
+import { formatDate, shortPath } from "./utils";
 import "./styles.css";
 
 type ExplorerViewMode = "list" | "tree" | "grid" | "columns";
+type LeftPanel = "explorer" | "search" | "assets" | "status";
+type RightPanel = "inspector" | "code";
+
+const BOOKMARKS_KEY = "orbit:bookmarks";
+const MAX_BOOKMARKS = 12;
 
 function App() {
-  // Mode and navigation state
-  const [mode, setMode] = useState<Mode>("graph");
+  const [leftPanel, setLeftPanel] = useState<LeftPanel>("explorer");
+  const [rightPanel, setRightPanel] = useState<RightPanel>("inspector");
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
   const [rootPath, setRootPath] = useState("");
   const [currentPath, setCurrentPath] = useState("");
+  const [bookmarks, setBookmarks] = useState<string[]>([]);
 
-  // View persistence state
   const {
     viewMode: explorerViewMode,
     setViewMode: setExplorerViewMode,
     iconSize: gridIconSize,
     setIconSize: setGridIconSize,
+    sortBy,
+    setSortBy,
+    sortDirection,
+    setSortDirection,
   } = useViewPersistence(currentPath, "list");
 
-  // Data state
   const [children, setChildren] = useState<FileRecord[]>([]);
   const [selected, setSelected] = useState<FileRecord | null>(null);
   const [preview, setPreview] = useState<PreviewPayload | null>(null);
@@ -54,61 +74,31 @@ function App() {
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
-  // UI state
   const [status, setStatus] = useState("Ready");
   const [error, setError] = useState<string | null>(null);
   const [logPath, setLogPath] = useState<string | null>(null);
   const [isCheckingCache, setIsCheckingCache] = useState(false);
 
-  // Debounced search query
   const debouncedQuery = useDebounce(query, 300);
 
-  // File opening hook for Code Editor
   const { openFileInEditor } = useOpenFiles({
-    onSwitchToCodeMode: () => setMode("code"),
+    onSwitchToCodeMode: () => {
+      setRightPanel("code");
+      setRightCollapsed(false);
+    },
   });
 
-  // Handle opening a file in the Code Editor
-  const handleOpenInEditor = useCallback(async (record: FileRecord) => {
-    if (!isEditableFile(record)) {
-      setError(`Cannot edit file type: ${record.extension || "unknown"}`);
-      return;
-    }
-    
-    try {
-      await openFileInEditor(record);
-    } catch (err) {
-      setError(`Failed to open file: ${err}`);
-    }
-  }, [openFileInEditor]);
-
-
-
-  // Initialize
-  useEffect(() => {
-    invoke<string>("default_root_path")
-      .then((path) => {
-        setRootPath(path);
-        setCurrentPath(path);
-        // Check cache status after setting root
-        checkCacheStatus(path);
-      })
-      .catch(() => undefined);
-    invoke<string | null>("get_log_path").then(setLogPath).catch(() => undefined);
-  }, []);
-
-  // Check cache status
-  const checkCacheStatus = async (path: string) => {
+  const checkCacheStatus = useCallback(async (path: string) => {
     if (!path) return;
     setIsCheckingCache(true);
     try {
-      const status = await invoke<CacheStatus>("check_cache_status", { rootPath: path });
-      setCacheStatus(status);
-      if (status.isStale) {
-        setStatus(`Cache stale: ${status.staleReason}`);
-      } else if (status.isFresh) {
-        setStatus(`Cache fresh: ${status.fileCount.toLocaleString()} files`);
-      } else if (status.fileCount === 0) {
+      const nextStatus = await tauriInvoke("check_cache_status", { rootPath: path });
+      setCacheStatus(nextStatus);
+      if (nextStatus.isStale) {
+        setStatus(`Cache stale: ${nextStatus.staleReason}`);
+      } else if (nextStatus.isFresh) {
+        setStatus(`Cache fresh: ${nextStatus.fileCount.toLocaleString()} files`);
+      } else if (nextStatus.fileCount === 0) {
         setStatus("No cached data - scan required");
       }
     } catch (err) {
@@ -116,51 +106,28 @@ function App() {
     } finally {
       setIsCheckingCache(false);
     }
-  };
+  }, []);
 
-  // Load children when current path changes
-  useEffect(() => {
-    if (currentPath) {
-      loadChildren(currentPath);
-    }
-  }, [currentPath]);
-
-  // Search when debounced query changes
-  useEffect(() => {
-    if (debouncedQuery.trim() && rootPath) {
-      runSearch(debouncedQuery);
-    } else {
-      setSearchResults([]);
-    }
-  }, [debouncedQuery, rootPath]);
-
-  // Load graph when in graph mode
-  useEffect(() => {
-    if (mode === "graph" && rootPath) {
-      loadGraph(currentPath || rootPath);
-    }
-  }, [mode, rootPath, currentPath]);
-
-  const loadChildren = async (path: string) => {
+  const loadChildren = useCallback(async (path: string) => {
     if (!path) return;
     try {
       setStatus("Loading...");
-      const result = await invoke<FileRecord[]>("list_children", { parentPath: path });
+      const result = await tauriInvoke("list_children", { parentPath: path });
       setChildren(result);
       setStatus(`${result.length} items`);
     } catch (err) {
       setError(String(err));
       setStatus("Error loading directory");
     }
-  };
+  }, []);
 
-  const loadGraph = async (scopePath: string, expanded: string[] = expandedGraphFolders) => {
+  const loadGraph = useCallback(async (scopePath: string, expanded: string[] = expandedGraphFolders) => {
     if (!rootPath) return;
     setIsGraphLoading(true);
     const startTime = performance.now();
     try {
       setStatus("Loading graph...");
-      const payload = await invoke<GraphPayload>("load_graph", {
+      const payload = await tauriInvoke("load_graph", {
         request: {
           rootPath,
           scopePath,
@@ -171,9 +138,10 @@ function App() {
       });
       setGraphPayload(payload);
       const duration = Math.round(performance.now() - startTime);
-      setStatus(payload.capped 
-        ? `Graph capped at ${payload.nodeLimit} nodes (${duration}ms)` 
-        : `${payload.nodes.length} graph nodes (${duration}ms)`
+      setStatus(
+        payload.capped
+          ? `Graph capped at ${payload.nodeLimit} nodes (${duration}ms)`
+          : `${payload.nodes.length} graph nodes (${duration}ms)`
       );
     } catch (err) {
       setError(String(err));
@@ -181,110 +149,96 @@ function App() {
     } finally {
       setIsGraphLoading(false);
     }
-  };
+  }, [expandedGraphFolders, rootPath]);
 
-  // Handle cluster expansion
-  const handleExpandCluster = async (folderPath: string) => {
-    const newExpanded = [...expandedGraphFolders, folderPath];
-    setExpandedGraphFolders(newExpanded);
-    // Reload graph with expanded folders
-    await loadGraph(currentPath || rootPath, newExpanded);
-  };
-
-  const runSearch = async (searchQuery: string) => {
-    if (!rootPath || !searchQuery.trim()) return;
-    try {
-      setIsSearching(true);
-      setStatus("Searching...");
-      const matches = await invoke<FileRecord[]>("search_files", { 
-        rootPath, 
-        query: searchQuery 
-      });
-      setSearchResults(matches);
-      setStatus(`${matches.length} matches`);
-    } catch (err) {
-      setError(String(err));
-      setStatus("Search failed");
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const selectRecord = async (record: FileRecord) => {
+  const selectRecord = useCallback(async (record: FileRecord) => {
     setSelected(record);
+    setRightPanel("inspector");
+    setRightCollapsed(false);
     setError(null);
     setPreview(null);
-    
-    // Only load preview for files (not folders)
-    if (record.isDir) {
-      return;
-    }
-    
     setIsPreviewLoading(true);
+
     try {
-      const previewData = await invoke<PreviewPayload>("get_preview", { path: record.path });
+      const previewData = await tauriInvoke("get_preview", { path: record.path });
       setPreview(previewData);
-    } catch (err) {
+    } catch {
       setPreview(null);
     } finally {
       setIsPreviewLoading(false);
     }
-  };
+  }, []);
 
-  const openPath = async (path: string) => {
+  const selectPathInsideOrbit = useCallback(async (path: string) => {
+    const normalizedPath = path.includes("/__cluster__") ? path.replace("/__cluster__", "") : path;
+    const record = await tauriInvoke("get_file", { path: normalizedPath });
+    if (!record) {
+      setError(`Path is not indexed: ${normalizedPath}`);
+      return;
+    }
+    await selectRecord(record);
+    if (record.isDir) {
+      setCurrentPath(record.path);
+      setLeftPanel("explorer");
+      setLeftCollapsed(false);
+    }
+  }, [selectRecord]);
+
+  const openPath = useCallback(async (path: string) => {
     try {
-      await invoke("open_path", { path });
+      await tauriInvoke("open_path", { path });
     } catch (err) {
       setError(`Failed to open: ${err}`);
     }
-  };
+  }, []);
 
-  const chooseFolder = async () => {
-    const selectedFolder = await invoke<string | null>("choose_folder");
-    if (!selectedFolder) return;
-    setRootPath(selectedFolder);
-    setCurrentPath(selectedFolder);
+  const applyWorkspace = useCallback(async (path: string, statusText = "Workspace selected") => {
+    setRootPath(path);
+    setCurrentPath(path);
     setChildren([]);
     setSearchResults([]);
     setGraphPayload(null);
+    setExpandedGraphFolders([]);
     setSelected(null);
     setPreview(null);
     setScan(null);
-    setStatus("Workspace selected");
-    // Check cache for new folder
-    await checkCacheStatus(selectedFolder);
-  };
+    setStatus(statusText);
+    setLeftPanel("explorer");
+    setLeftCollapsed(false);
+    await checkCacheStatus(path);
+  }, [checkCacheStatus]);
 
-  // Listen for menu events from Tauri
-  useEffect(() => {
-    const unlisteners: Promise<() => void>[] = [];
+  const chooseFolder = useCallback(async () => {
+    const selectedFolder = await tauriInvoke("choose_folder");
+    if (!selectedFolder) return;
+    await applyWorkspace(selectedFolder);
+  }, [applyWorkspace]);
 
-    // Open Folder menu item
-    unlisteners.push(
-      listen("menu-open-folder", () => {
-        chooseFolder();
-      })
-    );
+  const handleOpenInEditor = useCallback(async (record: FileRecord) => {
+    if (!isEditableFile(record)) {
+      setError(`Cannot edit file type: ${record.extension || "unknown"}`);
+      return;
+    }
 
-    // Cleanup
-    return () => {
-      unlisteners.forEach((u) => u.then((fn) => fn()));
-    };
-  }, [chooseFolder]);
+    try {
+      await openFileInEditor(record);
+    } catch (err) {
+      setError(`Failed to open file: ${err}`);
+    }
+  }, [openFileInEditor]);
 
-  const scanWorkspace = async () => {
+  const scanWorkspace = useCallback(async () => {
     if (!rootPath) return;
     setError(null);
     setStatus("Scanning...");
     const scanStartTime = performance.now();
     try {
-      const progress = await invoke<ScanProgress>("scan_workspace", { rootPath });
+      const progress = await tauriInvoke("scan_workspace", { rootPath });
       setScan(progress);
       setCurrentPath(progress.rootPath);
       setLogPath(progress.logPath ?? logPath);
       await loadChildren(progress.rootPath);
       await loadGraph(progress.rootPath);
-      // Refresh cache status after scan
       await checkCacheStatus(progress.rootPath);
       const totalDuration = Math.round(performance.now() - scanStartTime);
       setStatus(`Scanned ${progress.scanned.toLocaleString()} entries in ${totalDuration}ms`);
@@ -292,303 +246,446 @@ function App() {
       setError(String(err));
       setStatus("Scan failed");
     }
-  };
+  }, [checkCacheStatus, loadChildren, loadGraph, logPath, rootPath]);
 
-  const handleSearchQueryChange = (newQuery: string) => {
+  const handleSearchQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
     if (newQuery.trim()) {
-      setMode("search");
+      setLeftPanel("search");
+      setLeftCollapsed(false);
     }
-  };
+  }, []);
 
-  const isTauriRuntime =
-    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  const handleExpandCluster = useCallback(async (folderPath: string) => {
+    const newExpanded = [...expandedGraphFolders, folderPath];
+    setExpandedGraphFolders(newExpanded);
+    await loadGraph(currentPath || rootPath, newExpanded);
+  }, [currentPath, expandedGraphFolders, loadGraph, rootPath]);
 
-  const handleGraphNodeSelect = async (path: string) => {
-    // Handle cluster nodes - they have synthetic paths
-    if (path.includes("/__cluster__")) {
-      const folderPath = path.replace("/__cluster__", "");
-      const record = await invoke<FileRecord | null>("get_file", { path: folderPath });
-      if (record) {
-        await selectRecord(record);
+  const addCurrentBookmark = useCallback(() => {
+    if (!rootPath) return;
+    setBookmarks((current) => [rootPath, ...current.filter((path) => path !== rootPath)].slice(0, MAX_BOOKMARKS));
+  }, [rootPath]);
+
+  const removeCurrentBookmark = useCallback(() => {
+    if (!rootPath) return;
+    setBookmarks((current) => current.filter((path) => path !== rootPath));
+  }, [rootPath]);
+
+  const openBookmark = useCallback(async (path: string) => {
+    await applyWorkspace(path, "Bookmark opened");
+  }, [applyWorkspace]);
+
+  const showLeftPanel = useCallback((panel: LeftPanel) => {
+    setLeftPanel(panel);
+    setLeftCollapsed(false);
+  }, []);
+
+  const showRightPanel = useCallback((panel: RightPanel) => {
+    setRightPanel(panel);
+    setRightCollapsed(false);
+  }, []);
+
+  const openSelected = useCallback(() => {
+    if (!selected) return;
+    void openPath(selected.path);
+  }, [openPath, selected]);
+
+  const copySelectedPath = useCallback(() => {
+    if (!selected) return;
+    void navigator.clipboard?.writeText(selected.path);
+  }, [selected]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(BOOKMARKS_KEY);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        setBookmarks(parsed.filter((path) => typeof path === "string").slice(0, MAX_BOOKMARKS));
       }
-      return;
+    } catch {
+      setBookmarks([]);
     }
-    
-    const record = await invoke<FileRecord | null>("get_file", { path });
-    if (record) {
-      await selectRecord(record);
-    }
-  };
+  }, []);
 
-  // Extract workspace name from rootPath
-  const workspaceName = rootPath ? rootPath.split("/").pop() || rootPath : undefined;
+  useEffect(() => {
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+  }, [bookmarks]);
+
+  useEffect(() => {
+    tauriInvoke("default_root_path")
+      .then((path) => {
+        setRootPath(path);
+        setCurrentPath(path);
+        void checkCacheStatus(path);
+      })
+      .catch(() => undefined);
+    tauriInvoke("get_log_path").then(setLogPath).catch(() => undefined);
+  }, [checkCacheStatus]);
+
+  useEffect(() => {
+    if (currentPath) {
+      void loadChildren(currentPath);
+    }
+  }, [currentPath, loadChildren]);
+
+  useEffect(() => {
+    if (debouncedQuery.trim() && rootPath) {
+      const runSearch = async () => {
+        try {
+          setIsSearching(true);
+          setStatus("Searching...");
+          const matches = await tauriInvoke("search_files", {
+            rootPath,
+            query: debouncedQuery,
+          });
+          setSearchResults(matches);
+          setStatus(`${matches.length} matches`);
+        } catch (err) {
+          setError(String(err));
+          setStatus("Search failed");
+        } finally {
+          setIsSearching(false);
+        }
+      };
+      void runSearch();
+    } else {
+      setSearchResults([]);
+    }
+  }, [debouncedQuery, rootPath]);
+
+  useEffect(() => {
+    if (rootPath) {
+      void loadGraph(currentPath || rootPath);
+    }
+  }, [currentPath, loadGraph, rootPath]);
+
+  useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [];
+    unlisteners.push(listen("menu-open-folder", () => void chooseFolder()));
+    return () => {
+      unlisteners.forEach((unlisten) => void unlisten.then((fn) => fn()));
+    };
+  }, [chooseFolder]);
+
+  const leftPanelLabel = {
+    explorer: "Explorer",
+    search: "Search",
+    assets: "Assets",
+    status: "Status",
+  }[leftPanel];
 
   return (
     <main className="app-shell">
-      {/* Title Bar */}
-      <TitleBar workspaceName={workspaceName} />
+      <UnifiedHeader
+        workspacePath={rootPath}
+        selectedPath={selected?.path}
+        leftCollapsed={leftCollapsed}
+        rightCollapsed={rightCollapsed}
+        onToggleLeft={() => setLeftCollapsed((value) => !value)}
+        onToggleRight={() => setRightCollapsed((value) => !value)}
+        onOpenFolder={chooseFolder}
+        onScan={scanWorkspace}
+        onRefreshGraph={() => void loadGraph(currentPath || rootPath)}
+        onOpenSelected={openSelected}
+        onCopySelected={copySelectedPath}
+        onAddBookmark={addCurrentBookmark}
+        onShowExplorer={() => showLeftPanel("explorer")}
+        onShowSearch={() => showLeftPanel("search")}
+        onShowAssets={() => showLeftPanel("assets")}
+        onShowStatus={() => showLeftPanel("status")}
+        onShowInspector={() => showRightPanel("inspector")}
+        onShowCode={() => showRightPanel("code")}
+      />
 
-      {/* Top Bar */}
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">O</span>
-          <div>
-            <h1>Orbit</h1>
-            <p>{rootPath ? shortPath(rootPath) : "No workspace"}</p>
-          </div>
-        </div>
-        {isTauriRuntime ? <div className="topbar-drag-fill" data-tauri-drag-region /> : null}
-        <div className="top-actions">
-          <button type="button" onClick={chooseFolder}>
-            Open Folder
-          </button>
-          <input
-            className="search-input"
-            value={query}
-            onChange={(e) => handleSearchQueryChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && query.trim()) {
-                setMode("search");
-                runSearch(query);
-              }
-            }}
-            placeholder="Search files..."
-          />
-          <button type="button" className="primary" onClick={scanWorkspace}>
-            Scan
-          </button>
-        </div>
-      </header>
-
-      {/* Main Workspace */}
-      <section className="workspace">
-        {/* Sidebar */}
-        <aside className="sidebar">
-          <h2>Workspace</h2>
-          <div className="sidebar-mode-row">
-            <ModeSwitcher
-              currentMode={mode}
-              onModeChange={setMode}
-              modes={["graph", "explorer", "assets", "search"]}
-              variant="toolbar"
-              className="sidebar-mode-toolbar"
-              toolbarLeading={
-                <button
-                  type="button"
-                  className="sidebar-workspace-folder"
-                  onClick={() => {
-                    if (rootPath) setCurrentPath(rootPath);
-                    else void chooseFolder();
-                  }}
-                  title={
-                    rootPath
-                      ? `${shortPath(rootPath)} — workspace root (click)`
-                      : "Choose folder"
-                  }
-                  aria-label={
-                    rootPath ? "Go to workspace root" : "Choose folder"
-                  }
-                >
-                  <FolderOpen className="sidebar-workspace-folder-icon" size={14} strokeWidth={1.75} aria-hidden />
-                </button>
-              }
-            />
+      <section className={`workbench ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
+        <aside className="pane left-pane">
+          <div className="explorer-header">
+            <button
+              type="button"
+              className="explorer-root"
+              onClick={() => rootPath ? setCurrentPath(rootPath) : void chooseFolder()}
+              title={rootPath || "Choose folder"}
+            >
+              <FolderOpen size={14} strokeWidth={1.75} />
+              <span className="explorer-root-name">{rootPath ? shortPath(rootPath) : "No workspace"}</span>
+            </button>
+            <span className="explorer-header-actions">
+              <button type="button" onClick={chooseFolder} title="Open folder">
+                <FolderOpen size={14} strokeWidth={1.75} />
+              </button>
+              <button type="button" onClick={scanWorkspace} title="Scan workspace">
+                <Activity size={14} strokeWidth={1.75} />
+              </button>
+            </span>
           </div>
 
-          <h2>View</h2>
-          {mode === "explorer" && (
-            <div className="view-toggle">
-              <button
-                className={explorerViewMode === "list" ? "active" : ""}
-                onClick={() => setExplorerViewMode("list")}
-              >
-                List
-              </button>
-              <button
-                className={explorerViewMode === "tree" ? "active" : ""}
-                onClick={() => setExplorerViewMode("tree")}
-              >
-                Tree
-              </button>
-              <button
-                className={explorerViewMode === "grid" ? "active" : ""}
-                onClick={() => setExplorerViewMode("grid")}
-              >
-                Grid
-              </button>
-              <button
-                className={explorerViewMode === "columns" ? "active" : ""}
-                onClick={() => setExplorerViewMode("columns")}
-              >
-                Columns
-              </button>
-            </div>
-          )}
+          <div className="side-nav" aria-label="Left panel">
+            <PanelButton active={leftPanel === "explorer"} label="Explorer" onClick={() => setLeftPanel("explorer")} icon={<TreePine size={15} />} />
+            <PanelButton active={leftPanel === "search"} label="Search" onClick={() => setLeftPanel("search")} icon={<Search size={15} />} />
+            <PanelButton active={leftPanel === "assets"} label="Assets" onClick={() => setLeftPanel("assets")} icon={<ImageIcon size={15} />} />
+            <PanelButton active={leftPanel === "status"} label="Status" onClick={() => setLeftPanel("status")} icon={<Info size={15} />} />
+          </div>
 
-          <h2>Status</h2>
-          <StatusBlock
-            status={status}
-            scan={scan}
-            logPath={logPath}
-            error={error}
-            cacheStatus={cacheStatus}
-            isCheckingCache={isCheckingCache}
-            onRefreshCache={() => rootPath && checkCacheStatus(rootPath)}
+          <div className="side-panel-title">
+            <h2>{leftPanelLabel}</h2>
+          </div>
+
+          <div className="left-panel-content">
+            {leftPanel === "explorer" && (
+              <ExplorerSidePanel
+                explorerViewMode={explorerViewMode}
+                setExplorerViewMode={setExplorerViewMode}
+                currentPath={currentPath}
+                rootPath={rootPath}
+                children={children}
+                selectedPath={selected?.path}
+                selectRecord={selectRecord}
+                setCurrentPath={setCurrentPath}
+                gridIconSize={gridIconSize}
+                setGridIconSize={setGridIconSize}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                sortDirection={sortDirection}
+                setSortDirection={setSortDirection}
+              />
+            )}
+
+            {leftPanel === "search" && (
+              <SearchPanel
+                rootPath={rootPath}
+                query={query}
+                results={searchResults}
+                selectedPath={selected?.path}
+                isLoading={isSearching}
+                onQueryChange={handleSearchQueryChange}
+                onSelect={selectRecord}
+                onOpen={(record) => {
+                  if (record.isDir) {
+                    setCurrentPath(record.path);
+                    showLeftPanel("explorer");
+                  } else {
+                    void openPath(record.path);
+                  }
+                }}
+              />
+            )}
+
+            {leftPanel === "assets" && (
+              <AssetMode
+                files={children}
+                currentPath={currentPath}
+                onSelect={selectRecord}
+              />
+            )}
+
+            {leftPanel === "status" && (
+              <StatusBlock
+                status={status}
+                scan={scan}
+                logPath={logPath}
+                error={error}
+                cacheStatus={cacheStatus}
+                isCheckingCache={isCheckingCache}
+                onRefreshCache={() => rootPath && void checkCacheStatus(rootPath)}
+              />
+            )}
+          </div>
+
+          <BookmarksPanel
+            bookmarks={bookmarks}
+            currentRootPath={rootPath}
+            onAddCurrent={addCurrentBookmark}
+            onRemoveCurrent={removeCurrentBookmark}
+            onOpenBookmark={openBookmark}
           />
         </aside>
 
-        {/* Main Surface */}
-        <section className="main-surface">
-          {mode === "graph" && (
-            <ErrorBoundary
-              fallbackTitle="Graph unavailable"
-              resetKey={[
-                currentPath,
-                graphPayload?.nodes.length ?? 0,
-                graphPayload?.edges.length ?? 0,
-                expandedGraphFolders.join("|"),
-              ].join(":")}
-            >
-              <GraphView
-                payload={graphPayload}
-                selectedPath={selected?.path}
-                onSelectPath={handleGraphNodeSelect}
-                onOpenPath={openPath}
-                onFocusFolder={(path) => {
-                  setCurrentPath(path);
-                  loadGraph(path);
-                }}
-                onExpandCluster={handleExpandCluster}
-                expandedFolders={expandedGraphFolders}
-                isLoading={isGraphLoading}
-              />
-            </ErrorBoundary>
-          )}
-
-          {mode === "explorer" && (
-            <div className="surface-panel">
-              <div className="surface-header">
-                <div>
-                  <h2>Explorer</h2>
-                  <p>{currentPath}</p>
-                </div>
-                <div className="view-toggle inline">
-                  <button
-                    className={explorerViewMode === "list" ? "active" : ""}
-                    onClick={() => setExplorerViewMode("list")}
-                  >
-                    List
-                  </button>
-                  <button
-                    className={explorerViewMode === "tree" ? "active" : ""}
-                    onClick={() => setExplorerViewMode("tree")}
-                  >
-                    Tree
-                  </button>
-                  <button
-                    className={explorerViewMode === "grid" ? "active" : ""}
-                    onClick={() => setExplorerViewMode("grid")}
-                  >
-                    Grid
-                  </button>
-                  <button
-                    className={explorerViewMode === "columns" ? "active" : ""}
-                    onClick={() => setExplorerViewMode("columns")}
-                  >
-                    Columns
-                  </button>
-                </div>
-              </div>
-              {explorerViewMode === "columns" ? (
-                <ExplorerColumns
-                  rootPath={rootPath}
-                  currentPath={currentPath}
-                  selectedPath={selected?.path}
-                  onSelect={selectRecord}
-                  onNavigate={setCurrentPath}
-                />
-              ) : explorerViewMode === "grid" ? (
-                <ExplorerGrid
-                  currentPath={currentPath}
-                  rootPath={rootPath}
-                  items={children}
-                  selectedPath={selected?.path}
-                  onSelect={selectRecord}
-                  onNavigate={setCurrentPath}
-                  iconSize={gridIconSize}
-                  onIconSizeChange={setGridIconSize}
-                />
-              ) : explorerViewMode === "list" ? (
-                <ExplorerList
-                  currentPath={currentPath}
-                  rootPath={rootPath}
-                  items={children}
-                  selectedPath={selected?.path}
-                  onSelect={selectRecord}
-                  onNavigate={setCurrentPath}
-                />
-              ) : (
-                <ExplorerTree
-                  rootPath={rootPath}
-                  selectedPath={selected?.path}
-                  onSelect={selectRecord}
-                  onNavigate={setCurrentPath}
-                />
-              )}
-            </div>
-          )}
-
-          {mode === "search" && (
-            <SearchPanel
-              rootPath={rootPath}
-              query={query}
-              results={searchResults}
+        <section className="pane center-pane">
+          <ErrorBoundary
+            fallbackTitle="Graph unavailable"
+            resetKey={[
+              currentPath,
+              graphPayload?.nodes.length ?? 0,
+              graphPayload?.edges.length ?? 0,
+              expandedGraphFolders.join("|"),
+            ].join(":")}
+          >
+            <GraphView
+              payload={graphPayload}
               selectedPath={selected?.path}
-              isLoading={isSearching}
-              onQueryChange={handleSearchQueryChange}
-              onSelect={selectRecord}
-              onOpen={(record) => openPath(record.path)}
+              onSelectPath={selectPathInsideOrbit}
+              onOpenPath={openPath}
+              onFocusFolder={(path) => {
+                setCurrentPath(path);
+                showLeftPanel("explorer");
+                void loadGraph(path);
+              }}
+              onExpandCluster={handleExpandCluster}
+              expandedFolders={expandedGraphFolders}
+              isLoading={isGraphLoading}
             />
-          )}
-
-          {mode === "assets" && (
-            <AssetMode
-              files={children}
-              currentPath={currentPath}
-              onSelect={selectRecord}
-            />
-          )}
-
-          {mode === "code" && (
-            <CodeMode />
-          )}
+          </ErrorBoundary>
         </section>
 
-        {/* Inspector */}
-        <Inspector
-          record={selected}
-          preview={preview}
-          isLoadingPreview={isPreviewLoading}
-          onOpen={openPath}
-          onNavigate={setCurrentPath}
-          onEdit={handleOpenInEditor}
-          currentMode={mode}
-          onModeChange={setMode}
-        />
+        <aside className="pane right-pane">
+          <div className="right-tabs" aria-label="Right panel">
+            <PanelButton active={rightPanel === "inspector"} label="Inspector" onClick={() => setRightPanel("inspector")} icon={<Info size={15} />} />
+            <PanelButton active={rightPanel === "code"} label="Code" onClick={() => setRightPanel("code")} icon={<SquareCode size={15} />} />
+          </div>
+
+          {rightPanel === "inspector" ? (
+            <Inspector
+              record={selected}
+              preview={preview}
+              isLoadingPreview={isPreviewLoading}
+              onOpen={openPath}
+              onSelectPath={selectPathInsideOrbit}
+              onNavigate={(path) => {
+                setCurrentPath(path);
+                setLeftPanel("explorer");
+                setLeftCollapsed(false);
+              }}
+              onEdit={handleOpenInEditor}
+            />
+          ) : (
+            <CodeMode />
+          )}
+        </aside>
       </section>
 
       <footer className="statusbar">
-        <span>{mode}</span>
+        <span>Graph</span>
+        <span>{leftPanelLabel}</span>
         <span title={status}>{status}</span>
         <span>{selected ? selected.name : "No selection"}</span>
         <span>{cacheStatus?.fileCount ? `${cacheStatus.fileCount.toLocaleString()} indexed` : "No cache"}</span>
         {logPath && <span title={logPath}>Log {shortPath(logPath)}</span>}
       </footer>
 
-      {/* Help Menu Dialogs */}
       <HelpMenuDialogs />
     </main>
+  );
+}
+
+interface PanelButtonProps {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}
+
+function PanelButton({ active, icon, label, onClick }: PanelButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`panel-tab ${active ? "active" : ""}`}
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+    >
+      {icon}
+    </button>
+  );
+}
+
+interface ExplorerSidePanelProps {
+  explorerViewMode: ExplorerViewMode;
+  setExplorerViewMode: (mode: ExplorerViewMode) => void;
+  currentPath: string;
+  rootPath: string;
+  children: FileRecord[];
+  selectedPath?: string;
+  selectRecord: (record: FileRecord) => Promise<void>;
+  setCurrentPath: (path: string) => void;
+  gridIconSize: 48 | 64 | 96 | 128;
+  setGridIconSize: (size: 48 | 64 | 96 | 128) => void;
+  sortBy: "name" | "size" | "modified";
+  setSortBy: (sort: "name" | "size" | "modified") => void;
+  sortDirection: "asc" | "desc";
+  setSortDirection: (dir: "asc" | "desc") => void;
+}
+
+function ExplorerSidePanel({
+  explorerViewMode,
+  setExplorerViewMode,
+  currentPath,
+  rootPath,
+  children,
+  selectedPath,
+  selectRecord,
+  setCurrentPath,
+  gridIconSize,
+  setGridIconSize,
+  sortBy,
+  setSortBy,
+  sortDirection,
+  setSortDirection,
+}: ExplorerSidePanelProps) {
+  return (
+    <div className="side-explorer">
+      <div className="view-toggle icon-toggle" aria-label="Explorer view mode">
+        <button className={explorerViewMode === "list" ? "active" : ""} onClick={() => setExplorerViewMode("list")} title="List">
+          <List size={13} />
+        </button>
+        <button className={explorerViewMode === "tree" ? "active" : ""} onClick={() => setExplorerViewMode("tree")} title="Tree">
+          <TreePine size={13} />
+        </button>
+        <button className={explorerViewMode === "grid" ? "active" : ""} onClick={() => setExplorerViewMode("grid")} title="Grid">
+          <Grid3X3 size={13} />
+        </button>
+        <button className={explorerViewMode === "columns" ? "active" : ""} onClick={() => setExplorerViewMode("columns")} title="Columns">
+          <Columns3 size={13} />
+        </button>
+      </div>
+
+      <div className="side-path" title={currentPath}>{currentPath || rootPath}</div>
+
+      <div className="side-explorer-body">
+        {explorerViewMode === "columns" ? (
+          <ExplorerColumns
+            rootPath={rootPath}
+            currentPath={currentPath}
+            selectedPath={selectedPath}
+            onSelect={selectRecord}
+            onNavigate={setCurrentPath}
+          />
+        ) : explorerViewMode === "grid" ? (
+          <ExplorerGrid
+            currentPath={currentPath}
+            rootPath={rootPath}
+            items={children}
+            selectedPath={selectedPath}
+            onSelect={selectRecord}
+            onNavigate={setCurrentPath}
+            iconSize={gridIconSize}
+            onIconSizeChange={setGridIconSize}
+            sortBy={sortBy}
+            onSortByChange={setSortBy}
+            sortDirection={sortDirection}
+            onSortDirectionChange={setSortDirection}
+          />
+        ) : explorerViewMode === "list" ? (
+          <ExplorerList
+            currentPath={currentPath}
+            rootPath={rootPath}
+            items={children}
+            selectedPath={selectedPath}
+            onSelect={selectRecord}
+            onNavigate={setCurrentPath}
+          />
+        ) : (
+          <ExplorerTree
+            rootPath={rootPath}
+            selectedPath={selectedPath}
+            onSelect={selectRecord}
+            onNavigate={setCurrentPath}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -631,31 +728,24 @@ function StatusBlock({
       <strong className={status.toLowerCase().includes("scanning") ? "scanning-indicator" : ""}>
         {status}
       </strong>
-      
-      {/* Cache Status */}
+
       {cacheStatus && (
-        <div className="cache-section" style={{ marginTop: 12 }}>
+        <div className="cache-section">
           <div className={`cache-status ${getCacheStatusClass()}`}>
             <span>Cache: {getCacheLabel()}</span>
           </div>
           {cacheStatus.fileCount > 0 && (
-            <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+            <p className="muted">
               {cacheStatus.fileCount.toLocaleString()} files
               {cacheStatus.lastScanTime && (
-                <span> • {formatDate(cacheStatus.lastScanTime)}</span>
+                <span> | {formatDate(cacheStatus.lastScanTime)}</span>
               )}
             </p>
           )}
           {cacheStatus.isStale && cacheStatus.staleReason && (
-            <p className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-              {cacheStatus.staleReason}
-            </p>
+            <p className="muted">{cacheStatus.staleReason}</p>
           )}
-          <button 
-            onClick={onRefreshCache}
-            disabled={isCheckingCache}
-            style={{ fontSize: 11, marginTop: 6, padding: "2px 8px", height: 24 }}
-          >
+          <button onClick={onRefreshCache} disabled={isCheckingCache}>
             {isCheckingCache ? "Checking..." : "Refresh Check"}
           </button>
         </div>

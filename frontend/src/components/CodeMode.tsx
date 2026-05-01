@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { FileCode, FileText, AlertCircle } from 'lucide-react';
 import { EditorTabs } from './EditorTabs';
 import { MonacoEditor } from './MonacoEditor';
+import { tauriInvoke } from '../lib/tauriCommands';
 import { useEditorStore } from '../stores/editorStore';
 import type { FileRecord } from '../types';
 
@@ -119,7 +119,7 @@ const EDITABLE_FILENAMES = new Set([
   '.tool-versions',
   'manifest',
   'robots.txt',
-  ' humans.txt',
+  'humans.txt',
   'sitemap.xml',
 ]);
 
@@ -182,7 +182,7 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
     setError(null);
 
     try {
-      const content = await invoke<string>('read_file_for_edit', { path: filePath });
+      const content = await tauriInvoke('read_file_for_edit', { path: filePath });
       openFile(filePath, content);
     } catch (err) {
       setError(`Failed to open file: ${err}`);
@@ -233,9 +233,9 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
     setError(null);
 
     try {
-      await invoke('save_file', { 
-        path: activeFile, 
-        content 
+      await tauriInvoke('save_file', {
+        path: activeFile,
+        content
       });
       markSaved(activeFile);
       setSaveStatus('saved');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { FileRecord } from "../types";
+import { tauriInvoke } from "../lib/tauriCommands";
 import { getParentPath } from "../utils";
 import { Column } from "./Column";
 
@@ -68,7 +68,7 @@ export function ExplorerColumns({
       const newColumns: ColumnState[] = [];
       
       // Add root column
-      const rootItems = await invoke<FileRecord[]>("list_children", { parentPath: rootPath });
+      const rootItems = await tauriInvoke("list_children", { parentPath: rootPath });
       const rootName = rootPath.split("/").pop() || "Root";
       newColumns.push({
         path: rootPath,
@@ -93,7 +93,7 @@ export function ExplorerColumns({
         for (const segment of segments) {
           currentPath = currentPath === "/" ? `/${segment}` : `${currentPath}/${segment}`;
           try {
-            const items = await invoke<FileRecord[]>("list_children", { parentPath: currentPath });
+            const items = await tauriInvoke("list_children", { parentPath: currentPath });
             newColumns.push({
               path: currentPath,
               name: segment,
@@ -187,7 +187,7 @@ export function ExplorerColumns({
       // Loading folder contents for cascade
       setIsLoading(true);
       try {
-        const items = await invoke<FileRecord[]>("list_children", { parentPath: record.path });
+        const items = await tauriInvoke("list_children", { parentPath: record.path });
         
         setColumns(prev => {
           // Remove columns after this one

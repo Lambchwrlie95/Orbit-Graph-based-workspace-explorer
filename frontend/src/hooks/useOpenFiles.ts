@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { tauriInvoke } from '../lib/tauriCommands';
 import { useEditorStore } from '../stores/editorStore';
 import type { FileRecord } from '../types';
 
@@ -175,7 +175,7 @@ export function useOpenFiles(options: UseOpenFilesOptions = {}): UseOpenFilesRet
 
     try {
       // Load file content
-      const content = await invoke<string>('read_file_for_edit', { path: file.path });
+      const content = await tauriInvoke('read_file_for_edit', { path: file.path });
       
       // Open in editor store
       openFile(file.path, content);

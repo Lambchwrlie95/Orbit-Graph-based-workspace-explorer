@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Orbit Desktop Experience
 status: stabilizing
-stopped_at: Error sweep clean; graph runtime guard added
-last_updated: "2026-04-30T00:00:00Z"
-last_activity: 2026-04-30
+stopped_at: Graph-first workbench restored; typed Tauri command boundary and smoke checks added
+last_updated: "2026-05-01T05:39:47Z"
+last_activity: 2026-05-01
 progress:
   total_phases: 8
   completed_phases: 7
@@ -22,7 +22,7 @@ progress:
 **Milestone**: v2.0 — Orbit Desktop Experience
 **Status**: 🔧 **STABILIZING**
 **Previous**: ✅ v1.0 Orbit Foundation — COMPLETE (2026-04-29)
-**Next**: Add smoke coverage, then execute Phase 8 Code Mode & Enhanced Inspector
+**Next**: Add deeper smoke coverage, finish Phase 8 markdown/backlink work, and validate graph-first workbench flows with real scanned projects
 
 ---
 
@@ -49,8 +49,8 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 ## v2.0 Current State (STABILIZING)
 
 **Milestone**: v2.0 — Desktop Experience
-**Phase**: Stabilization after Phase 7
-**Status**: Build/test/clippy baseline restored; visual workbench alignment started
+**Phase**: Phase 8 partial implementation and stabilization
+**Status**: Build/test baseline restored; graph-first workbench alignment implemented
 
 ### v2.0 Phases Overview
 
@@ -58,8 +58,8 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 |-------|------|-------|--------------|--------|
 | **5** | Packaging & Desktop Integration | 2 | Phase 4 | ✅ Complete (05-01, 05-02) |
 | **6** | Explorer Enhancements | 2 | Phase 5 | ✅ Complete (06-01, 06-02) |
-| **7** | Asset Mode | 3 | Phase 6 | ✅ Complete (07-01, 07-02, 07-03) |
-| **8** | Code Mode & Enhanced Inspector | 4 | Phase 7 | 📋 Planning Complete |
+| **7** | Asset Mode | 3 | Phase 6 | 🔨 Partial Implementation (thumbnails/colors; duplicate grouping pending) |
+| **8** | Code Mode & Enhanced Inspector | 4 | Phase 7 | 🔨 Partial Implementation |
 
 **Total v2.0 Plans**: 11 plans
 **Total Requirements**: 10 new requirements
@@ -69,13 +69,13 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 
 ## Current Position
 
-**Current Phase**: Stabilization before Phase 8
-**Current Activity**: Frontend build, Rust tests, and clippy all-targets pass; graph surface gained layout modes, filtering, minimap, legend, focus controls, stable Sigma hover/selection reducers, duplicate-edge protection, and a graph-local error boundary. Mode navigation is now sidebar-owned: Graph/Explorer/Assets/Search on the left, Code on the right inspector sidebar.
-**Last activity**: 2026-04-30 — Moved mode navigation to sidebars, completed error sweep, hardened GraphView runtime failure handling, and verified clean frontend/Rust baseline
+**Current Phase**: Phase 8 partial implementation and stabilization
+**Current Activity**: The workbench now follows the graph-file-manager reference more closely: a thin top menu, left sidebar for Explorer/Search/Assets/Status, right sidebar for Inspector/Code, and the center surface reserved for the graph only. Bookmarks are localStorage-backed, the inspector now owns text/image/code previews, image dimensions/colors, and code analysis panels, graph/search/folder actions route into side panels rather than replacing the graph center, and frontend Tauri calls now pass through a typed command boundary checked against the Rust registry.
+**Last activity**: 2026-05-01 — Reworked the Orbit app shell around a graph-only center, added a reference-style top menu, restored bookmarks, integrated image/code preview analysis in the right inspector, centralized typed Tauri command calls, added command-registry drift checking and browser smoke script, ran frontend build, Rust tests, and a 1440x900 Chromium smoke screenshot
 **Developer handoff**: See `.planning/HANDOFF.md` for the current baseline, dirty worktree notes, graph state, and next priorities.
 
 **v1.0 Progress**: [##########] 100% COMPLETE
-**v2.0 Progress**: [#########░] 86% EXECUTING (11/13 plans)
+**v2.0 Progress**: [#########░] 86% EXECUTING (Phase 8 partially implemented; UAT/smoke still pending)
 
 ---
 
@@ -130,18 +130,19 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 |----------|-------|--------|
 | Packaging (PKG) | 4/4 | ✅ Complete (PKG-01, PKG-02, PKG-03, PKG-04) |
 | Explorer (EXPL) | 2/2 | ✅ Complete (EXPL-05, EXPL-06) |
-| Asset Mode (ASET) | 4/4 | ✅ Complete |
-| Code Mode (CODE) | 0/4 | 📋 Planned |
-| Relationships (RELA) | 0/2 | 📋 Planned |
-| **Total** | **7/16** | **✅ 44% Complete** |
+| Asset Mode (ASET) | 2/4 | 🔨 ASET-01 and ASET-02 implemented; ASET-03 pending; ASET-04 partial |
+| Code Mode (CODE) | 3/4 | 🔨 CODE-01, CODE-02, CODE-04 implemented; CODE-03 pending |
+| Relationships (RELA) | 0/4 | 📋 Planned / partial code-analysis groundwork |
+| Inspector Enhancements (INSP) | 1/3 | 🔨 INSP-04 implemented; INSP-05 partial; INSP-06 pending |
+| **Total** | **Implementation status** | **🔨 In Progress; smoke/UAT pending** |
 
 ---
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (core value and architecture)
-See: `.planning/ROADMAP.md` (v1.0 complete, v2.0 planned)
-See: `.planning/REQUIREMENTS.md` (25 v1.0 req complete, 16 v2.0 req planned)
+See: `.planning/ROADMAP.md` (v1.0 complete, v2.0 partial implementation)
+See: `.planning/REQUIREMENTS.md` (v1.0 complete, v2.0 implementation status and pending gaps)
 See: `.planning/v1.0-COMPLETION.md` (milestone summary)
 
 **Core value:** Orbit makes local files understandable and actionable by showing the relationships that matter without overwhelming the user or their machine.
@@ -190,19 +191,23 @@ See: `.planning/v1.0-COMPLETION.md` (milestone summary)
    - ✅ Duplicate detection
 
 4. **Phase 8 Execution** — Code Mode & Enhanced Inspector
-   - Monaco Editor integration
-   - Code analysis
-   - Markdown analysis
+   - ✅ Monaco editor integration and side-panel routing
+   - ✅ Code analysis surfaced in the right inspector
+   - 🔨 Image dimensions and dominant colors surfaced in the right inspector; similar-image inspector grouping still pending
+   - ⏳ Markdown analysis and backlinks still pending
 
 ---
 
 ## Blockers/Concerns
 
 - Build blockers from Phase 8/analysis work were fixed on 2026-04-30.
-- `npm run frontend:build` passes.
-- `cargo test` passes 12/12 without warnings.
-- `cargo clippy --all-targets -- -D warnings` passes.
-- Smoke tests are still needed around scan, graph load, thumbnail/image commands, and UI mode flows before treating the v2.0 claims as fully validated.
+- `npm run commands:check` passes as of 2026-05-01 and confirms the frontend command catalog matches Rust `generate_handler`.
+- `npm run frontend:smoke` passes as of 2026-05-01 and confirms the Vite workbench shell renders in Chromium.
+- `npm run frontend:build` passes as of 2026-05-01 after the graph-only workbench refactor and typed command-boundary pass.
+- `cargo test` passes 12/12 as of 2026-05-01.
+- `cargo clippy --all-targets -- -D warnings` passes as of 2026-05-01.
+- Headless Chromium smoke screenshot at 1440x900 confirms the graph-only center and side panels render.
+- Deeper smoke tests are still needed around scan, graph load with real data, thumbnail/image commands, bookmarks persistence, menu actions, and UI side-panel flows before treating the v2.0 claims as fully validated.
 
 ---
 
@@ -226,19 +231,19 @@ See: `.planning/v1.0-COMPLETION.md` (milestone summary)
 - **Phase 4**: Complete — artifacts in `.planning/phases/04-performance-guardrails/`
 - **Phase 5**: Complete — 05-01 and 05-02 complete — `.planning/phases/05-packaging-integration/`
 - **Phase 6**: Complete — 06-01 and 06-02 complete — `.planning/phases/06-explorer-enhancements/`
-- **Phase 7**: Planning — context in `.planning/phases/07-asset-mode/07-CONTEXT.md`
-- **Phase 8**: Planning — context in `.planning/phases/08-code-mode-enhanced-inspector/08-CONTEXT.md`
+- **Phase 7**: Partial implementation — thumbnails and image metadata/colors exist; duplicate/similar-image grouping still needs completion — context in `.planning/phases/07-asset-mode/07-CONTEXT.md`
+- **Phase 8**: Partial implementation — Monaco/code analysis/image inspector integration exists; markdown/backlinks still need completion — context in `.planning/phases/08-code-mode-enhanced-inspector/08-CONTEXT.md`
 
 ---
 
 ## Session Continuity
 
-Last session: 2026-04-29
-Stopped at: Graph polish pass with build/test green
+Last session: 2026-05-01
+Stopped at: Graph-first workbench refactor with typed command boundary and build/test/smoke green
 Resume file: `.planning/phases/07-asset-mode/07-asset-mode-SUMMARY.md`
 Handoff file: `.planning/HANDOFF.md`
 
-Next: Add smoke tests, then execute Phase 8 — Code Mode & Enhanced Inspector
+Next: Add deeper smoke tests, finish Phase 8 markdown/backlinks, and complete asset duplicate/similar-image flows
 
 ---
 
@@ -259,7 +264,8 @@ Next: Add smoke tests, then execute Phase 8 — Code Mode & Enhanced Inspector
 
 ---
 
-*State last updated: 2026-04-30*
+*State last updated: 2026-05-01*
 *Milestone: v2.0 — Desktop Experience — STABILIZING*
-*Phase 7: IMPLEMENTED, UAT/SMOKE PENDING*
-*Next: Add smoke tests, then execute Phase 8 — Code Mode & Enhanced Inspector*
+*Phase 7: PARTIAL IMPLEMENTATION, DUPLICATE/SIMILAR-IMAGE FLOWS PENDING*
+*Phase 8: PARTIAL IMPLEMENTATION, MARKDOWN/BACKLINK FLOWS PENDING*
+*Next: Add smoke tests, then finish Phase 8 and asset duplicate flows*
