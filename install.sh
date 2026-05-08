@@ -45,11 +45,14 @@ echo -e "${RESET}"
 # ── Parse args ───────────────────────────────────────────
 MODE="auto"
 BUILD=0
+LINK=0
 for arg in "$@"; do
   case "$arg" in
     --build)    BUILD=1 ;;
     --appimage) MODE="appimage" ;;
     --binary)   MODE="binary" ;;
+    --link)     LINK=1 ;;
+    --dev)      LINK=1 ;;
     --help|-h)
       echo "Usage: ./install.sh [options]"
       echo ""
@@ -57,6 +60,9 @@ for arg in "$@"; do
       echo "  --build      Build from source before installing"
       echo "  --appimage   Install AppImage (default when available)"
       echo "  --binary     Install raw release binary"
+      echo "  --link, --dev  Symlink the release binary instead of copying"
+      echo "                 — every cargo build --release is auto-picked-up"
+      echo "                 next launch, no reinstall needed."
       echo "  --help       Show this help"
       echo ""
       echo "What gets installed:"
@@ -157,6 +163,12 @@ if [[ "$INSTALL_TYPE" == "appimage" ]]; then
   ln -sf "${DATA_DIR}/${APPIMAGE_NAME}" "$DEST_EXEC"
   ok "AppImage installed → ${DIM}${DATA_DIR}/${APPIMAGE_NAME}${RESET}"
   ok "Symlink created  → ${DIM}${DEST_EXEC}${RESET}"
+elif [[ "$LINK" == 1 ]]; then
+  rm -f "$DEST_EXEC"
+  ln -s "$ARTIFACT" "$DEST_EXEC"
+  ok "Symlink created   → ${DIM}${DEST_EXEC}${RESET}"
+  info "Tracking ${DIM}${ARTIFACT}${RESET}"
+  info "Future ${BOLD}cargo build --release${RESET} runs are picked up on next launch."
 else
   install -m 755 "$ARTIFACT" "$DEST_EXEC"
   ok "Binary installed → ${DIM}${DEST_EXEC}${RESET}"

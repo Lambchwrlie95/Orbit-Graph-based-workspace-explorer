@@ -65,7 +65,12 @@ function InspectorComponent({
     );
   }
 
-  const canPreview = !record.isDir && (isTextFile(record.extension) || isImageFile(record.extension));
+  // Show preview if it's a known text/image type OR the backend already returned a payload.
+  // This lets unknown-extension files (e.g. "Procfile", scripts without extension) preview
+  // when the backend successfully reads them as text.
+  const canPreview =
+    !record.isDir &&
+    (isTextFile(record.extension) || isImageFile(record.extension) || preview !== null);
   const previewKind = (preview?.kind ?? (record.isDir ? "directory" : "binary")) as PreviewKind;
   const previewTitle = preview?.title || record.name;
   const previewSummary = preview?.summary || (record.isDir ? "Folder" : "No preview available");
@@ -132,30 +137,48 @@ function InspectorComponent({
         <div className="metadata-section">
           <h4>◈ Information</h4>
           <dl className="meta-grid">
-            <dt>⊟ Type</dt>
+            <dt>
+              <span className="meta-dot" style={{ background: "#94a3b8" }} aria-hidden />
+              Type
+            </dt>
             <dd>{recordType}</dd>
 
-            <dt>⊞ Size</dt>
+            <dt>
+              <span className="meta-dot" style={{ background: "#fbbf24" }} aria-hidden />
+              Size
+            </dt>
             <dd>{record.isDir ? "—" : formatBytes(record.sizeBytes)}</dd>
 
             {record.extension && (
               <>
-                <dt>· Ext</dt>
+                <dt>
+                  <span className="meta-dot" style={{ background: "#a78bfa" }} aria-hidden />
+                  Ext
+                </dt>
                 <dd>.{record.extension}</dd>
               </>
             )}
 
-            <dt>✎ Modified</dt>
+            <dt>
+              <span className="meta-dot" style={{ background: "#f59e0b" }} aria-hidden />
+              Modified
+            </dt>
             <dd>{formatDate(record.modifiedAt)}</dd>
 
             {record.createdAt && (
               <>
-                <dt>✦ Created</dt>
+                <dt>
+                  <span className="meta-dot" style={{ background: "#22c55e" }} aria-hidden />
+                  Created
+                </dt>
                 <dd>{formatDate(record.createdAt)}</dd>
               </>
             )}
 
-            <dt># ID</dt>
+            <dt>
+              <span className="meta-dot" style={{ background: "#475569" }} aria-hidden />
+              ID
+            </dt>
             <dd>{record.id}</dd>
           </dl>
         </div>

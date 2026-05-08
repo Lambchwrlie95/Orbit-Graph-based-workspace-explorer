@@ -65,13 +65,80 @@ export function relativeDate(timestamp?: number | null): string {
   return formatDate(timestamp);
 }
 
+// Anything Monaco can syntax-highlight, plus common plain-text formats.
+// Used by the Inspector to decide whether to render a text preview at all.
+const TEXT_EXTENSIONS = new Set([
+  // Programming languages
+  "ts", "tsx", "js", "jsx", "mjs", "cjs",
+  "py", "pyw", "pyi",
+  "rs",
+  "go",
+  "java", "kt", "kts", "scala",
+  "c", "cpp", "cc", "cxx", "h", "hh", "hpp", "hxx",
+  "cs",
+  "rb",
+  "php", "phtml",
+  "swift",
+  "lua",
+  "pl", "pm",
+  "r",
+  "jl",
+  "dart",
+  "ex", "exs",
+  "erl", "hrl",
+  "hs", "lhs",
+  "clj", "cljs", "cljc", "edn",
+  "fs", "fsx", "fsi",
+  "ml", "mli",
+  "nim",
+  "zig",
+  "v", "vh",
+  "sv", "svh",
+  "groovy", "gradle",
+  "tcl",
+  "vb", "vbs",
+  // Shell / scripts
+  "sh", "bash", "zsh", "fish", "ksh",
+  "ps1", "psm1",
+  "bat", "cmd",
+  // Markup / docs
+  "md", "mdx", "markdown",
+  "rst", "adoc", "asciidoc",
+  "tex",
+  "html", "htm",
+  "xml", "xsd", "xsl", "xslt",
+  "svg",
+  // Stylesheets
+  "css", "scss", "sass", "less", "styl", "stylus",
+  // Config / data
+  "json", "json5", "jsonc",
+  "yaml", "yml",
+  "toml",
+  "ini", "cfg", "conf", "config",
+  "env",
+  "properties",
+  "csv", "tsv",
+  // Build / infra
+  "dockerfile",
+  "makefile", "mk",
+  "cmake",
+  "lock",
+  // Database / query
+  "sql", "psql",
+  "graphql", "gql",
+  // Web / templating
+  "vue", "svelte", "astro",
+  "ejs", "pug", "hbs", "handlebars", "mustache", "twig", "njk",
+  // Misc text
+  "txt", "log",
+  "diff", "patch",
+  "gitignore", "gitattributes", "editorconfig",
+  "rtf",
+]);
+
 export function isTextFile(extension?: string | null): boolean {
   if (!extension) return false;
-  return [
-    "txt", "md", "rs", "ts", "tsx", "js", "jsx", "json", 
-    "toml", "yaml", "yml", "css", "scss", "sass", "less", 
-    "html", "htm", "xml", "svg"
-  ].includes(extension.toLowerCase());
+  return TEXT_EXTENSIONS.has(extension.toLowerCase());
 }
 
 export function isImageFile(extension?: string | null): boolean {

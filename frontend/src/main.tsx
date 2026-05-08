@@ -111,10 +111,13 @@ function App() {
   const loadChildren = useCallback(async (path: string) => {
     if (!path) return;
     try {
-      setStatus("Loading...");
+      // Don't blast the status with "Loading..." for cached-cheap lookups —
+      // most folders return in <50ms; only show the indicator if it's slow.
+      const slowTimer = setTimeout(() => setStatus("Loading…"), 120);
       const result = await tauriInvoke("list_children", { parentPath: path });
+      clearTimeout(slowTimer);
       setChildren(result);
-      setStatus(`${result.length} items`);
+      setStatus(`${result.length} item${result.length === 1 ? "" : "s"}`);
     } catch (err) {
       setError(String(err));
       setStatus("Error loading directory");
@@ -470,10 +473,15 @@ function App() {
     }
   }, [debouncedQuery, rootPath]);
 
+  // Debounce graph reloads triggered by directory navigation so rapid clicks
+  // through subfolders don't fire N expensive scope queries back-to-back.
   useEffect(() => {
-    if (rootPath) {
-      void loadGraph(currentPath || rootPath);
-    }
+    if (!rootPath) return;
+    const target = currentPath || rootPath;
+    const timer = setTimeout(() => {
+      void loadGraph(target);
+    }, 180);
+    return () => clearTimeout(timer);
   }, [currentPath, loadGraph, rootPath]);
 
   useEffect(() => {
@@ -678,6 +686,20 @@ function App() {
                 void loadGraph(path);
               }}
               onExpandCluster={handleExpandCluster}
+              onGoBack={() => {
+                if (graphNavHistory.length === 0) return;
+                const previous = graphNavHistory[graphNavHistory.length - 1];
+                const nextHistory = graphNavHistory.slice(0, -1);
+                const droppedNode = breadcrumbNodes.find((n) => n.path === previous);
+                setGraphNavHistory(nextHistory);
+                setBreadcrumbNodes(breadcrumbNodes.filter((n) => n.path !== previous));
+                setCurrentPath(previous);
+                showLeftPanel("explorer");
+                void loadGraph(previous);
+                if (droppedNode) {
+                  void selectPathInsideOrbit(previous);
+                }
+              }}
               expandedFolders={expandedGraphFolders}
               navHistory={graphNavHistory}
               breadcrumbNodes={breadcrumbNodes}

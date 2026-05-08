@@ -54,58 +54,54 @@ const EDITABLE_EXTENSIONS = new Set([
   '.rs',
   // Go
   '.go',
-  // Java
-  '.java', '.kt', '.scala',
+  // Java / JVM
+  '.java', '.kt', '.kts', '.scala', '.groovy', '.gradle',
   // C/C++
-  '.c', '.cpp', '.cc', '.h', '.hpp',
+  '.c', '.cpp', '.cc', '.cxx', '.h', '.hh', '.hpp', '.hxx',
   // C#
-  '.cs',
+  '.cs', '.vb',
   // Ruby
   '.rb',
   // PHP
-  '.php',
+  '.php', '.phtml',
   // Swift
   '.swift',
   // Shell
-  '.sh', '.bash', '.zsh',
-  // Config/Data
-  '.json', '.yaml', '.yml', '.toml', '.xml', '.ini', '.conf', '.cfg',
-  // Markdown
-  '.md', '.mdx',
-  // CSS/SCSS
-  '.css', '.scss', '.sass', '.less',
-  // HTML
-  '.html', '.htm', '.svg',
-  // SQL
-  '.sql',
+  '.sh', '.bash', '.zsh', '.fish', '.ksh',
+  // Config / data
+  '.json', '.json5', '.jsonc', '.yaml', '.yml', '.toml', '.xml',
+  '.xsd', '.xsl', '.ini', '.conf', '.cfg', '.config',
+  '.env', '.properties', '.csv', '.tsv',
+  // Markdown / docs
+  '.md', '.mdx', '.markdown', '.rst', '.adoc', '.asciidoc', '.tex',
+  // CSS / styles
+  '.css', '.scss', '.sass', '.less', '.styl',
+  // HTML / templating
+  '.html', '.htm', '.svg', '.vue', '.svelte', '.astro',
+  '.ejs', '.pug', '.hbs', '.handlebars', '.mustache', '.twig', '.njk',
+  // Database
+  '.sql', '.psql',
   // GraphQL
   '.graphql', '.gql',
-  // Lua
-  '.lua',
-  // Perl
-  '.pl',
-  // R
+  // Other languages
+  '.lua', '.pl', '.pm',
   '.r', '.R',
-  // Julia
-  '.jl',
-  // Dart
-  '.dart',
-  // Elixir
+  '.jl', '.dart',
   '.ex', '.exs',
-  // Erlang
-  '.erl',
-  // Haskell
-  '.hs',
-  // Clojure
-  '.clj', '.cljs',
-  // F#
-  '.fs',
-  // PowerShell
+  '.erl', '.hrl',
+  '.hs', '.lhs',
+  '.clj', '.cljs', '.cljc', '.edn',
+  '.fs', '.fsx', '.fsi',
+  '.ml', '.mli',
+  '.nim', '.zig', '.v', '.sv',
+  '.tcl',
+  // Scripts / shell
   '.ps1', '.psm1',
-  // Batch
   '.bat', '.cmd',
-  // Log/Text
-  '.log', '.txt',
+  // Build / infra
+  '.cmake', '.lock', '.mk',
+  // Misc text
+  '.log', '.txt', '.diff', '.patch', '.rtf',
 ]);
 
 // Files without extensions that can be edited

@@ -1,10 +1,13 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
-import { Maximize, Target } from "lucide-react";
+import { ArrowLeft, Maximize, Target } from "lucide-react";
 import { GraphEdge, GraphNode, GraphPayload } from "../types";
 import { formatBytes } from "../utils";
 import { usePersistedState } from "../hooks/usePersistedState";
+import { glyphForPath } from "../lib/fileGlyphs";
+
+type NodeView = "spheres" | "icons";
 
 const ALL_NODE_TYPES: NodeType[] = [
   "folder",
@@ -25,6 +28,7 @@ const PREF = {
   folders: "orbit:graph:showFolders",
   dim: "orbit:graph:dimUnrelated",
   types: "orbit:graph:visibleTypes",
+  nodeView: "orbit:graph:nodeView",
 };
 
 const serializeTypeSet = (set: Set<NodeType>) => JSON.stringify(Array.from(set));
@@ -46,6 +50,7 @@ interface GraphViewProps {
   onSelectPath: (path: string) => void;
   onOpenPath?: (path: string) => void;
   onFocusFolder?: (path: string) => void;
+  onGoBack?: () => void;
   onExpandCluster?: (folderPath: string) => void;
   expandedFolders?: string[];
   navHistory?: string[]; // Breadcrumb paths for navigation
@@ -59,6 +64,7 @@ function GraphViewComponent({
   onSelectPath,
   onOpenPath,
   onFocusFolder,
+  onGoBack,
   onExpandCluster,
   expandedFolders = [],
   navHistory = [],
@@ -84,6 +90,10 @@ function GraphViewComponent({
     new Set(ALL_NODE_TYPES),
     { serialize: serializeTypeSet, deserialize: deserializeTypeSet },
   );
+  const [nodeView, setNodeView] = usePersistedState<NodeView>(PREF.nodeView, "spheres");
+  const [iconOverlay, setIconOverlay] = useState<
+    Array<{ id: string; x: number; y: number; size: number; glyph: string; color: string; opacity: number }>
+  >([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [expandingCluster, setExpandingCluster] = useState<string | null>(null);
@@ -296,6 +306,54 @@ function GraphViewComponent({
 
     rendererRef.current = renderer;
 
+    // Project node positions to viewport coords for the icon overlay layer.
+    // Throttled via afterRender so it follows pan/zoom without thrashing React.
+    let overlayRaf: number | null = null;
+    const updateOverlay = () => {
+      if (overlayRaf !== null) return;
+      overlayRaf = requestAnimationFrame(() => {
+        overlayRaf = null;
+        const points: Array<{
+          id: string;
+          x: number;
+          y: number;
+          size: number;
+          glyph: string;
+          color: string;
+          opacity: number;
+        }> = [];
+        graph.forEachNode((node, attrs) => {
+          const viewport = renderer.graphToViewport({
+            x: attrs.x as number,
+            y: attrs.y as number,
+          });
+          const display = renderer.getNodeDisplayData(node);
+          const sizeOnScreen = display?.size ?? (attrs.size as number) ?? 6;
+          const baseColor = (attrs.baseColor as string) ?? (attrs.color as string);
+          const renderedColor = (display?.color as string) ?? baseColor;
+          const isDimmed =
+            baseColor &&
+            renderedColor &&
+            renderedColor.toLowerCase() !== baseColor.toLowerCase();
+          points.push({
+            id: node,
+            x: viewport.x,
+            y: viewport.y,
+            size: sizeOnScreen,
+            glyph: glyphForPath(
+              attrs.path as string,
+              attrs.isDir as boolean,
+              attrs.isCluster as boolean,
+            ),
+            color: baseColor ?? "#a8bbc8",
+            opacity: isDimmed ? 0.35 : 1,
+          });
+        });
+        setIconOverlay(points);
+      });
+    };
+    renderer.on("afterRender", updateOverlay);
+
     // Only animate camera on first render, not on updates
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
@@ -393,6 +451,19 @@ function GraphViewComponent({
           ))}
         </div>
 
+        <div className="graph-mode-tabs" aria-label="Node style">
+          {(["spheres", "icons"] as NodeView[]).map((view) => (
+            <button
+              key={view}
+              className={nodeView === view ? "active" : ""}
+              onClick={() => setNodeView(view)}
+              title={view === "icons" ? "Show file-type icons on nodes" : "Plain colored nodes"}
+            >
+              {view}
+            </button>
+          ))}
+        </div>
+
         <div className="graph-switches">
           <button className={showFolders ? "active" : ""} onClick={() => setShowFolders((value) => !value)}>
             Folders
@@ -453,6 +524,19 @@ function GraphViewComponent({
 
       <div className="graph-controls">
         <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
+        <button
+          type="button"
+          className="graph-icon-btn"
+          onClick={onGoBack}
+          disabled={!onGoBack || navHistory.length === 0}
+          title={
+            navHistory.length > 0
+              ? `Back to ${navHistory[navHistory.length - 1].split("/").pop() || "previous"}`
+              : "Back (no history)"
+          }
+        >
+          <ArrowLeft size={14} strokeWidth={1.8} />
+        </button>
         <button type="button" className="graph-icon-btn" onClick={fitGraph} title="Fit graph">
           <Maximize size={14} strokeWidth={1.8} />
         </button>
@@ -482,6 +566,28 @@ function GraphViewComponent({
         {(!displayPayload || displayNodes.length === 0) && (
           <div className="empty-state">
             <p>{payload ? "No nodes match the current graph filters" : "Scan a workspace to render the graph"}</p>
+          </div>
+        )}
+        {nodeView === "icons" && (
+          <div className="graph-icon-overlay" aria-hidden>
+            {iconOverlay.map((point) => {
+              const fontSize = Math.max(11, Math.min(30, point.size * 1.6));
+              return (
+                <span
+                  key={point.id}
+                  className="graph-node-glyph"
+                  style={{
+                    left: point.x,
+                    top: point.y,
+                    fontSize: `${fontSize}px`,
+                    color: point.color,
+                    opacity: point.opacity,
+                  }}
+                >
+                  {point.glyph}
+                </span>
+              );
+            })}
           </div>
         )}
       </div>
@@ -724,7 +830,8 @@ function reduceNode(
   let targetLabel = data.label as string;
 
   if (dimUnrelated && (hovered || selected) && !isHovered && !isSelected && !connectedToActive) {
-    targetColor = "#343a40";
+    // Preserve hue identity by darkening toward background instead of going monochrome
+    targetColor = adjustColorBrightness(targetColor, 0.42);
     targetLabel = "";
     targetZIndex = 0;
     targetSize = Math.max(2, baseSize * 0.72);
