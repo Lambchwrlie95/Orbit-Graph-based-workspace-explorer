@@ -11,7 +11,9 @@ mod db;
 mod git_status;
 mod graph;
 mod image_analyzer;
+mod image_hash;
 mod logger;
+mod markdown_analyzer;
 mod models;
 mod performance;
 mod preview;
@@ -233,16 +235,23 @@ fn main() {
             commands::file::read_file_for_edit,
             commands::file::save_file,
             commands::analysis::analyze_code_file,
+            commands::analysis::analyze_markdown_file,
             commands::analysis::batch_analyze_code_files,
+            commands::analysis::batch_analyze_markdown_files,
+            commands::analysis::list_analyzable_files,
             commands::analysis::get_file_git_status,
             commands::analysis::get_files_git_status,
             commands::analysis::get_related_files,
             commands::analysis::is_analyzable_code_file,
+            commands::analysis::is_analyzable_markdown_file,
             commands::analysis::get_supported_code_extensions,
             commands::analysis::find_git_repo_root,
             commands::analysis::is_in_git_repo,
             commands::image_analysis::analyze_image_file,
             commands::image_analysis::extract_colors,
+            commands::image_analysis::compute_image_phash,
+            commands::image_analysis::find_similar_images,
+            commands::image_analysis::compute_workspace_phashes,
             commands::thumbnail::ensure_thumbnail,
             commands::thumbnail::get_thumbnail_info,
             commands::thumbnail::delete_thumbnails,

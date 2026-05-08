@@ -61,11 +61,11 @@ export const AssetMode: React.FC<AssetModeProps> = ({
           <ImageIcon className="asset-title-icon" size={16} />
           <h2>Assets</h2>
           <span className="asset-count">
-            {imageFiles.length} images
+            ◈ {imageFiles.length} images
           </span>
           {loadingCount > 0 && (
             <span className="asset-loading">
-              ({loadingCount} generating...)
+              ⟳ {loadingCount} generating…
             </span>
           )}
         </div>
@@ -91,7 +91,7 @@ export const AssetMode: React.FC<AssetModeProps> = ({
         {imageFiles.length === 0 ? (
           <div className="asset-empty">
             <ImageIcon size={48} />
-            <p>No images in current folder</p>
+            <p>◌ No images in current folder</p>
           </div>
         ) : (
           <div 
@@ -146,8 +146,8 @@ export const AssetMode: React.FC<AssetModeProps> = ({
 
       {/* Status bar */}
       <div className="asset-status">
-        <span>{currentPath || 'No workspace'}</span>
-        <span>{imageFiles.length} images</span>
+        <span>⬡ {currentPath || 'No workspace'}</span>
+        <span>◈ {imageFiles.length} images</span>
       </div>
     </div>
   );

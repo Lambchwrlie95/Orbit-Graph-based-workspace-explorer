@@ -1,10 +1,32 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { FileCode, FileText, AlertCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FileCode, FileText, AlertCircle, Eye, Columns, Code as CodeIcon } from 'lucide-react';
 import { EditorTabs } from './EditorTabs';
 import { MonacoEditor } from './MonacoEditor';
+import { MarkdownPreview } from './MarkdownPreview';
 import { tauriInvoke } from '../lib/tauriCommands';
 import { useEditorStore } from '../stores/editorStore';
+import { usePersistedState } from '../hooks/usePersistedState';
 import type { FileRecord } from '../types';
+
+type MarkdownView = 'editor' | 'split' | 'preview';
+
+function isMarkdownPath(path: string | null): boolean {
+  if (!path) return false;
+  const lower = path.toLowerCase();
+  return lower.endsWith('.md') || lower.endsWith('.mdx') || lower.endsWith('.markdown');
+}
+
+function resolveLocalLink(sourceFile: string, target: string): string {
+  const clean = target.split('#')[0].split('?')[0];
+  if (clean.startsWith('/')) return clean;
+  const parts = sourceFile.split('/').slice(0, -1);
+  for (const part of clean.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') parts.pop();
+    else parts.push(part);
+  }
+  return parts.join('/');
+}
 
 /**
  * CodeMode component - Main container for the code editing experience
@@ -169,6 +191,19 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [markdownView, setMarkdownView] = usePersistedState<MarkdownView>('orbit:code:mdView', 'split');
+
+  const isMarkdown = useMemo(() => isMarkdownPath(activeFile), [activeFile]);
+
+  const handleMarkdownLinkClick = useCallback(
+    (target: string) => {
+      if (!activeFile) return;
+      if (target.startsWith('http://') || target.startsWith('https://')) return;
+      const resolved = resolveLocalLink(activeFile, target);
+      window.dispatchEvent(new CustomEvent('orbit:open-file', { detail: resolved }));
+    },
+    [activeFile],
+  );
 
   // Load file content when opening
   const loadFile = useCallback(async (filePath: string) => {
@@ -201,9 +236,9 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
   // Handle tab close with save prompt if modified
   const handleTabClose = useCallback(async (path: string) => {
     if (modifiedFiles.has(path)) {
-      // For now, just close without prompting (prompt will be implemented in UI layer)
-      // TODO: Add save confirmation dialog
-      console.warn(`Closing modified file without saving: ${path}`);
+      const fileName = path.split('/').pop() ?? path;
+      const confirmed = window.confirm(`"${fileName}" has unsaved changes. Close without saving?`);
+      if (!confirmed) return;
     }
     closeFile(path);
     setError(null);
@@ -259,6 +294,13 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
   useEffect(() => {
     setError(null);
   }, [activeFile]);
+
+  // Auto-load content for the active file if it has no content yet (e.g. restored from session)
+  useEffect(() => {
+    if (activeFile && !fileContents.has(activeFile)) {
+      void loadFile(activeFile);
+    }
+  }, [activeFile, fileContents, loadFile]);
 
   return (
     <div className={`code-mode ${className}`} style={{
@@ -394,14 +436,41 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
             Loading file...
           </div>
         ) : (
-          // Editor
-          <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-            <MonacoEditor
-              filePath={activeFile || ''}
-              content={currentContent}
-              onChange={handleEditorChange}
-              onSave={handleSave}
-            />
+          // Editor (with markdown split-view when applicable)
+          <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex' }}>
+            {(!isMarkdown || markdownView !== 'preview') && (
+              <div
+                style={{
+                  flex: isMarkdown && markdownView === 'split' ? '1 1 50%' : '1 1 100%',
+                  minWidth: 0,
+                  position: 'relative',
+                  borderRight:
+                    isMarkdown && markdownView === 'split' ? '1px solid #1c2831' : 'none',
+                }}
+              >
+                <MonacoEditor
+                  filePath={activeFile || ''}
+                  content={currentContent}
+                  onChange={handleEditorChange}
+                  onSave={handleSave}
+                />
+              </div>
+            )}
+            {isMarkdown && markdownView !== 'editor' && (
+              <div
+                style={{
+                  flex: markdownView === 'split' ? '1 1 50%' : '1 1 100%',
+                  minWidth: 0,
+                  overflow: 'auto',
+                  background: '#0f1418',
+                }}
+              >
+                <MarkdownPreview
+                  content={currentContent}
+                  onLinkClick={handleMarkdownLinkClick}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -441,14 +510,45 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
             )}
             
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {isMarkdown && (
+                <div className="md-view-toggle" role="group" aria-label="Markdown view mode">
+                  <button
+                    type="button"
+                    className={markdownView === 'editor' ? 'active' : ''}
+                    onClick={() => setMarkdownView('editor')}
+                    title="Editor only"
+                    aria-label="Editor only"
+                  >
+                    <CodeIcon size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className={markdownView === 'split' ? 'active' : ''}
+                    onClick={() => setMarkdownView('split')}
+                    title="Split view"
+                    aria-label="Split view"
+                  >
+                    <Columns size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className={markdownView === 'preview' ? 'active' : ''}
+                    onClick={() => setMarkdownView('preview')}
+                    title="Preview only"
+                    aria-label="Preview only"
+                  >
+                    <Eye size={11} />
+                  </button>
+                </div>
+              )}
               {saveStatus === 'saving' && (
-                <span style={{ color: '#7dd3fc' }}>Saving...</span>
+                <span style={{ color: '#7dd3fc' }}>⟳ Saving…</span>
               )}
               {saveStatus === 'saved' && (
-                <span style={{ color: '#86efac' }}>Saved</span>
+                <span style={{ color: '#86efac' }}>✓ Saved</span>
               )}
               {saveStatus === 'error' && (
-                <span style={{ color: '#fca5a5' }}>Save failed</span>
+                <span style={{ color: '#fca5a5' }}>✗ Save failed</span>
               )}
               <span style={{ opacity: 0.6 }}>Ctrl+S to save</span>
             </span>

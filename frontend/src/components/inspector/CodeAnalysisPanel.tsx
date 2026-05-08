@@ -50,8 +50,8 @@ export function CodeAnalysisPanel({ filePath, onOpenFile }: CodeAnalysisPanelPro
   return (
     <div className="code-analysis-panel">
       <div className="panel-header">
-        <h4>Code Analysis</h4>
-        {loading && <span className="loading-indicator">Analyzing...</span>}
+        <h4>⌥ Code Analysis</h4>
+        {loading && <span className="loading-indicator">⟳ Analyzing…</span>}
         {!loading && (
           <button className="refresh-btn" onClick={refresh} title="Refresh analysis">
             ↻
@@ -73,9 +73,9 @@ export function CodeAnalysisPanel({ filePath, onOpenFile }: CodeAnalysisPanelPro
             onClick={() => toggleSection('gitStatus')}
           >
             <span className="section-icon">
-              {expandedSections.gitStatus ? '▼' : '▶'}
+              {expandedSections.gitStatus ? '▾' : '▸'}
             </span>
-            <span>Git Status</span>
+            <span>⎇ Git Status</span>
             <GitStatusBadge status={gitStatus} />
           </button>
           
@@ -95,12 +95,12 @@ export function CodeAnalysisPanel({ filePath, onOpenFile }: CodeAnalysisPanelPro
             onClick={() => toggleSection('imports')}
           >
             <span className="section-icon">
-              {expandedSections.imports ? '▼' : '▶'}
+              {expandedSections.imports ? '▾' : '▸'}
             </span>
-            <span>Imports</span>
+            <span>⬇ Imports</span>
             <span className="item-count">{analysis.imports.length}</span>
           </button>
-          
+
           {expandedSections.imports && (
             <div className="section-content">
               <ImportsList
@@ -121,12 +121,12 @@ export function CodeAnalysisPanel({ filePath, onOpenFile }: CodeAnalysisPanelPro
             onClick={() => toggleSection('exports')}
           >
             <span className="section-icon">
-              {expandedSections.exports ? '▼' : '▶'}
+              {expandedSections.exports ? '▾' : '▸'}
             </span>
-            <span>Exports</span>
+            <span>⬆ Exports</span>
             <span className="item-count">{analysis.exports.length}</span>
           </button>
-          
+
           {expandedSections.exports && (
             <div className="section-content">
               <ExportsList exports={analysis.exports} />
@@ -143,9 +143,9 @@ export function CodeAnalysisPanel({ filePath, onOpenFile }: CodeAnalysisPanelPro
             onClick={() => toggleSection('related')}
           >
             <span className="section-icon">
-              {expandedSections.related ? '▼' : '▶'}
+              {expandedSections.related ? '▾' : '▸'}
             </span>
-            <span>Related Files</span>
+            <span>⬡ Related Files</span>
             <span className="item-count">{relatedFiles.length}</span>
           </button>
           
@@ -375,32 +375,43 @@ function RelatedFilesList({
   );
 }
 
-// Helper function to resolve relative import paths
+// Helper function to resolve relative import paths.
+// Returns the most-likely resolved absolute path; the caller (tauriInvoke "get_file")
+// will return null if the file is not indexed, so we fall back gracefully.
 function resolveImportPath(filePath: string, importPath: string): string {
-  // Handle relative imports
-  if (importPath.startsWith('./') || importPath.startsWith('../')) {
-    const baseDir = filePath.substring(0, filePath.lastIndexOf('/'));
-    const parts = importPath.split('/');
-    let result = baseDir;
-    
-    for (const part of parts) {
-      if (part === '..') {
-        result = result.substring(0, result.lastIndexOf('/'));
-      } else if (part !== '.') {
-        result = `${result}/${part}`;
-      }
-    }
-    
-    // Try common extensions if none specified
-    if (!result.includes('.')) {
-      const extensions = ['.ts', '.tsx', '.js', '.jsx', '.rs', '.py', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
-      return `${result}${extensions[0]}`; // Return first extension as guess
-    }
-    
-    return result;
+  if (!importPath.startsWith('./') && !importPath.startsWith('../')) {
+    return importPath;
   }
-  
-  return importPath;
+
+  const baseParts = filePath.split('/').slice(0, -1);
+  const importParts = importPath.split('/');
+
+  for (const part of importParts) {
+    if (part === '..') {
+      baseParts.pop();
+    } else if (part !== '.') {
+      baseParts.push(part);
+    }
+  }
+
+  const resolved = baseParts.join('/');
+
+  // If the resolved path already has an extension, return as-is
+  const lastSegment = resolved.split('/').pop() ?? '';
+  if (lastSegment.includes('.')) {
+    return resolved;
+  }
+
+  // Infer extension from the source file to prefer the same language
+  const srcExt = filePath.split('.').pop()?.toLowerCase() ?? '';
+  if (srcExt === 'ts' || srcExt === 'tsx') return `${resolved}.ts`;
+  if (srcExt === 'js' || srcExt === 'jsx' || srcExt === 'mjs') return `${resolved}.js`;
+  if (srcExt === 'py') return `${resolved}.py`;
+  if (srcExt === 'rs') return `${resolved}.rs`;
+  if (srcExt === 'go') return `${resolved}.go`;
+
+  // Default: TypeScript
+  return `${resolved}.ts`;
 }
 
 // Get icon for export type

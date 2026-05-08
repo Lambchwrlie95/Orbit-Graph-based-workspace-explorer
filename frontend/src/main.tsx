@@ -4,12 +4,14 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Activity,
   Folder,
+  Image as ImageIcon,
   Info,
   List,
   Network,
   Search as SearchIcon,
   SquareCode,
 } from "lucide-react";
+import { AssetMode } from "./components/AssetMode";
 import { BookmarksPanel } from "./components/BookmarksPanel";
 import { CodeMode, isEditableFile } from "./components/CodeMode";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -30,7 +32,7 @@ import { formatDate, shortPath } from "./utils";
 import "./styles.css";
 
 type ExplorerViewMode = "list" | "tree";
-type LeftPanel = "explorer" | "search";
+type LeftPanel = "explorer" | "search" | "assets";
 type RightPanel = "inspector" | "code";
 
 const BOOKMARKS_KEY = "orbit:bookmarks";
@@ -209,8 +211,54 @@ function App() {
     setStatus(statusText);
     setLeftPanel("explorer");
     setLeftCollapsed(false);
-    await checkCacheStatus(path);
-  }, [checkCacheStatus]);
+
+    // If the cache is fresh, populate the UI from it. Otherwise trigger a scan
+    // so the user isn't left staring at an empty workbench.
+    try {
+      const status = await tauriInvoke("check_cache_status", { rootPath: path });
+      setCacheStatus(status);
+      if (status.fileCount > 0 && !status.isStale) {
+        setStatus(`Cache fresh · ${status.fileCount.toLocaleString()} files`);
+        await loadChildren(path);
+        await loadGraph(path);
+      } else {
+        // Empty or stale cache: auto-scan
+        setStatus(status.fileCount === 0 ? "Scanning new workspace…" : "Refreshing stale cache…");
+        const progress = await tauriInvoke("scan_workspace", { rootPath: path });
+        setScan(progress);
+        setLogPath(progress.logPath ?? null);
+        await loadChildren(progress.rootPath);
+        await loadGraph(progress.rootPath);
+        await checkCacheStatus(progress.rootPath);
+        setStatus(`Scanned ${progress.scanned.toLocaleString()} entries`);
+
+        // Background analysis (mirrors scanWorkspace flow)
+        void (async () => {
+          try {
+            const buckets = await tauriInvoke("list_analyzable_files", {
+              rootPath: progress.rootPath,
+            });
+            if (buckets.code.length > 0) {
+              await tauriInvoke("batch_analyze_code_files", { paths: buckets.code });
+            }
+            if (buckets.markdown.length > 0) {
+              await tauriInvoke("batch_analyze_markdown_files", { paths: buckets.markdown });
+            }
+            if (buckets.code.length + buckets.markdown.length > 0) {
+              await loadGraph(progress.rootPath);
+            }
+            await tauriInvoke("compute_workspace_phashes", { rootPath: progress.rootPath });
+          } catch (analysisErr) {
+            console.warn("Post-scan analysis failed:", analysisErr);
+          }
+        })();
+      }
+    } catch (err) {
+      console.error("applyWorkspace failed:", err);
+      setError(String(err));
+      setStatus("Workspace load failed");
+    }
+  }, [checkCacheStatus, loadChildren, loadGraph]);
 
   const chooseFolder = useCallback(async () => {
     const selectedFolder = await tauriInvoke("choose_folder");
@@ -231,6 +279,31 @@ function App() {
     }
   }, [openFileInEditor]);
 
+  // Bridge: markdown preview emits `orbit:open-file` with a resolved path; look it up
+  // in the index and route through the standard edit flow.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (!detail) return;
+      try {
+        const file = await tauriInvoke("get_file", { path: detail });
+        if (file) {
+          if (file.isDir) {
+            setCurrentPath(file.path);
+            setLeftPanel("explorer");
+            setLeftCollapsed(false);
+          } else {
+            await handleOpenInEditor(file);
+          }
+        }
+      } catch (err) {
+        console.warn("Open-from-link failed:", err);
+      }
+    };
+    window.addEventListener("orbit:open-file", handler);
+    return () => window.removeEventListener("orbit:open-file", handler);
+  }, [handleOpenInEditor]);
+
   const scanWorkspace = useCallback(async () => {
     if (!rootPath) return;
     setError(null);
@@ -246,6 +319,39 @@ function App() {
       await checkCacheStatus(progress.rootPath);
       const totalDuration = Math.round(performance.now() - scanStartTime);
       setStatus(`Scanned ${progress.scanned.toLocaleString()} entries in ${totalDuration}ms`);
+
+      // Background: extract import/markdown link relationships so the graph
+      // gains real edges. Reload the graph once analysis completes.
+      void (async () => {
+        try {
+          const buckets = await tauriInvoke("list_analyzable_files", {
+            rootPath: progress.rootPath,
+          });
+          const total = buckets.code.length + buckets.markdown.length;
+          if (total === 0) return;
+          setStatus(`Analyzing ${total} file${total === 1 ? "" : "s"} for relationships…`);
+          if (buckets.code.length > 0) {
+            await tauriInvoke("batch_analyze_code_files", { paths: buckets.code });
+          }
+          if (buckets.markdown.length > 0) {
+            await tauriInvoke("batch_analyze_markdown_files", { paths: buckets.markdown });
+          }
+          await loadGraph(progress.rootPath);
+          setStatus(`Analysis complete · ${total.toLocaleString()} file${total === 1 ? "" : "s"}`);
+        } catch (analysisErr) {
+          console.warn("Post-scan analysis failed:", analysisErr);
+        }
+        try {
+          const hashed = await tauriInvoke("compute_workspace_phashes", {
+            rootPath: progress.rootPath,
+          });
+          if (hashed > 0) {
+            console.log(`[Orbit] Indexed ${hashed} new image hash${hashed === 1 ? "" : "es"}`);
+          }
+        } catch (hashErr) {
+          console.warn("Image hash computation failed:", hashErr);
+        }
+      })();
     } catch (err) {
       setError(String(err));
       setStatus("Scan failed");
@@ -396,15 +502,20 @@ function App() {
         e.preventDefault();
         // Future: toggle bottom panel
       }
-      // Cmd/Ctrl+1-2 - switch left panel tabs
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === "1" || e.key === "2")) {
+      // Cmd/Ctrl+1-3 - switch left panel tabs
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === "1" || e.key === "2" || e.key === "3")) {
         e.preventDefault();
-        const panels: LeftPanel[] = ["explorer", "search"];
+        const panels: LeftPanel[] = ["explorer", "search", "assets"];
         const index = parseInt(e.key, 10) - 1;
         if (panels[index]) {
           showLeftPanel(panels[index]);
           setLeftCollapsed(false);
         }
+      }
+      // Ctrl+L - edit path in header
+      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent("orbit:edit-path"));
       }
     };
 
@@ -415,6 +526,7 @@ function App() {
   const leftPanelLabel = {
     explorer: "Explorer",
     search: "Search",
+    assets: "Assets",
   }[leftPanel];
 
   return (
@@ -435,6 +547,7 @@ function App() {
         onAddBookmark={addCurrentBookmark}
         onShowExplorer={() => showLeftPanel("explorer")}
         onShowSearch={() => showLeftPanel("search")}
+        onShowAssets={() => showLeftPanel("assets")}
         onShowInspector={() => showRightPanel("inspector")}
         onShowCode={() => showRightPanel("code")}
         onNavigateToPath={(path) => {
@@ -452,6 +565,7 @@ function App() {
           <div className="side-nav" aria-label="Left panel">
             <PanelButton active={leftPanel === "explorer"} label="Explorer" onClick={() => setLeftPanel("explorer")} icon={<Folder size={15} />} />
             <PanelButton active={leftPanel === "search"} label="Search" onClick={() => setLeftPanel("search")} icon={<SearchIcon size={15} />} />
+            <PanelButton active={leftPanel === "assets"} label="Assets" onClick={() => setLeftPanel("assets")} icon={<ImageIcon size={15} />} />
           </div>
 
           <div className="side-panel-title">
@@ -489,6 +603,14 @@ function App() {
                     void openPath(record.path);
                   }
                 }}
+              />
+            )}
+
+            {leftPanel === "assets" && (
+              <AssetMode
+                files={children}
+                currentPath={currentPath}
+                onSelect={(record) => void selectRecord(record)}
               />
             )}
           </div>
@@ -583,6 +705,7 @@ function App() {
               record={selected}
               preview={preview}
               isLoadingPreview={isPreviewLoading}
+              rootPath={rootPath}
               onOpen={openPath}
               onSelectPath={selectPathInsideOrbit}
               onNavigate={(path) => {
@@ -599,12 +722,12 @@ function App() {
       </section>
 
       <footer className="statusbar">
-        <span>Graph</span>
-        <span>{leftPanelLabel}</span>
+        <span>⬡ Graph</span>
+        <span>◈ {leftPanelLabel}</span>
         <span title={status}>{status}</span>
-        <span>{selected ? selected.name : "No selection"}</span>
-        <span>{cacheStatus?.fileCount ? `${cacheStatus.fileCount.toLocaleString()} indexed` : "No cache"}</span>
-        {logPath && <span title={logPath}>Log {shortPath(logPath)}</span>}
+        <span>{selected ? `· ${selected.name}` : "◌ No selection"}</span>
+        <span>{cacheStatus?.fileCount ? `⊞ ${cacheStatus.fileCount.toLocaleString()} indexed` : "⊟ No cache"}</span>
+        {logPath && <span title={logPath}>≡ Log {shortPath(logPath)}</span>}
       </footer>
 
       <HelpMenuDialogs />

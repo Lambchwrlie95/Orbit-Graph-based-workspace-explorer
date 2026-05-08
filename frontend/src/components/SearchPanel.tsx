@@ -1,6 +1,6 @@
 import React, { memo, useMemo } from "react";
 import { FileRecord } from "../types";
-import { fileTypeLabel, formatBytes, shortPath } from "../utils";
+import { formatBytes, shortPath } from "../utils";
 
 interface SearchPanelProps {
   rootPath: string;
@@ -56,7 +56,7 @@ function SearchPanelComponent({
           )}
         </div>
         <span className="search-status">
-          {isLoading ? "Searching..." : `${results.length} result${results.length !== 1 ? "s" : ""}`}
+          {isLoading ? "⟳ Searching…" : `⊞ ${results.length} result${results.length !== 1 ? "s" : ""}`}
         </span>
       </div>
 
@@ -70,7 +70,7 @@ function SearchPanelComponent({
             title={item.path}
           >
             <span className={`file-icon ${item.isDir ? "folder" : getFileIconClass(item.extension)}`}>
-              {item.isDir ? "D" : fileTypeLabel(item)}
+              {item.isDir ? "⊞" : fileGlyph(item.extension)}
             </span>
             <div className="search-result-info">
               <span className="file-name">{item.name}</span>
@@ -84,20 +84,38 @@ function SearchPanelComponent({
 
         {!isLoading && results.length === 0 && query && (
           <div className="empty-state">
-            <p>No results found for "{query}"</p>
+            <p>◌ No results for "{query}"</p>
             <p className="muted">Try a different search term</p>
           </div>
         )}
 
         {!query && (
           <div className="empty-state">
-            <p>Enter a search term to find files</p>
-            <p className="muted">Search in: {shortPath(rootPath)}</p>
+            <p>⌕ Enter a term to find files</p>
+            <p className="muted">⬡ {shortPath(rootPath)}</p>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function fileGlyph(ext?: string | null): string {
+  const e = (ext ?? "").toLowerCase();
+  if (e === "ts" || e === "tsx") return "⬡";
+  if (e === "js" || e === "jsx" || e === "mjs" || e === "cjs") return "◈";
+  if (e === "rs") return "⬖";
+  if (e === "py" || e === "pyi" || e === "pyw") return "◇";
+  if (e === "go") return "⬡";
+  if (e === "java" || e === "kt" || e === "scala") return "◉";
+  if (e === "c" || e === "cpp" || e === "h" || e === "hpp") return "◑";
+  if (e === "md" || e === "mdx") return "≡";
+  if (e === "html" || e === "htm") return "◫";
+  if (e === "css" || e === "scss" || e === "sass") return "◌";
+  if (e === "json") return "⊞";
+  if (e === "toml" || e === "yaml" || e === "yml" || e === "xml") return "⊟";
+  if (["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(e)) return "◈";
+  return "·";
 }
 
 function getFileIconClass(extension?: string | null): string {

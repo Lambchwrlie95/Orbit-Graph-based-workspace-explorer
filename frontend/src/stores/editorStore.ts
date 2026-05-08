@@ -29,12 +29,10 @@ export interface EditorState {
   closeOtherFiles: (keepPath: string) => void;
 }
 
-// Custom storage serializer for Set and Map
+// Only open tabs and active tab are persisted; content and modified state reload on demand.
 interface PersistedState {
   openFiles: string[];
   activeFile: string | null;
-  modifiedFiles: string[];
-  fileContents: Array<[string, string]>;
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -186,24 +184,15 @@ export const useEditorStore = create<EditorState>()(
     }),
     {
       name: 'orbit-editor-storage',
-      // Only persist open files list, not content or modified state
       partialize: (state): PersistedState => ({
         openFiles: state.openFiles,
         activeFile: state.activeFile,
-        modifiedFiles: Array.from(state.modifiedFiles),
-        fileContents: Array.from(state.fileContents.entries()),
       }),
-      // Deserialize Sets and Maps on rehydration
       onRehydrateStorage: () => (state) => {
-        if (state) {
-          // Convert arrays back to Set and Map
-          const persistedState = state as unknown as PersistedState;
-          return {
-            ...state,
-            modifiedFiles: new Set(persistedState.modifiedFiles || []),
-            fileContents: new Map(persistedState.fileContents || []),
-          } as EditorState;
-        }
+        if (!state) return;
+        // Always start fresh — content will be loaded lazily from disk
+        state.modifiedFiles = new Set();
+        state.fileContents = new Map();
       },
     }
   )

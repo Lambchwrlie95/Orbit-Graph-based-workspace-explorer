@@ -4,6 +4,38 @@ import Sigma from "sigma";
 import { Maximize, Target } from "lucide-react";
 import { GraphEdge, GraphNode, GraphPayload } from "../types";
 import { formatBytes } from "../utils";
+import { usePersistedState } from "../hooks/usePersistedState";
+
+const ALL_NODE_TYPES: NodeType[] = [
+  "folder",
+  "code",
+  "image",
+  "config",
+  "text",
+  "web",
+  "document",
+  "other",
+  "cluster",
+];
+
+const PREF = {
+  layout: "orbit:graph:layoutMode",
+  labels: "orbit:graph:showLabels",
+  files: "orbit:graph:showFiles",
+  folders: "orbit:graph:showFolders",
+  dim: "orbit:graph:dimUnrelated",
+  types: "orbit:graph:visibleTypes",
+};
+
+const serializeTypeSet = (set: Set<NodeType>) => JSON.stringify(Array.from(set));
+const deserializeTypeSet = (raw: string): Set<NodeType> => {
+  try {
+    const parsed = JSON.parse(raw) as NodeType[];
+    return new Set(Array.isArray(parsed) ? parsed : ALL_NODE_TYPES);
+  } catch {
+    return new Set(ALL_NODE_TYPES);
+  }
+};
 
 type LayoutMode = "orbit" | "tree" | "force";
 type GraphDisplayNode = GraphNode & { x: number; y: number; depth: number; childCount: number };
@@ -40,14 +72,18 @@ function GraphViewComponent({
   const selectedNodeRef = useRef<string | null>(null);
   const navHistoryRef = useRef<string[]>(navHistory);
   const breadcrumbNodesRef = useRef<GraphNode[]>(breadcrumbNodes);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("orbit");
-  const [showLabels, setShowLabels] = useState(true);
-  const [showFiles, setShowFiles] = useState(true);
-  const [showFolders, setShowFolders] = useState(true);
-  const [dimUnrelated, setDimUnrelated] = useState(true);
+  const [layoutMode, setLayoutMode] = usePersistedState<LayoutMode>(PREF.layout, "orbit");
+  const [showLabels, setShowLabels] = usePersistedState<boolean>(PREF.labels, true);
+  const [showFiles, setShowFiles] = usePersistedState<boolean>(PREF.files, true);
+  const [showFolders, setShowFolders] = usePersistedState<boolean>(PREF.folders, true);
+  const [dimUnrelated, setDimUnrelated] = usePersistedState<boolean>(PREF.dim, true);
   const [graphFilter, setGraphFilter] = useState("");
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [visibleTypes, setVisibleTypes] = useState<Set<NodeType>>(new Set(['folder', 'code', 'image', 'config', 'text', 'web', 'document', 'other', 'cluster']));
+  const [visibleTypes, setVisibleTypes] = usePersistedState<Set<NodeType>>(
+    PREF.types,
+    new Set(ALL_NODE_TYPES),
+    { serialize: serializeTypeSet, deserialize: deserializeTypeSet },
+  );
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [expandingCluster, setExpandingCluster] = useState<string | null>(null);
@@ -113,6 +149,10 @@ function GraphViewComponent({
   const nodeById = useMemo(() => new Map(displayNodes.map((node) => [String(node.id), node])), [displayNodes]);
   const graphStats = useMemo(() => computeStats(displayNodes, displayPayload?.edges ?? []), [displayNodes, displayPayload]);
   const minimapNodes = useMemo(() => minimapPoints(displayNodes), [displayNodes]);
+  const minimapEdges = useMemo(
+    () => minimapEdgeLines(displayNodes, displayPayload?.edges ?? []),
+    [displayNodes, displayPayload],
+  );
 
   useEffect(() => {
     navHistoryRef.current = navHistory;
@@ -392,6 +432,18 @@ function GraphViewComponent({
       {displayNodes.length > 0 && (
         <div className="graph-minimap" title="Graph minimap">
           <svg viewBox="0 0 120 86" role="img" aria-label="Graph minimap">
+            {minimapEdges.map((edge, idx) => (
+              <line
+                key={idx}
+                x1={edge.x1}
+                y1={edge.y1}
+                x2={edge.x2}
+                y2={edge.y2}
+                stroke="#3a4f63"
+                strokeWidth={0.3}
+                opacity={0.45}
+              />
+            ))}
             {minimapNodes.map((point) => (
               <circle key={point.id} cx={point.x} cy={point.y} r={point.r} fill={point.color} opacity={point.opacity} />
             ))}
@@ -463,6 +515,7 @@ function graphEdgePairKey(source: string, target: string) {
 function edgePriority(edge: GraphEdge) {
   if (edge.edgeType === "contains") return 3;
   if (edge.edgeType === "import") return 2;
+  if (edge.edgeType === "markdown_link") return 2;
   return 1;
 }
 
@@ -812,6 +865,7 @@ function edgeColor(edge: GraphEdge): string {
   if (edge.edgeType === "contains") return "#4b6f93";
   if (edge.edgeType === "symlink") return "#b78a4a";
   if (edge.edgeType === "import") return "#c9a0dc";
+  if (edge.edgeType === "markdown_link") return "#7ee8ba";
   return "#5f8fc3";
 }
 
@@ -948,6 +1002,33 @@ function computeStats(nodes: GraphDisplayNode[], edges: GraphEdge[]) {
   };
 }
 
+function minimapEdgeLines(nodes: GraphDisplayNode[], edges: GraphEdge[]) {
+  if (nodes.length === 0 || edges.length === 0) return [];
+  const xs = nodes.map((node) => node.x);
+  const ys = nodes.map((node) => node.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const project = (n: GraphDisplayNode) => ({
+    x: 8 + ((n.x - minX) / width) * 104,
+    y: 8 + (1 - (n.y - minY) / height) * 70,
+  });
+  const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  for (const edge of edges.slice(0, 800)) {
+    const src = byId.get(edge.sourceId);
+    const dst = byId.get(edge.targetId);
+    if (!src || !dst) continue;
+    const a = project(src);
+    const b = project(dst);
+    lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+  }
+  return lines;
+}
+
 function minimapPoints(nodes: GraphDisplayNode[]) {
   if (nodes.length === 0) return [];
   const xs = nodes.map((node) => node.x);
@@ -958,10 +1039,12 @@ function minimapPoints(nodes: GraphDisplayNode[]) {
   const maxY = Math.max(...ys);
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, maxY - minY);
+  // Sigma uses mathematical Y (up = positive); SVG/HTML use screen Y (down = positive).
+  // Invert Y when projecting to the minimap so its orientation matches the main graph.
   return nodes.slice(0, 550).map((node) => ({
     id: node.id,
     x: 8 + ((node.x - minX) / width) * 104,
-    y: 8 + ((node.y - minY) / height) * 70,
+    y: 8 + (1 - (node.y - minY) / height) * 70,
     r: node.isCluster ? 2.4 : node.isDir ? 1.9 : 1.25,
     color: getNodeColor(node),
     opacity: node.isDir ? 0.95 : 0.72,

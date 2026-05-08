@@ -159,6 +159,7 @@ pub fn index_rows(
         }
     }
     rebuild_contains_edges(&tx, root_path)?;
+    rebuild_import_edges(&tx, root_path)?;
     tx.execute(
         "UPDATE scan_sessions SET finished_at = ?1, status = 'success', scanned_count = ?2, skipped_unchanged = ?3 WHERE id = ?4",
         params![chrono::Utc::now().timestamp(), rows.len() as i64, skipped as i64, scan_id],
@@ -238,6 +239,41 @@ fn rebuild_contains_edges(tx: &Transaction<'_>, root_path: &str) -> Result<(), S
         WHERE child.path = ?1 OR child.path LIKE ?2 ESCAPE '\'
         "#,
         params![root_path, child_prefix(root_path)],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Rebuild `import` and `markdown_link` edges for all files within a workspace root.
+/// Resolves stored `import_relationships` rows (which carry text target paths) into
+/// concrete `files` rows by matching exact paths, ext suffixes, and `/index.*` entries.
+fn rebuild_import_edges(tx: &Transaction<'_>, root_path: &str) -> Result<(), String> {
+    let root_prefix = child_prefix(root_path);
+    tx.execute(
+        "DELETE FROM edges WHERE edge_type IN ('import', 'markdown_link') AND source_id IN (SELECT id FROM files WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\')",
+        params![root_path, root_prefix],
+    )
+    .map_err(|e| e.to_string())?;
+
+    tx.execute(
+        r#"
+        INSERT OR IGNORE INTO edges(source_id, target_id, edge_type, weight)
+        SELECT DISTINCT
+            ir.source_file_id,
+            f.id,
+            CASE WHEN ir.import_type = 'markdown_link' THEN 'markdown_link' ELSE 'import' END,
+            1.0
+        FROM import_relationships ir
+        JOIN files source_f ON source_f.id = ir.source_file_id
+        JOIN files f ON (
+            f.path = ir.target_path
+            OR f.path LIKE ir.target_path || '.%'
+            OR f.path LIKE ir.target_path || '/index.%'
+        )
+        WHERE (source_f.path = ?1 OR source_f.path LIKE ?2 ESCAPE '\')
+          AND f.id != ir.source_file_id
+        "#,
+        params![root_path, root_prefix],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -418,6 +454,254 @@ pub fn clear_code_analysis_for_root(db_path: &Path, root_path: &str) -> Result<(
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Store resolved local import relationships for a file.
+/// `imports` is a slice of resolved absolute target paths.
+pub fn store_import_relationships(
+    db_path: &Path,
+    source_file_id: i64,
+    imports: &[String],
+) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM import_relationships WHERE source_file_id = ?1 AND import_type IN ('local', 'import')",
+        params![source_file_id],
+    )
+    .map_err(|e| e.to_string())?;
+    for target in imports {
+        conn.execute(
+            "INSERT OR IGNORE INTO import_relationships(source_file_id, target_path, import_type) VALUES (?1, ?2, 'local')",
+            params![source_file_id, target],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    sync_import_edges_for_source(&conn, source_file_id, "import")?;
+    Ok(())
+}
+
+/// Store resolved markdown link relationships for a file.
+/// `links` is a slice of resolved absolute target paths.
+pub fn store_markdown_links(
+    db_path: &Path,
+    source_file_id: i64,
+    links: &[String],
+) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM import_relationships WHERE source_file_id = ?1 AND import_type = 'markdown_link'",
+        params![source_file_id],
+    )
+    .map_err(|e| e.to_string())?;
+    for target in links {
+        conn.execute(
+            "INSERT OR IGNORE INTO import_relationships(source_file_id, target_path, import_type) VALUES (?1, ?2, 'markdown_link')",
+            params![source_file_id, target],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    sync_import_edges_for_source(&conn, source_file_id, "markdown_link")?;
+    Ok(())
+}
+
+fn sync_import_edges_for_source(
+    conn: &Connection,
+    source_file_id: i64,
+    edge_type: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM edges WHERE edge_type = ?1 AND source_id = ?2",
+        params![edge_type, source_file_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let import_type_filter = if edge_type == "markdown_link" {
+        "markdown_link"
+    } else {
+        "local"
+    };
+
+    conn.execute(
+        r#"
+        INSERT OR IGNORE INTO edges(source_id, target_id, edge_type, weight)
+        SELECT DISTINCT ir.source_file_id, f.id, ?1, 1.0
+        FROM import_relationships ir
+        JOIN files f ON (
+            f.path = ir.target_path
+            OR f.path LIKE ir.target_path || '.%'
+            OR f.path LIKE ir.target_path || '/index.%'
+        )
+        WHERE ir.source_file_id = ?2
+          AND ir.import_type = ?3
+          AND f.id != ir.source_file_id
+        "#,
+        params![edge_type, source_file_id, import_type_filter],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Find all indexed files that import the given file path (reverse dependencies).
+pub fn get_files_importing(db_path: &Path, file_path: &str) -> Result<Vec<String>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    // Match both the full path and the stem (path without extension)
+    let path_without_ext = {
+        let p = std::path::Path::new(file_path);
+        if let (Some(parent), Some(stem)) = (
+            p.parent().and_then(|d| d.to_str()),
+            p.file_stem().and_then(|s| s.to_str()),
+        ) {
+            format!("{}/{}", parent, stem)
+        } else {
+            file_path.to_string()
+        }
+    };
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT DISTINCT f.path
+            FROM import_relationships ir
+            JOIN files f ON f.id = ir.source_file_id
+            WHERE ir.target_path = ?1 OR ir.target_path = ?2
+            ORDER BY f.name COLLATE NOCASE
+            LIMIT 100
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![file_path, path_without_ext], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(|e| e.to_string())?;
+    let mut files = Vec::new();
+    for row in rows {
+        files.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(files)
+}
+
+/// Find indexed files that match the stored import targets for a source file (forward dependencies).
+pub fn get_import_targets(db_path: &Path, source_file_id: i64) -> Result<Vec<String>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT DISTINCT f.path
+            FROM import_relationships ir
+            JOIN files f ON (
+                f.path = ir.target_path
+                OR f.path LIKE ir.target_path || '.%'
+                OR f.path LIKE ir.target_path || '/index.%'
+            )
+            WHERE ir.source_file_id = ?1
+            ORDER BY f.name COLLATE NOCASE
+            LIMIT 100
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![source_file_id], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    let mut files = Vec::new();
+    for row in rows {
+        files.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(files)
+}
+
+// Perceptual hash operations
+
+pub fn store_phash(db_path: &Path, file_id: i64, hash: &[u8]) -> Result<(), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        r#"
+        INSERT INTO perceptual_hashes (file_id, phash, algorithm)
+        VALUES (?1, ?2, 'dhash')
+        ON CONFLICT(file_id) DO UPDATE SET
+            phash = excluded.phash,
+            algorithm = excluded.algorithm,
+            generated_at = CURRENT_TIMESTAMP
+        "#,
+        params![file_id, hash],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn get_phash(db_path: &Path, file_id: i64) -> Result<Option<Vec<u8>>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.query_row(
+        "SELECT phash FROM perceptual_hashes WHERE file_id = ?1",
+        params![file_id],
+        |row| row.get::<_, Vec<u8>>(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+pub fn file_ids_missing_phash(
+    db_path: &Path,
+    root_path: &str,
+) -> Result<Vec<(i64, String)>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let prefix = child_prefix(root_path);
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT f.id, f.path
+            FROM files f
+            LEFT JOIN perceptual_hashes ph ON ph.file_id = f.id
+            WHERE f.is_dir = 0
+              AND ph.file_id IS NULL
+              AND f.extension IS NOT NULL
+              AND lower(f.extension) IN ('jpg','jpeg','png','gif','webp','bmp')
+              AND (f.path = ?1 OR f.path LIKE ?2 ESCAPE '\')
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![root_path, prefix], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(out)
+}
+
+/// Return all stored (file_id, path, phash) rows for the given workspace root.
+pub fn list_phashes_for_root(
+    db_path: &Path,
+    root_path: &str,
+) -> Result<Vec<(i64, String, Vec<u8>)>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let prefix = child_prefix(root_path);
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT f.id, f.path, ph.phash
+            FROM perceptual_hashes ph
+            JOIN files f ON f.id = ph.file_id
+            WHERE f.path = ?1 OR f.path LIKE ?2 ESCAPE '\'
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![root_path, prefix], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(out)
 }
 
 // Thumbnail operations

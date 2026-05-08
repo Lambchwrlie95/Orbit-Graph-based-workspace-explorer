@@ -124,6 +124,25 @@ export interface CodeAnalysis {
   exports: Export[];
 }
 
+export type MarkdownLinkKind = "local" | "external" | "wikilink";
+
+export interface MarkdownHeading {
+  level: number;
+  text: string;
+  line: number;
+}
+
+export interface MarkdownLink {
+  label: string;
+  target: string;
+  kind: MarkdownLinkKind;
+}
+
+export interface MarkdownAnalysis {
+  headings: MarkdownHeading[];
+  links: MarkdownLink[];
+}
+
 export type GitStatus =
   | "current"
   | "modified"
@@ -167,6 +186,12 @@ export interface ColorExtractionResult {
   file_id: number;
   colors: ImageColor[];
   cached: boolean;
+}
+
+export interface SimilarImage {
+  fileId: number;
+  path: string;
+  distance: number;
 }
 
 export interface ThumbnailRequest {

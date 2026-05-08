@@ -8,10 +8,12 @@ import type {
   GraphPayload,
   GraphRequest,
   ImageMetadataResult,
+  MarkdownAnalysis,
   OperationStats,
   PerformanceMetrics,
   PreviewPayload,
   ScanProgress,
+  SimilarImage,
   ThumbnailInfo,
   ThumbnailRequest,
   ThumbnailResponse,
@@ -37,16 +39,23 @@ export const TAURI_COMMANDS = [
   "read_file_for_edit",
   "save_file",
   "analyze_code_file",
+  "analyze_markdown_file",
   "batch_analyze_code_files",
+  "batch_analyze_markdown_files",
+  "list_analyzable_files",
   "get_file_git_status",
   "get_files_git_status",
   "get_related_files",
   "is_analyzable_code_file",
+  "is_analyzable_markdown_file",
   "get_supported_code_extensions",
   "find_git_repo_root",
   "is_in_git_repo",
   "analyze_image_file",
   "extract_colors",
+  "compute_image_phash",
+  "find_similar_images",
+  "compute_workspace_phashes",
   "ensure_thumbnail",
   "get_thumbnail_info",
   "delete_thumbnails",
@@ -76,16 +85,28 @@ type CommandArgsMap = {
   read_file_for_edit: { path: string };
   save_file: { path: string; content: string };
   analyze_code_file: { path: string };
+  analyze_markdown_file: { path: string };
   batch_analyze_code_files: { paths: string[] };
+  batch_analyze_markdown_files: { paths: string[] };
+  list_analyzable_files: { rootPath: string };
   get_file_git_status: { path: string };
   get_files_git_status: { paths: string[] };
   get_related_files: { path: string };
   is_analyzable_code_file: { path: string };
+  is_analyzable_markdown_file: { path: string };
   get_supported_code_extensions: undefined;
   find_git_repo_root: { path: string };
   is_in_git_repo: { path: string };
   analyze_image_file: { fileId: number; filePath: string };
   extract_colors: { fileId: number; filePath: string; colorCount: number };
+  compute_image_phash: { fileId: number; filePath: string };
+  find_similar_images: {
+    fileId: number;
+    filePath: string;
+    rootPath: string;
+    maxDistance: number;
+  };
+  compute_workspace_phashes: { rootPath: string };
   ensure_thumbnail: { request: ThumbnailRequest };
   get_thumbnail_info: { fileId: number };
   delete_thumbnails: { fileId: number };
@@ -113,16 +134,23 @@ type CommandResultMap = {
   read_file_for_edit: string;
   save_file: void;
   analyze_code_file: CodeAnalysis | null;
+  analyze_markdown_file: MarkdownAnalysis | null;
   batch_analyze_code_files: Array<[string, CodeAnalysis | null]>;
+  batch_analyze_markdown_files: Array<[string, MarkdownAnalysis | null]>;
+  list_analyzable_files: { code: string[]; markdown: string[] };
   get_file_git_status: FileGitStatus;
   get_files_git_status: Array<[string, FileGitStatus]>;
   get_related_files: string[];
   is_analyzable_code_file: boolean;
+  is_analyzable_markdown_file: boolean;
   get_supported_code_extensions: string[];
   find_git_repo_root: string | null;
   is_in_git_repo: boolean;
   analyze_image_file: ImageMetadataResult;
   extract_colors: ColorExtractionResult;
+  compute_image_phash: number[];
+  find_similar_images: SimilarImage[];
+  compute_workspace_phashes: number;
   ensure_thumbnail: ThumbnailResponse;
   get_thumbnail_info: ThumbnailInfo[];
   delete_thumbnails: void;

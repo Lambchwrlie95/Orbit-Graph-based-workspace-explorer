@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::AppState;
 use crate::image_analyzer::{analyze_image, ImageAnalysis};
 use crate::color_extractor::{extract_dominant_colors, Color};
+use crate::image_hash::{compute_dhash, hamming_distance};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ColorExtractionResult {
@@ -96,4 +97,90 @@ pub fn extract_colors(
         colors,
         cached: false,
     })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimilarImage {
+    pub file_id: i64,
+    pub path: String,
+    pub distance: u32,
+}
+
+/// Compute a perceptual hash for a single image, caching the result.
+#[tauri::command]
+pub async fn compute_image_phash(
+    file_id: i64,
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<u8>, String> {
+    if let Some(existing) = crate::db::get_phash(&state.db_path, file_id)? {
+        return Ok(existing);
+    }
+    let hash = compute_dhash(Path::new(&file_path))?;
+    crate::db::store_phash(&state.db_path, file_id, &hash)?;
+    Ok(hash.to_vec())
+}
+
+/// Find images visually similar to the given image within `root_path`.
+/// Distance is Hamming distance over 64 bits; returns matches with distance ≤ `max_distance`.
+#[tauri::command]
+pub async fn find_similar_images(
+    file_id: i64,
+    file_path: String,
+    root_path: String,
+    max_distance: u32,
+    state: State<'_, AppState>,
+) -> Result<Vec<SimilarImage>, String> {
+    let max = max_distance.min(20);
+    let target_hash = match crate::db::get_phash(&state.db_path, file_id)? {
+        Some(h) => h,
+        None => {
+            let computed = compute_dhash(Path::new(&file_path))?;
+            crate::db::store_phash(&state.db_path, file_id, &computed)?;
+            computed.to_vec()
+        }
+    };
+
+    let candidates = crate::db::list_phashes_for_root(&state.db_path, &root_path)?;
+    let mut matches: Vec<SimilarImage> = candidates
+        .into_iter()
+        .filter(|(id, _, _)| *id != file_id)
+        .filter_map(|(id, path, hash)| {
+            let distance = hamming_distance(&target_hash, &hash);
+            if distance <= max {
+                Some(SimilarImage { file_id: id, path, distance })
+            } else {
+                None
+            }
+        })
+        .collect();
+    matches.sort_by_key(|m| m.distance);
+    matches.truncate(40);
+    Ok(matches)
+}
+
+/// Compute perceptual hashes for all images under `root_path` that don't already have one.
+/// Returns the number of hashes computed.
+#[tauri::command]
+pub async fn compute_workspace_phashes(
+    root_path: String,
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    let pending = crate::db::file_ids_missing_phash(&state.db_path, &root_path)?;
+    let mut computed = 0usize;
+    for (file_id, path) in pending {
+        match compute_dhash(Path::new(&path)) {
+            Ok(hash) => {
+                if crate::db::store_phash(&state.db_path, file_id, &hash).is_ok() {
+                    computed += 1;
+                }
+            }
+            Err(_) => {
+                // Skip unreadable images silently — continue with the rest.
+                continue;
+            }
+        }
+    }
+    Ok(computed)
 }

@@ -5,11 +5,13 @@ import { formatBytes, formatDate, isImageFile, isTextFile, shortPath } from "../
 import { isEditableFile } from "./CodeMode";
 import { CodeAnalysisPanel } from "./inspector/CodeAnalysisPanel";
 import { ImageAnalysisPanel } from "./inspector/ImageAnalysisPanel";
+import { MarkdownAnalysisPanel } from "./inspector/MarkdownAnalysisPanel";
 
 interface InspectorProps {
   record: FileRecord | null;
   preview: PreviewPayload | null;
   isLoadingPreview?: boolean;
+  rootPath?: string;
   onOpen: (path: string) => void;
   onSelectPath?: (path: string) => void;
   onNavigate?: (path: string) => void;
@@ -18,10 +20,35 @@ interface InspectorProps {
 
 type PreviewKind = "text" | "image" | "directory" | "binary" | "error";
 
+function fileTypeGlyph(ext?: string | null): string {
+  const e = (ext ?? "").toLowerCase();
+  if (e === "ts" || e === "tsx") return "⬡";
+  if (e === "js" || e === "jsx" || e === "mjs" || e === "cjs") return "◈";
+  if (e === "rs") return "⬖";
+  if (e === "py" || e === "pyi" || e === "pyw") return "◇";
+  if (e === "go") return "⬡";
+  if (e === "java" || e === "kt" || e === "scala") return "◉";
+  if (e === "c" || e === "cpp" || e === "cc" || e === "h" || e === "hpp") return "◑";
+  if (e === "cs") return "◎";
+  if (e === "rb") return "◆";
+  if (e === "swift") return "◐";
+  if (e === "sh" || e === "bash" || e === "zsh") return "▸";
+  if (e === "md" || e === "mdx") return "≡";
+  if (e === "html" || e === "htm") return "◫";
+  if (e === "css" || e === "scss" || e === "sass" || e === "less") return "◌";
+  if (e === "json") return "⊞";
+  if (e === "toml" || e === "yaml" || e === "yml" || e === "xml" || e === "ini") return "⊟";
+  if (e === "sql") return "⊞";
+  if (e === "svg" || e === "png" || e === "jpg" || e === "jpeg" || e === "gif" || e === "webp") return "◈";
+  if (e === "pdf") return "≡";
+  return "·";
+}
+
 function InspectorComponent({
   record,
   preview,
   isLoadingPreview,
+  rootPath,
   onOpen,
   onSelectPath,
   onNavigate,
@@ -31,8 +58,8 @@ function InspectorComponent({
     return (
       <div className="inspector sidebar-panel">
         <div className="panel-shell">
-          <h2>Inspector</h2>
-          <div className="empty-state small">Select a file or folder to view details</div>
+          <h2>⬡ Inspector</h2>
+          <div className="empty-state small">◌ Select a file or folder to view details</div>
         </div>
       </div>
     );
@@ -94,7 +121,7 @@ function InspectorComponent({
 
         <div className="record-header">
           <span className={`file-icon large ${record.isDir ? "folder" : ""}`}>
-            {record.isDir ? "D" : (record.extension || "F").slice(0, 2).toUpperCase()}
+            {record.isDir ? "⊞" : fileTypeGlyph(record.extension)}
           </span>
           <div className="record-title">
             <h3 title={record.name}>{record.name}</h3>
@@ -103,38 +130,38 @@ function InspectorComponent({
         </div>
 
         <div className="metadata-section">
-          <h4>Information</h4>
+          <h4>◈ Information</h4>
           <dl className="meta-grid">
-            <dt>Type</dt>
+            <dt>⊟ Type</dt>
             <dd>{recordType}</dd>
 
-            <dt>Size</dt>
+            <dt>⊞ Size</dt>
             <dd>{record.isDir ? "—" : formatBytes(record.sizeBytes)}</dd>
 
             {record.extension && (
               <>
-                <dt>Extension</dt>
+                <dt>· Ext</dt>
                 <dd>.{record.extension}</dd>
               </>
             )}
 
-            <dt>Modified</dt>
+            <dt>✎ Modified</dt>
             <dd>{formatDate(record.modifiedAt)}</dd>
 
             {record.createdAt && (
               <>
-                <dt>Created</dt>
+                <dt>✦ Created</dt>
                 <dd>{formatDate(record.createdAt)}</dd>
               </>
             )}
 
-            <dt>ID</dt>
+            <dt># ID</dt>
             <dd>{record.id}</dd>
           </dl>
         </div>
 
         <div className="actions-section">
-          <h4>Actions</h4>
+          <h4>⚡ Actions</h4>
           <div className="action-row">
             <button className="primary" onClick={() => onOpen(record.path)}>
               {record.isDir ? "Open Folder" : "Open File"}
@@ -178,10 +205,23 @@ function InspectorComponent({
           />
         )}
 
-        {!record.isDir && <ImageAnalysisPanel record={record} />}
+        {!record.isDir && (
+          <ImageAnalysisPanel
+            record={record}
+            rootPath={rootPath}
+            onOpenFile={onSelectPath ?? onOpen}
+          />
+        )}
 
         {!record.isDir && (
           <CodeAnalysisPanel
+            filePath={record.path}
+            onOpenFile={onSelectPath ?? onOpen}
+          />
+        )}
+
+        {!record.isDir && (
+          <MarkdownAnalysisPanel
             filePath={record.path}
             onOpenFile={onSelectPath ?? onOpen}
           />
@@ -268,7 +308,7 @@ function PreviewSection({
 
       {isLoadingPreview ? (
         <div className="empty-state small">
-          <span className="scanning-indicator">Loading preview...</span>
+          <span className="scanning-indicator">⟳ Loading preview…</span>
         </div>
       ) : preview ? (
         <div className={`preview-content preview-content-${preview.kind}`}>
@@ -309,12 +349,12 @@ function PreviewSection({
           )}
         </div>
       ) : (
-        <div className="empty-state small">No preview available</div>
+        <div className="empty-state small">◌ No preview available</div>
       )}
 
       {preview?.metadata.length ? (
         <div className="preview-details">
-          <div className="section-title">Details</div>
+          <div className="section-title">◈ Details</div>
           <dl className="preview-meta">
             {preview.metadata.map((item) => (
               <React.Fragment key={item.key}>

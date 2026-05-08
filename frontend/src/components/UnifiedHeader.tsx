@@ -39,6 +39,7 @@ interface UnifiedHeaderProps {
   onAddBookmark: () => void;
   onShowExplorer: () => void;
   onShowSearch: () => void;
+  onShowAssets: () => void;
   onShowInspector: () => void;
   onShowCode: () => void;
   onNavigateToPath?: (path: string) => void;
@@ -60,6 +61,7 @@ export function UnifiedHeader({
   onAddBookmark,
   onShowExplorer,
   onShowSearch,
+  onShowAssets,
   onShowInspector,
   onShowCode,
   onNavigateToPath,
@@ -87,6 +89,13 @@ export function UnifiedHeader({
       pathInputRef.current.select();
     }
   }, [isEditingPath]);
+
+  // Ctrl+L → enter path edit mode (dispatched from main.tsx keyboard handler)
+  useEffect(() => {
+    const handler = () => setIsEditingPath(true);
+    document.addEventListener("orbit:edit-path", handler);
+    return () => document.removeEventListener("orbit:edit-path", handler);
+  }, []);
 
   const handlePathSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,6 +298,7 @@ export function UnifiedHeader({
               <MenuSeparator />
               <MenuItem label="Explorer" onClick={() => runMenuAction(onShowExplorer)} />
               <MenuItem label="Search" onClick={() => runMenuAction(onShowSearch)} />
+              <MenuItem label="Assets" onClick={() => runMenuAction(onShowAssets)} />
             </>
           )}
 

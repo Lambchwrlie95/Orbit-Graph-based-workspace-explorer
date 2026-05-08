@@ -45,7 +45,7 @@ export function BookmarksPanel({
 
       <div className="bookmarks-list" role="list" aria-label="Workspace bookmarks">
         {bookmarks.length === 0 ? (
-          <div className="bookmarks-empty">No bookmarks yet</div>
+          <div className="bookmarks-empty">◌ No bookmarks yet</div>
         ) : (
           bookmarks.map((path) => {
             const isActive = path === currentRootPath;
@@ -58,7 +58,7 @@ export function BookmarksPanel({
                 onClick={() => onOpenBookmark(path)}
                 aria-label={`Open bookmark ${label}`}
               >
-                <span className="bookmark-dot" aria-hidden />
+                <span className="bookmark-dot" aria-hidden>{isActive ? "◉" : "◎"}</span>
                 <span className="bookmark-label">{label}</span>
               </button>
             );

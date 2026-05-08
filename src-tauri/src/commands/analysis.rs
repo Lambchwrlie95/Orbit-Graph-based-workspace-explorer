@@ -1,8 +1,34 @@
-use crate::code_analyzer::{analyze_file, CodeAnalysis, Export, Import, is_code_file};
+use crate::code_analyzer::{analyze_file, CodeAnalysis, Export, Import, ImportType, is_code_file};
 use crate::git_status::{find_repo_root, get_diff_stats, get_file_status, FileGitStatus};
+use crate::markdown_analyzer::{
+    analyze as analyze_markdown, is_markdown_file, resolve_link_target, MarkdownAnalysis,
+};
 use crate::AppState;
 use std::path::Path;
 use tauri::State;
+
+/// Resolve a local import path relative to the source file's directory.
+/// Returns an absolute path without extension (e.g. `/home/user/src/utils`).
+fn resolve_local_import(source_file: &str, import_path: &str) -> String {
+    let source_dir = Path::new(source_file)
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("");
+    let mut parts: Vec<&str> = source_dir
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    for part in import_path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    format!("/{}", parts.join("/"))
+}
 
 /// Analyze a code file and return imports and exports
 #[tauri::command]
@@ -34,12 +60,55 @@ pub async fn analyze_code_file(path: String, state: State<'_, AppState>) -> Resu
     let analysis = analyze_file(file_path, &content);
 
     if let (Some(file), Some(analysis)) = (&indexed_file, &analysis) {
-        let imports = serde_json::to_value(&analysis.imports).map_err(|e| e.to_string())?;
-        let exports = serde_json::to_value(&analysis.exports).map_err(|e| e.to_string())?;
-        crate::db::store_code_analysis(&state.db_path, file.id, &imports, &exports)?;
+        let imports_val = serde_json::to_value(&analysis.imports).map_err(|e| e.to_string())?;
+        let exports_val = serde_json::to_value(&analysis.exports).map_err(|e| e.to_string())?;
+        crate::db::store_code_analysis(&state.db_path, file.id, &imports_val, &exports_val)?;
+
+        // Resolve local imports to absolute paths and store relationships
+        let resolved: Vec<String> = analysis
+            .imports
+            .iter()
+            .filter(|i| matches!(i.import_type, ImportType::Local))
+            .map(|i| resolve_local_import(&path, &i.path))
+            .collect();
+        crate::db::store_import_relationships(&state.db_path, file.id, &resolved)?;
     }
-    
+
     Ok(analysis)
+}
+
+/// Analyze a markdown file: extract headings, links, and persist link relationships
+/// so backlinks and graph edges can be computed cheaply.
+#[tauri::command]
+pub async fn analyze_markdown_file(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Option<MarkdownAnalysis>, String> {
+    let file_path = Path::new(&path);
+    if !is_markdown_file(file_path) {
+        return Ok(None);
+    }
+
+    let content = std::fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let analysis = analyze_markdown(&content);
+
+    if let Some(file) = crate::db::get_file(&state.db_path, &path)? {
+        let resolved: Vec<String> = analysis
+            .links
+            .iter()
+            .filter_map(|link| resolve_link_target(&path, &link.target, &link.kind))
+            .collect();
+        crate::db::store_markdown_links(&state.db_path, file.id, &resolved)?;
+    }
+
+    Ok(Some(analysis))
+}
+
+/// Check if a file is a markdown file that can be analyzed.
+#[tauri::command]
+pub async fn is_analyzable_markdown_file(path: String) -> Result<bool, String> {
+    Ok(is_markdown_file(Path::new(&path)))
 }
 
 /// Get git status for a file
@@ -68,16 +137,25 @@ pub async fn get_file_git_status(path: String) -> Result<FileGitStatus, String> 
     }
 }
 
-/// Get files related to the current file (imports and importers)
+/// Get files related to the current file: files it imports (forward) and files that import it (reverse).
 #[tauri::command]
-pub async fn get_related_files(_path: String) -> Result<Vec<String>, String> {
-    // This would query the database for files that import this file
-    // and files this file imports. For now, return empty as the
-    // database schema is in place but full implementation would
-    // require the import_relationships table to be populated
-    
-    // TODO: Implement after code analysis is integrated into scan pipeline
-    Ok(vec![])
+pub async fn get_related_files(path: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let mut related = std::collections::HashSet::new();
+
+    // Reverse deps: files that import this file
+    let importers = crate::db::get_files_importing(&state.db_path, &path)?;
+    related.extend(importers);
+
+    // Forward deps: files this file imports (resolved via DB)
+    if let Some(file) = crate::db::get_file(&state.db_path, &path)? {
+        let targets = crate::db::get_import_targets(&state.db_path, file.id)?;
+        related.extend(targets);
+    }
+
+    related.remove(&path);
+    let mut result: Vec<String> = related.into_iter().collect();
+    result.sort();
+    Ok(result)
 }
 
 /// Batch analyze multiple code files
@@ -85,13 +163,79 @@ pub async fn get_related_files(_path: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 pub async fn batch_analyze_code_files(paths: Vec<String>, state: State<'_, AppState>) -> Result<Vec<(String, Option<CodeAnalysis>)>, String> {
     let mut results = Vec::new();
-    
+
     for path in paths {
         let result = analyze_code_file(path.clone(), state.clone()).await?;
         results.push((path, result));
     }
-    
+
     Ok(results)
+}
+
+/// Batch analyze multiple markdown files
+#[tauri::command]
+pub async fn batch_analyze_markdown_files(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, Option<MarkdownAnalysis>)>, String> {
+    let mut results = Vec::new();
+    for path in paths {
+        let result = analyze_markdown_file(path.clone(), state.clone()).await?;
+        results.push((path, result));
+    }
+    Ok(results)
+}
+
+/// Walk the indexed file table and return paths matching the supported analyzable extensions.
+/// Used by the frontend to schedule background analysis after a workspace scan.
+#[tauri::command]
+pub async fn list_analyzable_files(
+    root_path: String,
+    state: State<'_, AppState>,
+) -> Result<AnalyzableFiles, String> {
+    let conn = rusqlite::Connection::open(&state.db_path).map_err(|e| e.to_string())?;
+    let prefix = format!("{}/%", root_path.trim_end_matches('/'));
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT path, extension
+            FROM files
+            WHERE is_dir = 0
+              AND (path = ?1 OR path LIKE ?2 ESCAPE '\')
+              AND extension IS NOT NULL
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params![root_path, prefix], |row| {
+            let path: String = row.get(0)?;
+            let ext: String = row.get(1)?;
+            Ok((path, ext))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut code = Vec::new();
+    let mut markdown = Vec::new();
+    for row in rows {
+        let (path, ext) = row.map_err(|e| e.to_string())?;
+        let ext_lower = ext.to_lowercase();
+        if matches!(
+            ext_lower.as_str(),
+            "js" | "jsx" | "ts" | "tsx" | "mjs" | "py" | "pyi" | "rs" | "java" | "go"
+        ) {
+            code.push(path);
+        } else if matches!(ext_lower.as_str(), "md" | "mdx" | "markdown") {
+            markdown.push(path);
+        }
+    }
+    Ok(AnalyzableFiles { code, markdown })
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalyzableFiles {
+    pub code: Vec<String>,
+    pub markdown: Vec<String>,
 }
 
 /// Check if a file is a code file that can be analyzed

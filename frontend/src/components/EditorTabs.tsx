@@ -40,6 +40,31 @@ function getFileExtension(path: string): string {
   return lastDotIndex > 0 ? fileName.slice(lastDotIndex) : '';
 }
 
+/** Unicode glyph representing the file's language/type */
+function getFileGlyph(path: string): string {
+  const ext = getFileExtension(path).toLowerCase();
+  if (['.ts', '.tsx'].includes(ext)) return '⬡';
+  if (['.js', '.jsx', '.mjs', '.cjs'].includes(ext)) return '◈';
+  if (['.rs'].includes(ext)) return '⬖';
+  if (['.py', '.pyi', '.pyw'].includes(ext)) return '◇';
+  if (['.go'].includes(ext)) return '⬡';
+  if (['.java', '.kt', '.scala'].includes(ext)) return '◉';
+  if (['.c', '.cpp', '.cc', '.h', '.hpp'].includes(ext)) return '◑';
+  if (['.cs'].includes(ext)) return '◎';
+  if (['.rb'].includes(ext)) return '◆';
+  if (['.php'].includes(ext)) return '◈';
+  if (['.swift'].includes(ext)) return '◐';
+  if (['.sh', '.bash', '.zsh'].includes(ext)) return '▸';
+  if (['.md', '.mdx'].includes(ext)) return '≡';
+  if (['.html', '.htm'].includes(ext)) return '◫';
+  if (['.css', '.scss', '.sass', '.less'].includes(ext)) return '◌';
+  if (['.json'].includes(ext)) return '⊞';
+  if (['.toml', '.yaml', '.yml', '.xml', '.ini', '.conf'].includes(ext)) return '⊟';
+  if (['.sql'].includes(ext)) return '⊞';
+  if (['.svg'].includes(ext)) return '◈';
+  return '·';
+}
+
 /**
  * Get color coding for file type
  */
@@ -224,6 +249,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
         const isModified = modifiedFiles.has(filePath);
         const fileName = getFileName(filePath);
         const fileColor = getFileTypeColor(filePath);
+        const fileGlyph = getFileGlyph(filePath);
         const isDragOver = dragOverIndex === index;
         const isDragging = draggedIndex === index;
         
@@ -263,29 +289,30 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
           >
             {/* Drag handle */}
             {onTabReorder && (
-              <GripVertical 
-                size={12} 
-                style={{ 
-                  opacity: 0.5, 
-                  cursor: 'grab',
-                  flexShrink: 0,
-                }} 
-              />
-            )}
-            
-            {/* Modified indicator */}
-            {isModified && (
-              <span 
-                className="modified-indicator"
+              <GripVertical
+                size={12}
                 style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: '#fbbf24',
+                  opacity: 0.5,
+                  cursor: 'grab',
                   flexShrink: 0,
                 }}
               />
             )}
+
+            {/* Language glyph — changes to ● when file is modified */}
+            <span
+              title={isModified ? 'Unsaved changes' : undefined}
+              style={{
+                fontSize: '11px',
+                lineHeight: 1,
+                flexShrink: 0,
+                color: isModified ? '#fbbf24' : fileColor,
+                transition: 'color 0.15s ease',
+              }}
+              aria-hidden
+            >
+              {isModified ? '●' : fileGlyph}
+            </span>
             
             {/* File name */}
             <span 
