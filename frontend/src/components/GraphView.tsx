@@ -96,7 +96,7 @@ function GraphViewComponent({
   const [nodeView, setNodeView] = usePersistedState<NodeView>(PREF.nodeView, "icons");
   const [iconTheme, setIconTheme] = useState<IconThemePayload | null>(null);
   const [iconOverlay, setIconOverlay] = useState<
-    Array<{ id: string; x: number; y: number; size: number; glyph: string; color: string; opacity: number }>
+    Array<{ id: string; x: number; y: number; size: number; glyph: string; color: string; opacity: number; emphasized: boolean }>
   >([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -397,12 +397,20 @@ function GraphViewComponent({
           glyph: string;
           color: string;
           opacity: number;
+          emphasized: boolean;
         }> = [];
+        const cameraRatio = renderer.getCamera().getState().ratio;
+        const hoveredId = hoveredNodeRef.current;
+        const selectedId = selectedNodeRef.current;
         graph.forEachNode((node, attrs) => {
-          const display = renderer.getNodeDisplayData(node);
-          const sizeOnScreen = display?.size ?? (attrs.size as number) ?? 6;
+          // Use the natural baseSize (set at node-add time, untouched by the
+          // sphere-collapse logic) so big nodes get visibly bigger glyphs.
+          // Then divide by the camera ratio so glyphs zoom with the graph
+          // instead of staying frozen in screen space.
+          const naturalSize = Number(attrs.baseSize ?? 6);
+          const sizeOnScreen = naturalSize / cameraRatio;
           const baseColor = (attrs.baseColor as string) ?? (attrs.color as string);
-          const renderedColor = (display?.color as string) ?? baseColor;
+          const renderedColor = (attrs.color as string) ?? baseColor;
           const isDimmed =
             baseColor &&
             renderedColor &&
@@ -423,6 +431,7 @@ function GraphViewComponent({
           // Cached at node-add time — no per-frame glob/map work.
           const glyph = (attrs.glyphText as string) ?? "·";
           const glyphColor = (attrs.glyphColor as string) ?? baseColor ?? "#a8bbc8";
+          const emphasized = node === hoveredId || node === selectedId;
           points.push({
             id: node,
             x: viewport.x,
@@ -430,14 +439,15 @@ function GraphViewComponent({
             size: sizeOnScreen,
             glyph,
             color: glyphColor,
-            opacity: isDimmed ? 0.35 : 1,
+            opacity: isDimmed ? 0.32 : 1,
+            emphasized,
           });
         });
         // Cheap fingerprint to skip React renders when nothing visible moved.
         // Round to whole pixels — sub-pixel jitter from camera animation isn't
         // worth a re-render for a 200-element list.
         const key = points
-          .map((p) => `${p.id}:${p.x | 0}:${p.y | 0}:${p.size | 0}:${p.opacity}:${p.glyph}:${p.color}`)
+          .map((p) => `${p.id}:${p.x | 0}:${p.y | 0}:${p.size | 0}:${p.opacity}:${p.emphasized ? 1 : 0}:${p.glyph}:${p.color}`)
           .join("|");
         if (key === lastOverlayKey) return;
         lastOverlayKey = key;
@@ -689,16 +699,20 @@ function GraphViewComponent({
       {nodeView === "icons" && (
         <div className="graph-icon-overlay" aria-hidden>
           {iconOverlay.map((point) => {
-            const fontSize = Math.max(12, Math.min(28, point.size * 1.85));
+            // Glyph IS the node visual: pull size from natural baseSize
+            // (already zoom-aware from /cameraRatio), clamp to a readable
+            // range, then bump on hover/select so feedback feels physical.
+            const baseFont = Math.max(11, Math.min(36, point.size * 1.6));
+            const fontSize = point.emphasized ? baseFont * 1.4 : baseFont;
             return (
               <span
                 key={point.id}
-                className="graph-node-glyph"
+                className={`graph-node-glyph${point.emphasized ? " emphasized" : ""}`}
                 style={{
                   left: point.x,
                   top: point.y,
                   fontSize: `${fontSize}px`,
-                  color: point.color,
+                  color: point.emphasized ? "#ffe27a" : point.color,
                   opacity: point.opacity,
                 }}
               >
@@ -875,13 +889,13 @@ function reduceNode(
 ) {
   const isHovered = hovered === node;
   const isSelected = selected === node;
-  // In icons mode the HTML overlay IS the visual. Collapse the WebGL sphere
-  // to ~1px (kept as an anchor for hit-testing) so the glyph isn't sitting
-  // on top of a competing sphere.
+  // In icons mode the HTML glyph IS the visual. Sphere becomes a constant
+  // invisible click-target — never grows on hover/select (the overlay
+  // handles that), never gets resized by dim/connected logic. This avoids
+  // the bug where dim-unrelated made the "hidden" sphere bigger than the
+  // visible one.
   const rawBase = Number(data.baseSize ?? data.size ?? 5);
-  const baseSize = nodeView === "icons"
-    ? (isHovered || isSelected ? Math.max(2, rawBase * 0.4) : 1.5)
-    : rawBase;
+  const baseSize = nodeView === "icons" ? 1 : rawBase;
   const connectedToActive = (hovered || selected) ? isConnected(graph, node, hovered ?? selected!) : false;
   const nodePath = data.path as string;
   const isInNavHistory = navHistory.includes(nodePath);
@@ -894,35 +908,40 @@ function reduceNode(
   let targetZIndex = data.baseZIndex ?? 1;
   let targetLabel = data.label as string;
 
+  // In icons mode the HTML overlay handles all visual feedback (size, color,
+  // dimming) — the sphere stays a constant 1px hit-target. So we mutate
+  // color/zIndex/label but never size when nodeView === "icons".
+  const iconsMode = nodeView === "icons";
+
   if (dimUnrelated && (hovered || selected) && !isHovered && !isSelected && !connectedToActive) {
     // Preserve hue identity by darkening toward background instead of going monochrome
     targetColor = adjustColorBrightness(targetColor, 0.42);
     targetLabel = "";
     targetZIndex = 0;
-    targetSize = Math.max(2, baseSize * 0.72);
+    if (!iconsMode) targetSize = Math.max(2, baseSize * 0.72);
   }
 
   // Style breadcrumb nodes (in nav history but not selected)
   if (isBreadcrumb && !dimUnrelated) {
     targetColor = adjustColorBrightness(targetColor, 0.6); // Darken
-    targetSize = baseSize * 0.85; // Smaller
+    if (!iconsMode) targetSize = baseSize * 0.85; // Smaller
     targetZIndex = 5; // Lower z-index
   }
 
   if (connectedToActive) {
-    targetSize = baseSize * 1.08;
+    if (!iconsMode) targetSize = baseSize * 1.08;
     targetZIndex = 40;
   }
 
   if (isHovered) {
     targetColor = "#f5c542";
-    targetSize = Math.max(8, baseSize * 1.35);
+    if (!iconsMode) targetSize = Math.max(8, baseSize * 1.35);
     targetZIndex = 90;
   }
 
   if (isSelected) {
     targetColor = "#ffffff";
-    targetSize = Math.max(9, baseSize * 1.45);
+    if (!iconsMode) targetSize = Math.max(9, baseSize * 1.45);
     targetZIndex = 100;
   }
 
