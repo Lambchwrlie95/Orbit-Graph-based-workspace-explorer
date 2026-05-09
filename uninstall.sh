@@ -172,6 +172,14 @@ for size in 32 128 256 512; do
   fi
 done
 
+# Legacy artifact: scripts/install-desktop-entry.sh dropped a copy here
+# for GUI app-installer tools. Most installs won't have it.
+LEGACY_APP_ICON="${HOME}/Applications/orbit.png"
+if [[ -f "$LEGACY_APP_ICON" ]]; then
+  rm -f "$LEGACY_APP_ICON"
+  ok "Removed legacy ${DIM}${LEGACY_APP_ICON}${RESET}"
+fi
+
 # ── Remove user state ────────────────────────────────────
 if [[ "$KEEP_DATA" == 0 ]]; then
   step "Removing application data, cache, and config"

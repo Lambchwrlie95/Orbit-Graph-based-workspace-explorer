@@ -1,7 +1,12 @@
 #!/bin/bash
-# Install script for Orbit desktop entry and icons
+# DEPRECATED: prefer the top-level ./install.sh which builds + installs
+# everything in one pass and is the script ./uninstall.sh mirrors.
+# This helper is kept for older docs/links that referenced it.
 
 set -e
+echo "Note: ./install.sh at the repo root is the canonical installer." >&2
+echo "      This helper only writes the .desktop entry + icons (no build)." >&2
+echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
