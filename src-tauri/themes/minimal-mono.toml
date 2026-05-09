@@ -1,0 +1,205 @@
+name = "Minimal Mono"
+author = "Orbit"
+version = "1.0"
+
+# Single-color minimalist theme. Every glyph is the same near-white tone —
+# variety comes from glyph SHAPE only, not color. Useful when you want the
+# graph to read more like a wireframe and less like a candy store.
+# Uses Nerd Font glyphs.
+
+[icon.default_file]
+text = ""
+fg = "#cbd5e1"
+
+[icon.default_dir]
+text = ""
+fg = "#e2e8f0"
+
+[icon.default_cluster]
+text = ""
+fg = "#cbd5e1"
+
+# ─── Folders ────────────────────────────────────────────────────────────────
+[[icon.dirs]]
+name = ".git"
+text = ""
+fg = "#cbd5e1"
+[[icon.dirs]]
+name = "node_modules"
+text = ""
+fg = "#94a3b8"
+[[icon.dirs]]
+name = "src"
+text = ""
+fg = "#cbd5e1"
+[[icon.dirs]]
+name = "target"
+text = ""
+fg = "#94a3b8"
+[[icon.dirs]]
+name = "dist"
+text = ""
+fg = "#94a3b8"
+[[icon.dirs]]
+name = "tests"
+text = ""
+fg = "#cbd5e1"
+[[icon.dirs]]
+name = "docs"
+text = ""
+fg = "#cbd5e1"
+
+# ─── Languages — all the same color, distinct glyphs ────────────────────────
+[[icon.exts]]
+name = "ts"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "tsx"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "js"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "jsx"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "rs"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "py"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "go"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "java"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "c"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "cpp"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "rb"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "lua"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "sh"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "md"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "txt"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "pdf"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "html"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "css"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "json"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "toml"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "yaml"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "yml"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "xml"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "sql"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "png"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "jpg"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "svg"
+text = "ﰟ"
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "mp4"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "mp3"
+text = ""
+fg = "#cbd5e1"
+[[icon.exts]]
+name = "zip"
+text = ""
+fg = "#cbd5e1"
+
+[[icon.files]]
+name = "Cargo.toml"
+text = ""
+fg = "#cbd5e1"
+[[icon.files]]
+name = "package.json"
+text = ""
+fg = "#cbd5e1"
+[[icon.files]]
+name = "Dockerfile"
+text = ""
+fg = "#cbd5e1"
+[[icon.files]]
+name = "Makefile"
+text = ""
+fg = "#cbd5e1"
+[[icon.files]]
+name = "README.md"
+text = ""
+fg = "#cbd5e1"
+[[icon.files]]
+name = "LICENSE"
+text = ""
+fg = "#cbd5e1"
+[[icon.files]]
+name = ".gitignore"
+text = ""
+fg = "#cbd5e1"
+[[icon.files]]
+name = ".env"
+text = ""
+fg = "#cbd5e1"

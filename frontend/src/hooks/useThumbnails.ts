@@ -2,11 +2,30 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { tauriInvoke } from '../lib/tauriCommands';
 import type { ThumbnailInfo, ThumbnailResponse } from '../types';
 
+// Cap RAM use during long browsing sessions. Cold thumbs still live on disk
+// at ~/.local/share/orbit/thumbnails/ and reload on demand.
+const THUMBNAIL_CAP_KEY = "orbit:settings:thumbnailMemoryCap";
+
 export function useThumbnails() {
   const [loading, setLoading] = useState<Set<string>>(new Set());
   const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
+  const [memoryCap, setMemoryCap] = useState(() => readNumberSetting(THUMBNAIL_CAP_KEY, 300));
   const pendingRequests = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const refreshSettings = () => setMemoryCap(readNumberSetting(THUMBNAIL_CAP_KEY, 300));
+    const clearMemoryCache = () => {
+      setThumbnails(new Map());
+      setErrors(new Map());
+    };
+    document.addEventListener("orbit:settings-changed", refreshSettings);
+    document.addEventListener("orbit:thumbnail-cache-changed", clearMemoryCache);
+    return () => {
+      document.removeEventListener("orbit:settings-changed", refreshSettings);
+      document.removeEventListener("orbit:thumbnail-cache-changed", clearMemoryCache);
+    };
+  }, []);
 
   const getThumbnailKey = (fileId: number, size: number): string => 
     `${fileId}_${size}`;
@@ -46,7 +65,21 @@ export function useThumbnails() {
         // Convert to asset URL for Tauri
         const assetUrl = `asset://localhost${response.path}`;
         
-        setThumbnails(prev => new Map(prev).set(key, assetUrl));
+        // Cap in-memory thumbnails. Map preserves insertion order, so the
+        // first key is the oldest. Evicting from the head keeps the most
+        // recently used thumbs hot in memory; cold ones reload from the
+        // disk cache on next browse.
+        setThumbnails(prev => {
+          const next = new Map(prev);
+          next.delete(key); // re-insert at the end
+          next.set(key, assetUrl);
+          while (next.size > memoryCap) {
+            const oldest = next.keys().next().value;
+            if (oldest === undefined) break;
+            next.delete(oldest);
+          }
+          return next;
+        });
         setErrors(prev => {
           const next = new Map(prev);
           next.delete(key);
@@ -72,7 +105,7 @@ export function useThumbnails() {
       });
       pendingRequests.current.delete(key);
     }
-  }, [thumbnails, loading]);
+  }, [thumbnails, loading, memoryCap]);
 
   const getThumbnailInfo = useCallback(async (fileId: number): Promise<ThumbnailInfo[]> => {
     try {
@@ -104,3 +137,13 @@ export function useThumbnails() {
 }
 
 export default useThumbnails;
+
+function readNumberSetting(key: string, fallback: number) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
+    return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -14,6 +14,7 @@ import {
 import { AssetMode } from "./components/AssetMode";
 import { BookmarksPanel } from "./components/BookmarksPanel";
 import { CodeMode, isEditableFile } from "./components/CodeMode";
+import { CommandPalette, type PaletteCommand } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ExplorerList } from "./components/ExplorerList";
 import { ExplorerTree } from "./components/ExplorerTree";
@@ -21,10 +22,14 @@ import { GraphView } from "./components/GraphView";
 import { HelpMenuDialogs } from "./components/HelpDialogs";
 import { Inspector } from "./components/Inspector";
 import { SearchPanel } from "./components/SearchPanel";
+import { SettingsPanel, type EditorMode, type PerformanceMode } from "./components/SettingsPanel";
 import { Splitter } from "./components/Splitter";
 import { UnifiedHeader } from "./components/UnifiedHeader";
+import { IconEditor } from "./components/IconEditor";
+import { useIconTheme } from "./hooks/useIconTheme";
 import { useDebounce } from "./hooks/useDebounce";
 import { useOpenFiles } from "./hooks/useOpenFiles";
+import { usePersistedState } from "./hooks/usePersistedState";
 import { useViewPersistence } from "./hooks/useViewPersistence";
 import { tauriInvoke } from "./lib/tauriCommands";
 import { CacheStatus, FileRecord, GraphNode, GraphPayload, PreviewPayload, ScanProgress } from "./types";
@@ -37,6 +42,33 @@ type RightPanel = "inspector" | "code";
 
 const BOOKMARKS_KEY = "orbit:bookmarks";
 const MAX_BOOKMARKS = 12;
+const SETTINGS_KEYS = {
+  performanceMode: "orbit:settings:performanceMode",
+  graphNodeLimit: "orbit:settings:graphNodeLimit",
+  iconOverlayCap: "orbit:settings:iconOverlayCap",
+  thumbnailMemoryCap: "orbit:settings:thumbnailMemoryCap",
+  editorMode: "orbit:settings:editorMode",
+  monacoMinimap: "orbit:settings:monacoMinimap",
+  deepScan: "orbit:settings:deepScan",
+  visibleFolderRescan: "orbit:settings:visibleFolderRescan",
+};
+
+const PERFORMANCE_PRESETS: Record<
+  PerformanceMode,
+  { graphNodeLimit: number; iconOverlayCap: number; thumbnailMemoryCap: number; monacoMinimap: boolean; deepScan: boolean }
+> = {
+  eco: { graphNodeLimit: 150, iconOverlayCap: 100, thumbnailMemoryCap: 100, monacoMinimap: false, deepScan: false },
+  balanced: { graphNodeLimit: 300, iconOverlayCap: 250, thumbnailMemoryCap: 300, monacoMinimap: false, deepScan: false },
+  full: { graphNodeLimit: 800, iconOverlayCap: 700, thumbnailMemoryCap: 800, monacoMinimap: true, deepScan: true },
+};
+
+function persistSetting(key: string, value: unknown) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* localStorage is best-effort */
+  }
+}
 
 function App() {
   const [leftPanel, setLeftPanel] = useState<LeftPanel>("explorer");
@@ -73,6 +105,8 @@ function App() {
   const [breadcrumbNodes, setBreadcrumbNodes] = useState<GraphNode[]>([]); // Parent folder nodes to keep visible
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [status, setStatus] = useState("Ready");
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +114,14 @@ function App() {
   const [isCheckingCache, setIsCheckingCache] = useState(false);
 
   const debouncedQuery = useDebounce(query, 300);
+  const [performanceMode, setPerformanceMode] = usePersistedState<PerformanceMode>(SETTINGS_KEYS.performanceMode, "balanced");
+  const [graphNodeLimit, setGraphNodeLimit] = usePersistedState<number>(SETTINGS_KEYS.graphNodeLimit, 300);
+  const [iconOverlayCap, setIconOverlayCap] = usePersistedState<number>(SETTINGS_KEYS.iconOverlayCap, 250);
+  const [thumbnailMemoryCap, setThumbnailMemoryCap] = usePersistedState<number>(SETTINGS_KEYS.thumbnailMemoryCap, 300);
+  const [editorMode, setEditorMode] = usePersistedState<EditorMode>(SETTINGS_KEYS.editorMode, "light");
+  const [monacoMinimap, setMonacoMinimap] = usePersistedState<boolean>(SETTINGS_KEYS.monacoMinimap, false);
+  const [deepScan, setDeepScan] = usePersistedState<boolean>(SETTINGS_KEYS.deepScan, false);
+  const [visibleFolderRescan, setVisibleFolderRescan] = usePersistedState<boolean>(SETTINGS_KEYS.visibleFolderRescan, true);
 
   const { openFileInEditor } = useOpenFiles({
     onSwitchToCodeMode: () => {
@@ -139,7 +181,7 @@ function App() {
           rootPath,
           scopePath,
           mode: "workspace",
-          limit: 200,
+          limit: graphNodeLimit,
           expandedFolders: expanded,
         },
       });
@@ -158,7 +200,7 @@ function App() {
     } finally {
       setIsGraphLoading(false);
     }
-  }, [expandedGraphFolders, rootPath]);
+  }, [expandedGraphFolders, graphNodeLimit, rootPath]);
 
   const selectRecord = useCallback(async (record: FileRecord) => {
     setSelected(record);
@@ -307,6 +349,15 @@ function App() {
     return () => window.removeEventListener("orbit:open-file", handler);
   }, [handleOpenInEditor]);
 
+  // Icon Editor wiring — opened from the View → Icon Theme → Edit Icons menu.
+  const [iconEditorOpen, setIconEditorOpen] = useState(false);
+  const { theme: iconThemePayload, reload: reloadIconTheme } = useIconTheme();
+  useEffect(() => {
+    const handler = () => setIconEditorOpen(true);
+    document.addEventListener("orbit:open-icon-editor", handler);
+    return () => document.removeEventListener("orbit:open-icon-editor", handler);
+  }, []);
+
   const scanWorkspace = useCallback(async () => {
     if (!rootPath) return;
     setError(null);
@@ -404,10 +455,60 @@ function App() {
     void openPath(selected.path);
   }, [openPath, selected]);
 
+  const openSelectedInEditor = useCallback(async () => {
+    if (!selected || selected.isDir) return;
+    try {
+      await tauriInvoke("open_in_terminal_editor", { path: selected.path });
+      setStatus("Opened selected file in $EDITOR");
+    } catch (err) {
+      setError(String(err));
+      setStatus("External editor failed");
+    }
+  }, [selected]);
+
   const copySelectedPath = useCallback(() => {
     if (!selected) return;
     void navigator.clipboard?.writeText(selected.path);
+    setStatus("Copied selected path");
   }, [selected]);
+
+  const openThemesFolder = useCallback(async () => {
+    try {
+      const dir = await tauriInvoke("open_icon_themes_dir");
+      await tauriInvoke("open_path", { path: dir });
+    } catch (err) {
+      setError(String(err));
+    }
+  }, []);
+
+  const clearSelectedThumbnailCache = useCallback(async () => {
+    if (!selected || selected.isDir) return;
+    try {
+      await tauriInvoke("delete_thumbnails", { fileId: selected.id });
+      document.dispatchEvent(new CustomEvent("orbit:thumbnail-cache-changed"));
+      setStatus("Cleared selected thumbnail cache");
+    } catch (err) {
+      setError(String(err));
+      setStatus("Thumbnail cache clear failed");
+    }
+  }, [selected]);
+
+  const applyPerformanceMode = useCallback((mode: PerformanceMode) => {
+    const preset = PERFORMANCE_PRESETS[mode];
+    setPerformanceMode(mode);
+    setGraphNodeLimit(preset.graphNodeLimit);
+    setIconOverlayCap(preset.iconOverlayCap);
+    setThumbnailMemoryCap(preset.thumbnailMemoryCap);
+    setMonacoMinimap(preset.monacoMinimap);
+    setDeepScan(preset.deepScan);
+    persistSetting(SETTINGS_KEYS.graphNodeLimit, preset.graphNodeLimit);
+    persistSetting(SETTINGS_KEYS.iconOverlayCap, preset.iconOverlayCap);
+    persistSetting(SETTINGS_KEYS.thumbnailMemoryCap, preset.thumbnailMemoryCap);
+    persistSetting(SETTINGS_KEYS.monacoMinimap, preset.monacoMinimap);
+    persistSetting(SETTINGS_KEYS.deepScan, preset.deepScan);
+    document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
+    setStatus(`Performance mode: ${mode === "full" ? "Full Visuals" : mode[0].toUpperCase() + mode.slice(1)}`);
+  }, [setDeepScan, setGraphNodeLimit, setIconOverlayCap, setMonacoMinimap, setPerformanceMode, setThumbnailMemoryCap]);
 
   useEffect(() => {
     const saved = localStorage.getItem(BOOKMARKS_KEY);
@@ -497,7 +598,7 @@ function App() {
   // background rescan so newly-created folders show up without the user having
   // to click "Scan". Debounced so app-switching doesn't thrash the indexer.
   useEffect(() => {
-    if (!rootPath) return;
+    if (!rootPath || !visibleFolderRescan) return undefined;
     let lastRescan = 0;
     const RESCAN_COOLDOWN_MS = 2_500;
     const refresh = async () => {
@@ -527,7 +628,7 @@ function App() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [rootPath, currentPath, loadChildren, loadGraph, checkCacheStatus]);
+  }, [rootPath, currentPath, loadChildren, loadGraph, checkCacheStatus, visibleFolderRescan]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -556,6 +657,12 @@ function App() {
           showLeftPanel(panels[index]);
           setLeftCollapsed(false);
         }
+      }
+      // Ctrl+P - command palette
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setCommandPaletteOpen((value) => !value);
+        return;
       }
       // Ctrl+L - edit path in header
       if ((e.metaKey || e.ctrlKey) && e.key === "l") {
@@ -618,6 +725,51 @@ function App() {
     assets: "Assets",
   }[leftPanel];
 
+  const paletteCommands = useMemo<PaletteCommand[]>(() => [
+    { id: "open-folder", label: "Open folder", hint: "Workspace", run: chooseFolder },
+    { id: "rescan", label: "Rescan workspace", hint: rootPath ? shortPath(rootPath) : "No workspace", disabled: !rootPath, run: () => void scanWorkspace() },
+    { id: "toggle-labels", label: "Toggle labels", hint: "Graph", run: () => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-labels")) },
+    { id: "toggle-icons", label: "Toggle icons mode", hint: "Graph", run: () => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-icons")) },
+    {
+      id: "open-selected-editor",
+      label: "Open selected in $EDITOR",
+      hint: selected?.name,
+      disabled: !selected || selected.isDir,
+      run: () => void openSelectedInEditor(),
+    },
+    {
+      id: "copy-selected",
+      label: "Copy selected path",
+      hint: selected?.name,
+      disabled: !selected,
+      run: copySelectedPath,
+    },
+    {
+      id: "icon-editor",
+      label: "Open icon editor",
+      hint: "Icons",
+      run: () => document.dispatchEvent(new CustomEvent("orbit:open-icon-editor")),
+    },
+    { id: "themes-folder", label: "Open themes folder", hint: "Icons", run: () => void openThemesFolder() },
+    {
+      id: "clear-thumbnail-cache",
+      label: "Clear thumbnail cache",
+      hint: selected ? selected.name : "Select a file first",
+      disabled: !selected || selected.isDir,
+      run: () => void clearSelectedThumbnailCache(),
+    },
+    { id: "settings", label: "Open settings", hint: "General / Performance / Editor", run: () => setSettingsOpen(true) },
+  ], [
+    chooseFolder,
+    clearSelectedThumbnailCache,
+    copySelectedPath,
+    openSelectedInEditor,
+    openThemesFolder,
+    rootPath,
+    scanWorkspace,
+    selected,
+  ]);
+
   return (
     <main className="app-shell">
       <UnifiedHeader
@@ -639,6 +791,7 @@ function App() {
         onShowAssets={() => showLeftPanel("assets")}
         onShowInspector={() => showRightPanel("inspector")}
         onShowCode={() => showRightPanel("code")}
+        onOpenSettings={() => setSettingsOpen(true)}
         onNavigateToPath={(path) => {
           if (!path) return;
           // Path-bar / breadcrumb navigation: jump explorer + graph and ensure
@@ -821,6 +974,15 @@ function App() {
                 setLeftCollapsed(false);
               }}
               onEdit={handleOpenInEditor}
+              onRenamed={async (_oldPath, newPath) => {
+                void loadChildren(currentPath);
+                try {
+                  const renamed = await tauriInvoke("get_file", { path: newPath });
+                  if (renamed) await selectRecord(renamed);
+                } catch {
+                  /* selection refresh is best-effort */
+                }
+              }}
             />
           ) : (
             <CodeMode selectedFile={selected} />
@@ -838,6 +1000,69 @@ function App() {
       </footer>
 
       <HelpMenuDialogs />
+
+      <IconEditor
+        open={iconEditorOpen}
+        onClose={() => setIconEditorOpen(false)}
+        activeTheme={iconThemePayload}
+        onSaved={() => {
+          // Re-fetch the active theme so the graph re-resolves icons.
+          void reloadIconTheme();
+          document.dispatchEvent(new CustomEvent("orbit:icon-theme-changed"));
+        }}
+      />
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        commands={paletteCommands}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        performanceMode={performanceMode}
+        onPerformanceModeChange={applyPerformanceMode}
+        graphNodeLimit={graphNodeLimit}
+        onGraphNodeLimitChange={(value) => {
+          setGraphNodeLimit(value);
+          persistSetting(SETTINGS_KEYS.graphNodeLimit, value);
+          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
+        }}
+        iconOverlayCap={iconOverlayCap}
+        onIconOverlayCapChange={(value) => {
+          setIconOverlayCap(value);
+          persistSetting(SETTINGS_KEYS.iconOverlayCap, value);
+          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
+        }}
+        thumbnailMemoryCap={thumbnailMemoryCap}
+        onThumbnailMemoryCapChange={(value) => {
+          setThumbnailMemoryCap(value);
+          persistSetting(SETTINGS_KEYS.thumbnailMemoryCap, value);
+          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
+        }}
+        editorMode={editorMode}
+        onEditorModeChange={(value) => {
+          setEditorMode(value);
+          setMonacoMinimap(value === "full");
+          persistSetting(SETTINGS_KEYS.editorMode, value);
+          persistSetting(SETTINGS_KEYS.monacoMinimap, value === "full");
+          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
+        }}
+        monacoMinimap={monacoMinimap}
+        onMonacoMinimapChange={(value) => {
+          setMonacoMinimap(value);
+          persistSetting(SETTINGS_KEYS.monacoMinimap, value);
+          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
+        }}
+        deepScan={deepScan}
+        onDeepScanChange={setDeepScan}
+        visibleFolderRescan={visibleFolderRescan}
+        onVisibleFolderRescanChange={setVisibleFolderRescan}
+        onOpenThemesFolder={() => void openThemesFolder()}
+        onClearSelectedThumbnailCache={() => void clearSelectedThumbnailCache()}
+        canClearSelectedThumbnailCache={Boolean(selected && !selected.isDir)}
+      />
     </main>
   );
 }
@@ -873,6 +1098,7 @@ interface ExplorerSidePanelProps {
   selectedPath?: string;
   selectRecord: (record: FileRecord) => Promise<void>;
   setCurrentPath: (path: string) => void;
+  onFsChanged?: (newPath?: string) => void;
 }
 
 function ExplorerSidePanel({
@@ -884,6 +1110,7 @@ function ExplorerSidePanel({
   selectedPath,
   selectRecord,
   setCurrentPath,
+  onFsChanged,
 }: ExplorerSidePanelProps) {
   return (
     <div className="side-explorer">
@@ -907,6 +1134,7 @@ function ExplorerSidePanel({
             selectedPath={selectedPath}
             onSelect={selectRecord}
             onNavigate={setCurrentPath}
+            onFsChanged={onFsChanged}
           />
         ) : (
           <ExplorerTree

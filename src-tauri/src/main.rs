@@ -191,6 +191,164 @@ fn get_log_path() -> Option<String> {
     logger::log_path().map(|path| path.to_string_lossy().to_string())
 }
 
+/// Open a file in the user's preferred terminal + editor combo.
+///
+/// Resolution order (no hardcoded tools):
+///   1. Explicit template passed in (e.g. "kitty -e nvim {file}")
+///   2. $ORBIT_TERMINAL_EDITOR (Orbit-specific override)
+///   3. $TERMINAL env var + $VISUAL/$EDITOR (POSIX defaults)
+///   4. `xdg-terminal-exec` (modern XDG, respects user's default terminal)
+///   5. $VISUAL / $EDITOR alone (works for GUI editors like `code -w`)
+///
+/// If none resolve, returns an error explaining how to set $EDITOR.
+#[tauri::command]
+fn open_in_terminal_editor(path: String, editor_command: Option<String>) -> Result<(), String> {
+    use std::process::Command;
+
+    fn on_path(name: &str) -> bool {
+        std::env::var_os("PATH")
+            .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+            .unwrap_or(false)
+    }
+
+    // Quote the path safely for inclusion into a shell-style template.
+    let quoted = format!("'{}'", path.replace('\'', r"'\''"));
+
+    // 1. Explicit template wins.
+    let template = editor_command
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| std::env::var("ORBIT_TERMINAL_EDITOR").ok().filter(|s| !s.trim().is_empty()));
+
+    let template = match template {
+        Some(t) => Some(t),
+        None => {
+            // 2. $TERMINAL + $VISUAL/$EDITOR. Most Linux distros set neither
+            //    out of the box, but ricer / dotfile setups almost always do.
+            let terminal = std::env::var("TERMINAL").ok().filter(|s| !s.trim().is_empty());
+            let editor = std::env::var("VISUAL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("EDITOR").ok().filter(|s| !s.trim().is_empty()));
+            match (terminal, editor) {
+                (Some(t), Some(e)) => Some(format!("{t} -e {e} {{file}}")),
+                (Some(t), None) => Some(format!("{t} -e {{file}}")),
+                (None, _) => None,
+            }
+        }
+    };
+
+    if let Some(template) = template {
+        let cmdline = template.replace("{file}", &quoted);
+        let parts: Vec<&str> = cmdline.split_whitespace().collect();
+        if parts.is_empty() {
+            return Err("editor_command resolved to empty string".into());
+        }
+        return Command::new(parts[0])
+            .args(&parts[1..])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("spawn `{}`: {e}", parts[0]));
+    }
+
+    // 3. xdg-terminal-exec respects the user's default terminal via XDG.
+    if on_path("xdg-terminal-exec") {
+        let editor = std::env::var("VISUAL")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| std::env::var("EDITOR").ok().filter(|s| !s.trim().is_empty()));
+        if let Some(ed) = editor {
+            return Command::new("xdg-terminal-exec")
+                .arg(ed)
+                .arg(&path)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("spawn xdg-terminal-exec: {e}"));
+        }
+    }
+
+    // 4. Last resort: bare $VISUAL/$EDITOR (works for GUI editors).
+    if let Some(editor) = std::env::var("VISUAL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| std::env::var("EDITOR").ok().filter(|s| !s.trim().is_empty()))
+    {
+        let parts: Vec<&str> = editor.split_whitespace().collect();
+        if !parts.is_empty() {
+            return Command::new(parts[0])
+                .args(&parts[1..])
+                .arg(&path)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("spawn `{}`: {e}", parts[0]));
+        }
+    }
+
+    Err("No editor configured. Set $VISUAL or $EDITOR (e.g. `export VISUAL=nvim`) and optionally $TERMINAL (e.g. `export TERMINAL=kitty`).".into())
+}
+
+// File operations -----------------------------------------------------------
+
+fn validate_filename(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("name must not be empty".into());
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err("name must not contain path separators".into());
+    }
+    if name == "." || name == ".." {
+        return Err("invalid name".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn create_file(parent_dir: String, name: String) -> Result<String, String> {
+    validate_filename(&name)?;
+    let parent = std::path::Path::new(&parent_dir);
+    if !parent.is_dir() {
+        return Err(format!("not a directory: {parent_dir}"));
+    }
+    let target = parent.join(&name);
+    if target.exists() {
+        return Err(format!("already exists: {}", target.display()));
+    }
+    std::fs::File::create(&target).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn create_folder(parent_dir: String, name: String) -> Result<String, String> {
+    validate_filename(&name)?;
+    let parent = std::path::Path::new(&parent_dir);
+    if !parent.is_dir() {
+        return Err(format!("not a directory: {parent_dir}"));
+    }
+    let target = parent.join(&name);
+    if target.exists() {
+        return Err(format!("already exists: {}", target.display()));
+    }
+    std::fs::create_dir(&target).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn rename(path: String, new_name: String) -> Result<String, String> {
+    validate_filename(&new_name)?;
+    let src = std::path::Path::new(&path);
+    if !src.exists() {
+        return Err(format!("path does not exist: {path}"));
+    }
+    let parent = src
+        .parent()
+        .ok_or_else(|| format!("cannot rename root: {path}"))?;
+    let target = parent.join(&new_name);
+    if target.exists() {
+        return Err(format!("target already exists: {}", target.display()));
+    }
+    std::fs::rename(src, &target).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn check_cache_status(root_path: String, state: State<'_, AppState>) -> Result<CacheStatus, String> {
     let start = std::time::Instant::now();
@@ -226,6 +384,16 @@ fn open_icon_themes_dir() -> Result<String, String> {
     let path = dir.to_string_lossy().to_string();
     let _ = open::that(&path);
     Ok(path)
+}
+
+#[tauri::command]
+fn save_user_icon_theme(id: String, toml_content: String) -> Result<(), String> {
+    icon_theme::save_user_theme(&id, &toml_content)
+}
+
+#[tauri::command]
+fn delete_user_icon_theme(id: String) -> Result<(), String> {
+    icon_theme::delete_user_theme(&id)
 }
 
 #[tauri::command]
@@ -301,6 +469,12 @@ fn main() {
             get_active_icon_theme,
             set_active_icon_theme,
             open_icon_themes_dir,
+            save_user_icon_theme,
+            delete_user_icon_theme,
+            open_in_terminal_editor,
+            create_file,
+            create_folder,
+            rename,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Orbit");

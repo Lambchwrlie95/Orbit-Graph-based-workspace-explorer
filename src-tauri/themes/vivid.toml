@@ -1,0 +1,358 @@
+name = "Vivid"
+author = "Orbit"
+version = "1.0"
+
+# Maximum-saturation palette inspired by Atom file-icons + cyberpunk themes.
+# Every glyph is bright. Best viewed on a dark canvas. Uses Nerd Font glyphs.
+
+[icon.default_file]
+text = ""
+fg = "#fda4af"
+
+[icon.default_dir]
+text = ""
+fg = "#34d399"
+
+[icon.default_cluster]
+text = ""
+fg = "#facc15"
+
+# ─── Folders ────────────────────────────────────────────────────────────────
+[[icon.dirs]]
+name = ".git"
+text = ""
+fg = "#ff5f56"
+[[icon.dirs]]
+name = ".github"
+text = ""
+fg = "#a78bfa"
+[[icon.dirs]]
+name = "node_modules"
+text = ""
+fg = "#facc15"
+[[icon.dirs]]
+name = "src"
+text = ""
+fg = "#22d3ee"
+[[icon.dirs]]
+name = "lib"
+text = ""
+fg = "#22d3ee"
+[[icon.dirs]]
+name = "target"
+text = ""
+fg = "#fb7185"
+[[icon.dirs]]
+name = "dist"
+text = ""
+fg = "#fb923c"
+[[icon.dirs]]
+name = "build"
+text = ""
+fg = "#fb923c"
+[[icon.dirs]]
+name = "tests"
+text = ""
+fg = "#facc15"
+[[icon.dirs]]
+name = "test"
+text = ""
+fg = "#facc15"
+[[icon.dirs]]
+name = "docs"
+text = ""
+fg = "#60a5fa"
+[[icon.dirs]]
+name = "assets"
+text = ""
+fg = "#fde68a"
+[[icon.dirs]]
+name = "public"
+text = ""
+fg = "#34d399"
+[[icon.dirs]]
+name = "venv"
+text = ""
+fg = "#facc15"
+[[icon.dirs]]
+name = ".venv"
+text = ""
+fg = "#facc15"
+
+# ─── Languages ──────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "ts"
+text = ""
+fg = "#38bdf8"
+[[icon.exts]]
+name = "tsx"
+text = ""
+fg = "#38bdf8"
+[[icon.exts]]
+name = "js"
+text = ""
+fg = "#facc15"
+[[icon.exts]]
+name = "jsx"
+text = ""
+fg = "#22d3ee"
+[[icon.exts]]
+name = "rs"
+text = ""
+fg = "#fb923c"
+[[icon.exts]]
+name = "py"
+text = ""
+fg = "#fde047"
+[[icon.exts]]
+name = "go"
+text = ""
+fg = "#22d3ee"
+[[icon.exts]]
+name = "java"
+text = ""
+fg = "#fb7185"
+[[icon.exts]]
+name = "kt"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "c"
+text = ""
+fg = "#60a5fa"
+[[icon.exts]]
+name = "cpp"
+text = ""
+fg = "#3b82f6"
+[[icon.exts]]
+name = "rb"
+text = ""
+fg = "#ef4444"
+[[icon.exts]]
+name = "php"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "swift"
+text = ""
+fg = "#fb923c"
+[[icon.exts]]
+name = "lua"
+text = ""
+fg = "#3b82f6"
+[[icon.exts]]
+name = "zig"
+text = ""
+fg = "#fb923c"
+[[icon.exts]]
+name = "ex"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "exs"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "hs"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "scala"
+text = ""
+fg = "#ef4444"
+[[icon.exts]]
+name = "clj"
+text = ""
+fg = "#34d399"
+[[icon.exts]]
+name = "dart"
+text = ""
+fg = "#22d3ee"
+[[icon.exts]]
+name = "jl"
+text = ""
+fg = "#a78bfa"
+
+# ─── Shell ──────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "sh"
+text = ""
+fg = "#34d399"
+[[icon.exts]]
+name = "bash"
+text = ""
+fg = "#34d399"
+
+# ─── Markup ─────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "md"
+text = ""
+fg = "#60a5fa"
+[[icon.exts]]
+name = "txt"
+text = ""
+fg = "#fde68a"
+[[icon.exts]]
+name = "pdf"
+text = ""
+fg = "#ef4444"
+
+# ─── Web ────────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "html"
+text = ""
+fg = "#fb923c"
+[[icon.exts]]
+name = "css"
+text = ""
+fg = "#22d3ee"
+[[icon.exts]]
+name = "scss"
+text = ""
+fg = "#f472b6"
+[[icon.exts]]
+name = "vue"
+text = "﵂"
+fg = "#34d399"
+[[icon.exts]]
+name = "svelte"
+text = ""
+fg = "#fb923c"
+[[icon.exts]]
+name = "astro"
+text = ""
+fg = "#fb923c"
+
+# ─── Data ───────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "json"
+text = ""
+fg = "#facc15"
+[[icon.exts]]
+name = "toml"
+text = ""
+fg = "#fb7185"
+[[icon.exts]]
+name = "yaml"
+text = ""
+fg = "#fb7185"
+[[icon.exts]]
+name = "yml"
+text = ""
+fg = "#fb7185"
+[[icon.exts]]
+name = "xml"
+text = ""
+fg = "#fb923c"
+[[icon.exts]]
+name = "csv"
+text = ""
+fg = "#34d399"
+[[icon.exts]]
+name = "sql"
+text = ""
+fg = "#22d3ee"
+
+# ─── Images ─────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "png"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "jpg"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "jpeg"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "gif"
+text = ""
+fg = "#f472b6"
+[[icon.exts]]
+name = "svg"
+text = "ﰟ"
+fg = "#facc15"
+[[icon.exts]]
+name = "webp"
+text = ""
+fg = "#a78bfa"
+
+# ─── Media ──────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "mp3"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "wav"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "flac"
+text = ""
+fg = "#a78bfa"
+[[icon.exts]]
+name = "mp4"
+text = ""
+fg = "#f472b6"
+[[icon.exts]]
+name = "mkv"
+text = ""
+fg = "#f472b6"
+[[icon.exts]]
+name = "mov"
+text = ""
+fg = "#f472b6"
+
+# ─── Archives ───────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "zip"
+text = ""
+fg = "#fde047"
+[[icon.exts]]
+name = "tar"
+text = ""
+fg = "#fde047"
+[[icon.exts]]
+name = "gz"
+text = ""
+fg = "#fde047"
+
+# ─── Special filenames ──────────────────────────────────────────────────────
+[[icon.files]]
+name = "Cargo.toml"
+text = ""
+fg = "#fb923c"
+[[icon.files]]
+name = "package.json"
+text = ""
+fg = "#facc15"
+[[icon.files]]
+name = "tsconfig.json"
+text = ""
+fg = "#38bdf8"
+[[icon.files]]
+name = "Dockerfile"
+text = ""
+fg = "#22d3ee"
+[[icon.files]]
+name = "Makefile"
+text = ""
+fg = "#34d399"
+[[icon.files]]
+name = "README.md"
+text = ""
+fg = "#60a5fa"
+[[icon.files]]
+name = "LICENSE"
+text = ""
+fg = "#facc15"
+[[icon.files]]
+name = ".gitignore"
+text = ""
+fg = "#ef4444"
+[[icon.files]]
+name = ".env"
+text = ""
+fg = "#fde047"

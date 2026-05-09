@@ -43,6 +43,7 @@ interface UnifiedHeaderProps {
   onShowAssets: () => void;
   onShowInspector: () => void;
   onShowCode: () => void;
+  onOpenSettings: () => void;
   onNavigateToPath?: (path: string) => void;
 }
 
@@ -65,6 +66,7 @@ export function UnifiedHeader({
   onShowAssets,
   onShowInspector,
   onShowCode,
+  onOpenSettings,
   onNavigateToPath,
 }: UnifiedHeaderProps) {
   const win = useMemo(() => getTauriWindow(), []);
@@ -344,6 +346,7 @@ export function UnifiedHeader({
               <MenuItem label="Assets" onClick={() => runMenuAction(onShowAssets)} />
               <MenuSeparator />
               <MenuItem label="Icon Theme..." onClick={() => setOpenMenu("icons")} />
+              <MenuItem label="Settings..." onClick={() => runMenuAction(onOpenSettings)} />
             </>
           )}
 
@@ -369,6 +372,9 @@ export function UnifiedHeader({
                 </button>
               ))}
               <MenuSeparator />
+              <MenuItem label="Edit Icons..." onClick={() => runMenuAction(() => {
+                document.dispatchEvent(new CustomEvent("orbit:open-icon-editor"));
+              })} />
               <MenuItem label="Open themes folder" onClick={() => runMenuAction(() => void openIconThemesDir())} />
               <MenuItem label="Reload themes" onClick={() => runMenuAction(() => void refreshIconThemes())} />
               <MenuItem label="← Back" onClick={() => setOpenMenu("view")} />

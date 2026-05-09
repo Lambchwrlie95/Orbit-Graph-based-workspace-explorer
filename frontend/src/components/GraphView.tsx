@@ -31,6 +31,11 @@ const PREF = {
   dim: "orbit:graph:dimUnrelated",
   types: "orbit:graph:visibleTypes",
   nodeView: "orbit:graph:nodeView:v2",
+  minimap: "orbit:graph:showMinimap",
+};
+
+const SETTINGS_KEYS = {
+  iconOverlayCap: "orbit:settings:iconOverlayCap",
 };
 
 const serializeTypeSet = (set: Set<NodeType>) => JSON.stringify(Array.from(set));
@@ -94,6 +99,8 @@ function GraphViewComponent({
     { serialize: serializeTypeSet, deserialize: deserializeTypeSet },
   );
   const [nodeView, setNodeView] = usePersistedState<NodeView>(PREF.nodeView, "icons");
+  const [showMinimap, setShowMinimap] = usePersistedState<boolean>(PREF.minimap, false);
+  const [iconOverlayCap, setIconOverlayCap] = useState(() => readNumberSetting(SETTINGS_KEYS.iconOverlayCap, 250));
   const [iconTheme, setIconTheme] = useState<IconThemePayload | null>(null);
   const [iconOverlay, setIconOverlay] = useState<
     Array<{ id: string; x: number; y: number; size: number; glyph: string; color: string; opacity: number; emphasized: boolean }>
@@ -126,6 +133,20 @@ function GraphViewComponent({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const toggleLabels = () => setShowLabels((value) => !value);
+    const toggleIcons = () => setNodeView((value) => (value === "icons" ? "spheres" : "icons"));
+    const refreshSettings = () => setIconOverlayCap(readNumberSetting(SETTINGS_KEYS.iconOverlayCap, 250));
+    document.addEventListener("orbit:graph:toggle-labels", toggleLabels);
+    document.addEventListener("orbit:graph:toggle-icons", toggleIcons);
+    document.addEventListener("orbit:settings-changed", refreshSettings);
+    return () => {
+      document.removeEventListener("orbit:graph:toggle-labels", toggleLabels);
+      document.removeEventListener("orbit:graph:toggle-icons", toggleIcons);
+      document.removeEventListener("orbit:settings-changed", refreshSettings);
+    };
+  }, [setNodeView, setShowLabels]);
 
   useEffect(() => {
     iconThemeRef.current = iconTheme;
@@ -301,14 +322,25 @@ function GraphViewComponent({
       labelFont: "Inter, system-ui, sans-serif",
       labelSize: 12,
       labelWeight: "600",
-      labelDensity: 0.22,
-      labelGridCellSize: 72,
-      labelRenderedSizeThreshold: 7,
+      labelDensity: 0.4,
+      labelGridCellSize: 60,
+      // Lowered from 7 → 3 so labels also show up at default zoom for the
+      // smaller folder-class spheres (~6px). Without this, icons-mode and
+      // spheres-mode looked inconsistent because labels disappeared on
+      // smaller nodes long before they should.
+      labelRenderedSizeThreshold: 3,
       defaultNodeColor: "#94a3b8",
       defaultEdgeColor: "#335064",
       zIndex: true,
       minCameraRatio: 0.03,
       maxCameraRatio: 8,
+      // Sigma's default zoomToSizeRatioFunction is Math.pow(ratio, 0.5),
+      // which makes nodes SHRINK as you zoom in (because ratio < 1 when
+      // zoomed in). That feels backwards — zooming in should bring you
+      // closer, so things grow. Invert it: 1 / sqrt(ratio) gives sublinear
+      // growth on zoom-in (≈1.4× at half-zoom, 2× at quarter-zoom) and
+      // sublinear shrink on zoom-out, matching real-world camera behavior.
+      zoomToSizeRatioFunction: (ratio: number) => 1 / Math.sqrt(Math.max(ratio, 0.001)),
       nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current, nodeView),
       edgeReducer: (edge, data) => reduceEdge(edge, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated),
     });
@@ -403,12 +435,13 @@ function GraphViewComponent({
         const hoveredId = hoveredNodeRef.current;
         const selectedId = selectedNodeRef.current;
         graph.forEachNode((node, attrs) => {
-          // Use the natural baseSize (set at node-add time, untouched by the
-          // sphere-collapse logic) so big nodes get visibly bigger glyphs.
-          // Then divide by the camera ratio so glyphs zoom with the graph
-          // instead of staying frozen in screen space.
+          // Use the natural baseSize (set at node-add time, untouched by
+          // the reducer) so big nodes get visibly bigger glyphs. Use the
+          // SAME zoomToSizeRatio curve Sigma uses for spheres (1/sqrt(ratio))
+          // so the overlay grows/shrinks in lockstep with the underlying
+          // sphere geometry — keeping edges visually anchored to the icon.
           const naturalSize = Number(attrs.baseSize ?? 6);
-          const sizeOnScreen = naturalSize / cameraRatio;
+          const sizeOnScreen = naturalSize / Math.sqrt(Math.max(cameraRatio, 0.001));
           const baseColor = (attrs.baseColor as string) ?? (attrs.color as string);
           const renderedColor = (attrs.color as string) ?? baseColor;
           const isDimmed =
@@ -428,6 +461,11 @@ function GraphViewComponent({
           ) {
             return;
           }
+          // Hard cap on overlay points to keep DOM cost bounded — even when
+          // graph caps grow. Beyond this we stop pushing; the underlying
+          // sphere is still visible (in icons-mode, painted canvas-bg, but
+          // the geometry remains for edges).
+          if (points.length >= iconOverlayCap) return;
           // Cached at node-add time — no per-frame glob/map work.
           const glyph = (attrs.glyphText as string) ?? "·";
           const glyphColor = (attrs.glyphColor as string) ?? baseColor ?? "#a8bbc8";
@@ -472,7 +510,7 @@ function GraphViewComponent({
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, showLabels, dimUnrelated, nodeView, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
+  }, [displayPayload, displayNodes, showLabels, dimUnrelated, nodeView, iconOverlayCap, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
 
   const focusSelected = () => {
     const renderer = rendererRef.current;
@@ -603,6 +641,13 @@ function GraphViewComponent({
           >
             Dim
           </button>
+          <button
+            className={showMinimap ? "active" : ""}
+            onClick={() => setShowMinimap((value) => !value)}
+            title="Show graph minimap"
+          >
+            Minimap
+          </button>
         </div>
       </div>
 
@@ -626,7 +671,7 @@ function GraphViewComponent({
         stats={graphStats}
       />
 
-      {displayNodes.length > 0 && (
+      {displayNodes.length > 0 && showMinimap && (
         <div className="graph-minimap" title="Graph minimap">
           <svg viewBox="0 0 120 86" role="img" aria-label="Graph minimap">
             {minimapEdges.map((edge, idx) => (
@@ -691,7 +736,45 @@ function GraphViewComponent({
       <div className="graph-canvas" ref={containerRef}>
         {(!displayPayload || displayNodes.length === 0) && (
           <div className="empty-state">
-            <p>{payload ? "No nodes match the current graph filters" : "Scan a workspace to render the graph"}</p>
+            {payload ? (
+              (() => {
+                const total = payload.nodes.length;
+                const reasons: string[] = [];
+                if (!showFolders) reasons.push("folders hidden");
+                if (!showFiles) reasons.push("files hidden");
+                if (visibleTypes.size < ALL_NODE_TYPES.length) {
+                  reasons.push(`${ALL_NODE_TYPES.length - visibleTypes.size} type(s) hidden in legend`);
+                }
+                if (graphFilter.trim()) reasons.push(`search "${graphFilter.trim()}"`);
+                const why = reasons.length
+                  ? reasons.join(" + ")
+                  : (total === 0 ? "backend returned 0 nodes for this scope" : "all nodes filtered out");
+                return (
+                  <>
+                    <p>No nodes visible — {why}.</p>
+                    <p style={{ fontSize: "11px", color: "var(--orbit-muted)" }}>
+                      backend has {total} node{total === 1 ? "" : "s"} in scope.
+                    </p>
+                    {(reasons.length > 0) && (
+                      <button
+                        type="button"
+                        className="graph-reset-filters"
+                        onClick={() => {
+                          setShowFolders(true);
+                          setShowFiles(true);
+                          setVisibleTypes(new Set(ALL_NODE_TYPES));
+                          setGraphFilter("");
+                        }}
+                      >
+                        Reset all filters
+                      </button>
+                    )}
+                  </>
+                );
+              })()
+            ) : (
+              <p>Scan a workspace to render the graph</p>
+            )}
           </div>
         )}
       </div>
@@ -699,19 +782,24 @@ function GraphViewComponent({
       {nodeView === "icons" && (
         <div className="graph-icon-overlay" aria-hidden>
           {iconOverlay.map((point) => {
-            // Glyph IS the node visual: pull size from natural baseSize
-            // (already zoom-aware from /cameraRatio), clamp to a readable
-            // range, then bump on hover/select so feedback feels physical.
-            const baseFont = Math.max(11, Math.min(36, point.size * 1.6));
-            const fontSize = point.emphasized ? baseFont * 1.4 : baseFont;
+            // Glyph IS the node visual: size it so the rendered glyph roughly
+            // matches the (now invisible) sphere diameter — that way edges,
+            // which terminate at the sphere radius, visually meet the icon.
+            // ~1.9x sphere radius gives a glyph whose visual mass matches a
+            // disk of diameter 2*radius without overflowing past the edge
+            // termination point much.
+            const baseFont = Math.max(11, Math.min(40, point.size * 1.9));
+            // Emphasis bump goes through transform:scale, not font-size, so
+            // it doesn't trigger a layout/transition cascade every frame.
             return (
               <span
                 key={point.id}
                 className={`graph-node-glyph${point.emphasized ? " emphasized" : ""}`}
                 style={{
-                  left: point.x,
-                  top: point.y,
-                  fontSize: `${fontSize}px`,
+                  // translate3d promotes the layer to its own GPU compositor
+                  // surface — matters for ~200 spans repositioned every frame.
+                  transform: `translate3d(${point.x}px, ${point.y}px, 0) translate(-50%, -50%)${point.emphasized ? " scale(1.35)" : ""}`,
+                  fontSize: `${baseFont}px`,
                   color: point.emphasized ? "#ffe27a" : point.color,
                   opacity: point.opacity,
                 }}
@@ -762,10 +850,16 @@ function orbitLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphDisplayNode[]
   const totalWeight = roots.reduce((sum, id) => sum + subtreeWeight(id, tree.children), 0) || roots.length;
   let cursor = -Math.PI;
 
+  // When the payload has no parent (every item is a "root"), the old code
+  // placed every root at radius 0 → all nodes stacked on origin → user
+  // sees ONE clumped sphere. Fix: if there are multiple roots, treat them
+  // as orbiting an invisible super-root at depth 1 so they spread around.
+  const rootDepth = roots.length === 1 ? 0 : 1;
+
   for (const rootId of roots) {
     const weight = subtreeWeight(rootId, tree.children);
     const span = Math.PI * 2 * (weight / totalWeight);
-    placeOrbit(rootId, cursor, cursor + span, 0, tree, placed);
+    placeOrbit(rootId, cursor, cursor + span, rootDepth, tree, placed);
     cursor += span;
   }
 
@@ -787,7 +881,7 @@ function placeOrbit(
   // Increase spacing between rings to prevent node overlap (was 82)
   const baseRadius = 100;
   const depthSpacing = 110;
-  const radius = depth === 0 ? 0 : baseRadius + depth * depthSpacing + Math.min(30, kids.length * 1.2);
+  const radius = depth === 0 ? 0 : baseRadius + (depth - 1) * depthSpacing + Math.min(30, kids.length * 1.2);
   placed.set(id, { ...node, x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, depth, childCount: kids.length });
 
   if (!kids.length) return;
@@ -889,43 +983,52 @@ function reduceNode(
 ) {
   const isHovered = hovered === node;
   const isSelected = selected === node;
-  // In icons mode the HTML glyph IS the visual. Sphere becomes a constant
-  // invisible click-target — never grows on hover/select (the overlay
-  // handles that), never gets resized by dim/connected logic. This avoids
-  // the bug where dim-unrelated made the "hidden" sphere bigger than the
-  // visible one.
+  // Keep the sphere at its NATURAL radius in icons mode too. Sigma terminates
+  // edges at `size` from the node center, so collapsing the sphere to 1px
+  // detached the strings from the icons. We instead paint the sphere the
+  // exact canvas background color so it visually disappears, while still
+  // anchoring the edge endpoints at the same radius the glyph occupies.
   const rawBase = Number(data.baseSize ?? data.size ?? 5);
-  const baseSize = nodeView === "icons" ? 1 : rawBase;
+  const baseSize = rawBase;
   const connectedToActive = (hovered || selected) ? isConnected(graph, node, hovered ?? selected!) : false;
   const nodePath = data.path as string;
   const isInNavHistory = navHistory.includes(nodePath);
   const isBreadcrumbNode = breadcrumbNodes.some(bn => bn.path === nodePath);
   const isBreadcrumb = (isInNavHistory || isBreadcrumbNode) && !isSelected;
 
+  // Must match --orbit-bg in styles.css. In icons mode the sphere is painted
+  // with this so it blends into the canvas while still providing geometric
+  // size for edge termination.
+  const CANVAS_BG = "#1e1e1e";
+  const iconsMode = nodeView === "icons";
+
   // Determine target values
-  let targetColor = data.baseColor as string;
+  let targetColor = iconsMode ? CANVAS_BG : (data.baseColor as string);
   let targetSize = baseSize;
   let targetZIndex = data.baseZIndex ?? 1;
   let targetLabel = data.label as string;
 
-  // In icons mode the HTML overlay handles all visual feedback (size, color,
-  // dimming) — the sphere stays a constant 1px hit-target. So we mutate
-  // color/zIndex/label but never size when nodeView === "icons".
-  const iconsMode = nodeView === "icons";
-
+  // In icons mode all visual feedback (color, dim, hover, select) lives in
+  // the HTML overlay. The sphere stays a constant invisible disk so edges
+  // never visibly jitter their termination point. So we skip color AND size
+  // mutations under iconsMode — only zIndex/label still update.
   if (dimUnrelated && (hovered || selected) && !isHovered && !isSelected && !connectedToActive) {
-    // Preserve hue identity by darkening toward background instead of going monochrome
-    targetColor = adjustColorBrightness(targetColor, 0.42);
+    if (!iconsMode) {
+      // Preserve hue identity by darkening toward background instead of going monochrome
+      targetColor = adjustColorBrightness(targetColor, 0.42);
+      targetSize = Math.max(2, baseSize * 0.72);
+    }
     targetLabel = "";
     targetZIndex = 0;
-    if (!iconsMode) targetSize = Math.max(2, baseSize * 0.72);
   }
 
   // Style breadcrumb nodes (in nav history but not selected)
   if (isBreadcrumb && !dimUnrelated) {
-    targetColor = adjustColorBrightness(targetColor, 0.6); // Darken
-    if (!iconsMode) targetSize = baseSize * 0.85; // Smaller
-    targetZIndex = 5; // Lower z-index
+    if (!iconsMode) {
+      targetColor = adjustColorBrightness(targetColor, 0.6);
+      targetSize = baseSize * 0.85;
+    }
+    targetZIndex = 5;
   }
 
   if (connectedToActive) {
@@ -934,14 +1037,18 @@ function reduceNode(
   }
 
   if (isHovered) {
-    targetColor = "#f5c542";
-    if (!iconsMode) targetSize = Math.max(8, baseSize * 1.35);
+    if (!iconsMode) {
+      targetColor = "#f5c542";
+      targetSize = Math.max(8, baseSize * 1.35);
+    }
     targetZIndex = 90;
   }
 
   if (isSelected) {
-    targetColor = "#ffffff";
-    if (!iconsMode) targetSize = Math.max(9, baseSize * 1.45);
+    if (!iconsMode) {
+      targetColor = "#ffffff";
+      targetSize = Math.max(9, baseSize * 1.45);
+    }
     targetZIndex = 100;
   }
 
@@ -1234,6 +1341,16 @@ function shortNodePath(path: string) {
   const parts = path.split("/").filter(Boolean);
   if (parts.length <= 3) return path;
   return `.../${parts.slice(-3).join("/")}`;
+}
+
+function readNumberSetting(key: string, fallback: number) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
+    return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function seededAngle(id: number) {

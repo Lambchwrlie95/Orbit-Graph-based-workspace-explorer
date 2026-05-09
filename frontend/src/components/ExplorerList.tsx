@@ -2,6 +2,7 @@ import React, { memo, useMemo, useState } from "react";
 import { FileRecord } from "../types";
 import { fileTypeLabel, formatBytes, relativeDate } from "../utils";
 import { VirtualList } from "./VirtualList";
+import { FileContextMenu, ContextTarget } from "./FileContextMenu";
 
 interface ExplorerListProps {
   currentPath: string;
@@ -10,18 +11,26 @@ interface ExplorerListProps {
   selectedPath?: string;
   onSelect: (record: FileRecord) => void;
   onNavigate: (path: string) => void;
+  /** Called after a successful create/rename so the parent can re-list. */
+  onFsChanged?: (newPath?: string) => void;
 }
 
 const VIRTUAL_SCROLL_THRESHOLD = 50; // Use virtual scrolling for lists > 50 items
 const ITEM_HEIGHT = 36; // Height of each file row in pixels
 
 function ExplorerListComponent({
+  currentPath,
   items,
   selectedPath,
   onSelect,
   onNavigate,
+  onFsChanged,
 }: ExplorerListProps) {
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+  const [ctxMenu, setCtxMenu] = useState<{
+    pos: { x: number; y: number };
+    target: ContextTarget;
+  } | null>(null);
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
@@ -51,6 +60,11 @@ function ExplorerListComponent({
       className={`file-row ${selectedPath === item.path ? "selected" : ""}`}
       onClick={() => onSelect(item)}
       onDoubleClick={() => item.isDir && onNavigate(item.path)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onSelect(item);
+        setCtxMenu({ pos: { x: e.clientX, y: e.clientY }, target: { kind: "item", item } });
+      }}
       title={item.path}
     >
       <span className={`file-icon ${item.isDir ? "folder" : getFileIconClass(item.extension)}`}>
@@ -65,11 +79,23 @@ function ExplorerListComponent({
     </button>
   );
 
+  // Right-click on the empty space of the list opens the menu in
+  // "create-in-this-folder" mode.
+  const onContainerContextMenu = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".file-row")) return;
+    e.preventDefault();
+    if (!currentPath) return;
+    setCtxMenu({
+      pos: { x: e.clientX, y: e.clientY },
+      target: { kind: "folder", folderPath: currentPath },
+    });
+  };
+
   // Use virtual scrolling for large lists
   const useVirtualScroll = sortedItems.length > VIRTUAL_SCROLL_THRESHOLD;
 
   return (
-    <div className="explorer-list-container">
+    <div className="explorer-list-container" onContextMenu={onContainerContextMenu}>
       <div className="explorer-list-header">
         <span className="item-count">
           {items.length} item{items.length !== 1 ? "s" : ""}
@@ -104,6 +130,15 @@ function ExplorerListComponent({
           )}
         </div>
       )}
+
+      <FileContextMenu
+        position={ctxMenu?.pos ?? null}
+        target={ctxMenu?.target ?? null}
+        onClose={() => setCtxMenu(null)}
+        onChanged={(newPath) => {
+          onFsChanged?.(newPath);
+        }}
+      />
     </div>
   );
 }

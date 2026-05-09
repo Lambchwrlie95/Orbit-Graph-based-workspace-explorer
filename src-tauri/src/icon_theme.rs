@@ -22,6 +22,25 @@ use serde::{Deserialize, Serialize};
 
 const ORBIT_DEFAULT_TOML: &str = include_str!("../themes/orbit-default.toml");
 const NERD_FONT_TOML: &str = include_str!("../themes/nerd-font.toml");
+const MATERIAL_TOML: &str = include_str!("../themes/material.toml");
+const MINIMAL_MONO_TOML: &str = include_str!("../themes/minimal-mono.toml");
+const VIVID_TOML: &str = include_str!("../themes/vivid.toml");
+
+/// All themes that ship with the binary. The id (first field) doubles as the
+/// filename stem written into `~/.config/orbit/icon-themes/`. Adding a new
+/// bundled theme means: drop a TOML in src-tauri/themes/, add an
+/// include_str! constant, and append a row here. No other code needs to change.
+const BUILTIN_THEMES: &[(&str, &str)] = &[
+    ("orbit-default", ORBIT_DEFAULT_TOML),
+    ("nerd-font", NERD_FONT_TOML),
+    ("material", MATERIAL_TOML),
+    ("minimal-mono", MINIMAL_MONO_TOML),
+    ("vivid", VIVID_TOML),
+];
+
+fn is_builtin(id: &str) -> bool {
+    BUILTIN_THEMES.iter().any(|(name, _)| *name == id)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -304,9 +323,9 @@ fn write_settings(s: &Settings) -> Result<(), String> {
 pub fn ensure_bundled_themes() -> Result<(), String> {
     let dir = themes_dir()?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("orbit-default.toml"), ORBIT_DEFAULT_TOML)
-        .map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("nerd-font.toml"), NERD_FONT_TOML).map_err(|e| e.to_string())?;
+    for (id, body) in BUILTIN_THEMES {
+        std::fs::write(dir.join(format!("{id}.toml")), body).map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -324,7 +343,7 @@ pub fn list_themes() -> Result<Vec<IconThemeMeta>, String> {
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-        let builtin = matches!(id.as_str(), "orbit-default" | "nerd-font");
+        let builtin = is_builtin(id.as_str());
         match IconTheme::from_file(&path, builtin) {
             Ok(t) => out.push(t.meta),
             Err(e) => eprintln!("orbit: skip theme {}: {e}", path.display()),
@@ -338,7 +357,7 @@ pub fn load_theme(id: &str) -> Result<IconTheme, String> {
     ensure_bundled_themes()?;
     let dir = themes_dir()?;
     let path = dir.join(format!("{id}.toml"));
-    let builtin = matches!(id, "orbit-default" | "nerd-font");
+    let builtin = is_builtin(id);
     IconTheme::from_file(&path, builtin)
 }
 
@@ -402,7 +421,7 @@ pub fn cmd_get_active_theme() -> Result<ThemePayload, String> {
     })?;
     let parsed: ThemeFile = toml::from_str(&raw)
         .map_err(|e| format!("parse {}: {e}", path.display()))?;
-    let theme = IconTheme::from_file(&path, matches!(id.as_str(), "orbit-default" | "nerd-font"))?;
+    let theme = IconTheme::from_file(&path, is_builtin(id.as_str()))?;
     let original_globs: Vec<(String, IconRule)> = parsed
         .icon
         .globs
@@ -426,6 +445,49 @@ pub fn cmd_set_active_theme(id: String) -> Result<(), String> {
     let mut s = read_settings();
     s.active_icon_theme = Some(id);
     write_settings(&s)
+}
+
+/// Write a user-authored theme TOML to ~/.config/orbit/icon-themes/<id>.toml.
+/// Refuses to overwrite a builtin theme (those are restored from include_str!
+/// on every launch anyway). Validates the TOML parses before writing.
+pub fn save_user_theme(id: &str, toml_content: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err("theme id must not be empty".into());
+    }
+    if id.contains('/') || id.contains('\\') || id.contains("..") {
+        return Err("theme id contains invalid characters".into());
+    }
+    if is_builtin(id) {
+        return Err(format!("'{id}' is a builtin theme and cannot be overwritten"));
+    }
+    // Parse-validate before touching disk so a bad TOML doesn't half-corrupt
+    // the user's settings.
+    let _: ThemeFile =
+        toml::from_str(toml_content).map_err(|e| format!("invalid theme TOML: {e}"))?;
+    let dir = themes_dir()?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(format!("{id}.toml")), toml_content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Delete a user-authored theme. Builtin themes can't be deleted (they'd be
+/// rewritten on next launch anyway).
+pub fn delete_user_theme(id: &str) -> Result<(), String> {
+    if is_builtin(id) {
+        return Err(format!("'{id}' is a builtin theme and cannot be deleted"));
+    }
+    let dir = themes_dir()?;
+    let path = dir.join(format!("{id}.toml"));
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    // If the deleted theme was active, fall back to nerd-font.
+    let mut s = read_settings();
+    if s.active_icon_theme.as_deref() == Some(id) {
+        s.active_icon_theme = Some("nerd-font".to_string());
+        write_settings(&s)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

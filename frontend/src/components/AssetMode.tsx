@@ -94,13 +94,29 @@ export const AssetMode: React.FC<AssetModeProps> = ({
             <p>◌ No images in current folder</p>
           </div>
         ) : (
-          <div 
+          <div
             className="asset-grid"
-            style={{ 
+            style={{
               gridTemplateColumns: `repeat(auto-fill, minmax(${selectedSize}px, 1fr))`,
             }}
           >
-            {imageFiles.map((file, index) => {
+            {/* Top spacer: preserves scroll position so the user can keep
+                paging down even though we only render the visible window.
+                Spans the full grid row so the auto-fill columns ignore it. */}
+            {visibleRange.start > 0 && (
+              <div
+                aria-hidden
+                style={{
+                  gridColumn: '1 / -1',
+                  height: Math.ceil(visibleRange.start / Math.max(1, Math.floor((typeof window !== 'undefined' ? window.innerWidth : 1200) / (selectedSize + 16)))) * (selectedSize + 16),
+                }}
+              />
+            )}
+            {imageFiles.slice(visibleRange.start, visibleRange.end).map((file) => {
+              // True virtualization: only the visible window allocates JSX.
+              // Off-screen images aren't rendered at all (they were
+              // previously rendered with opacity 0.5, costing ~2k React
+              // nodes for a 2k-image folder).
               const thumbKey = `${file.id}_${selectedSize}`;
               const thumbUrl = thumbnails.get(thumbKey);
               const loading = isLoading(file.id, selectedSize);
@@ -109,9 +125,6 @@ export const AssetMode: React.FC<AssetModeProps> = ({
                 <button
                   key={file.id}
                   className="asset-tile"
-                  style={{ 
-                    opacity: index >= visibleRange.start && index < visibleRange.end ? 1 : 0.5 
-                  }}
                   title={file.path}
                   onClick={() => onSelect?.(file)}
                 >
@@ -130,7 +143,7 @@ export const AssetMode: React.FC<AssetModeProps> = ({
                       <ImageIcon size={28} />
                     </div>
                   )}
-                  
+
                   <div className="asset-tile-caption">
                     <p>{file.name}</p>
                     {file.extension && (
@@ -140,6 +153,17 @@ export const AssetMode: React.FC<AssetModeProps> = ({
                 </button>
               );
             })}
+            {/* Bottom spacer mirrors the top one so the scrollbar reflects
+                the full image count, not just the visible window. */}
+            {visibleRange.end < imageFiles.length && (
+              <div
+                aria-hidden
+                style={{
+                  gridColumn: '1 / -1',
+                  height: Math.ceil((imageFiles.length - visibleRange.end) / Math.max(1, Math.floor((typeof window !== 'undefined' ? window.innerWidth : 1200) / (selectedSize + 16)))) * (selectedSize + 16),
+                }}
+              />
+            )}
           </div>
         )}
       </div>

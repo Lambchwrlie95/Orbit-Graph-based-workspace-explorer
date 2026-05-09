@@ -67,6 +67,12 @@ export const TAURI_COMMANDS = [
   "get_active_icon_theme",
   "set_active_icon_theme",
   "open_icon_themes_dir",
+  "save_user_icon_theme",
+  "delete_user_icon_theme",
+  "open_in_terminal_editor",
+  "create_file",
+  "create_folder",
+  "rename",
 ] as const;
 
 export type TauriCommand = typeof TAURI_COMMANDS[number];
@@ -122,6 +128,12 @@ type CommandArgsMap = {
   get_active_icon_theme: undefined;
   set_active_icon_theme: { id: string };
   open_icon_themes_dir: undefined;
+  save_user_icon_theme: { id: string; tomlContent: string };
+  delete_user_icon_theme: { id: string };
+  open_in_terminal_editor: { path: string; editorCommand?: string };
+  create_file: { parentDir: string; name: string };
+  create_folder: { parentDir: string; name: string };
+  rename: { path: string; newName: string };
 };
 
 type CommandResultMap = {
@@ -170,6 +182,12 @@ type CommandResultMap = {
   get_active_icon_theme: IconThemePayload;
   set_active_icon_theme: void;
   open_icon_themes_dir: string;
+  save_user_icon_theme: void;
+  delete_user_icon_theme: void;
+  open_in_terminal_editor: void;
+  create_file: string;
+  create_folder: string;
+  rename: string;
 };
 
 type CommandArgs<C extends TauriCommand> = CommandArgsMap[C];

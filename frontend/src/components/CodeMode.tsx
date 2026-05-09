@@ -1,7 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { FileCode, FileText, AlertCircle, Eye, Columns, Code as CodeIcon } from 'lucide-react';
 import { EditorTabs } from './EditorTabs';
-import { MonacoEditor } from './MonacoEditor';
+// Monaco is the heaviest single dependency in the bundle. Lazy-load it so
+// Explorer / Graph / Assets boot without paying for it. First Code Mode
+// open will pause briefly to fetch the chunk.
+const MonacoEditor = lazy(() =>
+  import('./MonacoEditor').then((m) => ({ default: m.MonacoEditor })),
+);
 import { MarkdownPreview } from './MarkdownPreview';
 import { tauriInvoke } from '../lib/tauriCommands';
 import { useEditorStore } from '../stores/editorStore';
@@ -455,12 +460,14 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '', selectedFile
                     isMarkdown && markdownView === 'split' ? '1px solid #1c2831' : 'none',
                 }}
               >
-                <MonacoEditor
-                  filePath={activeFile || ''}
-                  content={currentContent}
-                  onChange={handleEditorChange}
-                  onSave={handleSave}
-                />
+                <Suspense fallback={<div className="editor-loading">Loading editor…</div>}>
+                  <MonacoEditor
+                    filePath={activeFile || ''}
+                    content={currentContent}
+                    onChange={handleEditorChange}
+                    onSave={handleSave}
+                  />
+                </Suspense>
               </div>
             )}
             {isMarkdown && markdownView !== 'editor' && (

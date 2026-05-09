@@ -1,0 +1,421 @@
+name = "Material"
+author = "Orbit"
+version = "1.0"
+
+# A Material-Icon-Theme-flavored palette. Uses Nerd Font glyphs but tints
+# them with Material Design's official brand colors for each language. If
+# you don't have a Nerd Font, glyphs fall back to symbol-font shapes via
+# Orbit's CSS font stack.
+
+# ─── Defaults ────────────────────────────────────────────────────────────────
+[icon.default_file]
+text = ""
+fg = "#90a4ae"
+
+[icon.default_dir]
+text = ""
+fg = "#90caf9"
+
+[icon.default_cluster]
+text = ""
+fg = "#ffb74d"
+
+# ─── Folder names ───────────────────────────────────────────────────────────
+[[icon.dirs]]
+name = ".git"
+text = ""
+fg = "#f44336"
+[[icon.dirs]]
+name = ".github"
+text = ""
+fg = "#90a4ae"
+[[icon.dirs]]
+name = "node_modules"
+text = ""
+fg = "#cddc39"
+[[icon.dirs]]
+name = "src"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "lib"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "target"
+text = ""
+fg = "#ef9a9a"
+[[icon.dirs]]
+name = "dist"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "build"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "tests"
+text = ""
+fg = "#ffb74d"
+[[icon.dirs]]
+name = "test"
+text = ""
+fg = "#ffb74d"
+[[icon.dirs]]
+name = "docs"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "assets"
+text = ""
+fg = "#ffb74d"
+[[icon.dirs]]
+name = "public"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "scripts"
+text = ""
+fg = "#90a4ae"
+[[icon.dirs]]
+name = ".vscode"
+text = ""
+fg = "#0078d4"
+[[icon.dirs]]
+name = ".idea"
+text = ""
+fg = "#aa3aff"
+[[icon.dirs]]
+name = "venv"
+text = ""
+fg = "#ffb300"
+[[icon.dirs]]
+name = ".venv"
+text = ""
+fg = "#ffb300"
+[[icon.dirs]]
+name = "Documents"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "Downloads"
+text = ""
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "Pictures"
+text = ""
+fg = "#fdd835"
+[[icon.dirs]]
+name = "Music"
+text = ""
+fg = "#ab47bc"
+[[icon.dirs]]
+name = "Videos"
+text = ""
+fg = "#ec407a"
+
+# ─── Languages — Material brand colors ──────────────────────────────────────
+[[icon.exts]]
+name = "ts"
+text = ""
+fg = "#3178c6"
+[[icon.exts]]
+name = "tsx"
+text = ""
+fg = "#3178c6"
+[[icon.exts]]
+name = "js"
+text = ""
+fg = "#f7df1e"
+[[icon.exts]]
+name = "jsx"
+text = ""
+fg = "#61dafb"
+[[icon.exts]]
+name = "rs"
+text = ""
+fg = "#dea584"
+[[icon.exts]]
+name = "py"
+text = ""
+fg = "#3776ab"
+[[icon.exts]]
+name = "go"
+text = ""
+fg = "#00add8"
+[[icon.exts]]
+name = "java"
+text = ""
+fg = "#ed8b00"
+[[icon.exts]]
+name = "kt"
+text = ""
+fg = "#7f52ff"
+[[icon.exts]]
+name = "c"
+text = ""
+fg = "#a8b9cc"
+[[icon.exts]]
+name = "cpp"
+text = ""
+fg = "#00599c"
+[[icon.exts]]
+name = "h"
+text = ""
+fg = "#a8b9cc"
+[[icon.exts]]
+name = "cs"
+text = ""
+fg = "#9b4f96"
+[[icon.exts]]
+name = "rb"
+text = ""
+fg = "#cc342d"
+[[icon.exts]]
+name = "php"
+text = ""
+fg = "#777bb4"
+[[icon.exts]]
+name = "swift"
+text = ""
+fg = "#fa7343"
+[[icon.exts]]
+name = "lua"
+text = ""
+fg = "#000080"
+[[icon.exts]]
+name = "zig"
+text = ""
+fg = "#f7a41d"
+[[icon.exts]]
+name = "ex"
+text = ""
+fg = "#6e4a7e"
+[[icon.exts]]
+name = "exs"
+text = ""
+fg = "#6e4a7e"
+[[icon.exts]]
+name = "hs"
+text = ""
+fg = "#5d4f85"
+[[icon.exts]]
+name = "scala"
+text = ""
+fg = "#dc322f"
+[[icon.exts]]
+name = "clj"
+text = ""
+fg = "#5881d8"
+[[icon.exts]]
+name = "dart"
+text = ""
+fg = "#0175c2"
+[[icon.exts]]
+name = "jl"
+text = ""
+fg = "#9558b2"
+[[icon.exts]]
+name = "r"
+text = ""
+fg = "#276dc3"
+
+# ─── Shell ──────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "sh"
+text = ""
+fg = "#4eaa25"
+[[icon.exts]]
+name = "bash"
+text = ""
+fg = "#4eaa25"
+[[icon.exts]]
+name = "zsh"
+text = ""
+fg = "#4eaa25"
+[[icon.exts]]
+name = "fish"
+text = ""
+fg = "#4eaa25"
+
+# ─── Markup / docs ──────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "md"
+text = ""
+fg = "#42a5f5"
+[[icon.exts]]
+name = "mdx"
+text = ""
+fg = "#42a5f5"
+[[icon.exts]]
+name = "txt"
+text = ""
+fg = "#90a4ae"
+[[icon.exts]]
+name = "pdf"
+text = ""
+fg = "#e53935"
+
+# ─── Web ────────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "html"
+text = ""
+fg = "#e44d26"
+[[icon.exts]]
+name = "css"
+text = ""
+fg = "#1572b6"
+[[icon.exts]]
+name = "scss"
+text = ""
+fg = "#cf649a"
+[[icon.exts]]
+name = "vue"
+text = "﵂"
+fg = "#41b883"
+[[icon.exts]]
+name = "svelte"
+text = ""
+fg = "#ff3e00"
+[[icon.exts]]
+name = "astro"
+text = ""
+fg = "#ff5d01"
+
+# ─── Data ───────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "json"
+text = ""
+fg = "#fdd835"
+[[icon.exts]]
+name = "toml"
+text = ""
+fg = "#9c4221"
+[[icon.exts]]
+name = "yaml"
+text = ""
+fg = "#cb171e"
+[[icon.exts]]
+name = "yml"
+text = ""
+fg = "#cb171e"
+[[icon.exts]]
+name = "xml"
+text = ""
+fg = "#fb7c00"
+[[icon.exts]]
+name = "csv"
+text = ""
+fg = "#43a047"
+[[icon.exts]]
+name = "sql"
+text = ""
+fg = "#90a4ae"
+
+# ─── Images ─────────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "png"
+text = ""
+fg = "#ab47bc"
+[[icon.exts]]
+name = "jpg"
+text = ""
+fg = "#ab47bc"
+[[icon.exts]]
+name = "jpeg"
+text = ""
+fg = "#ab47bc"
+[[icon.exts]]
+name = "gif"
+text = ""
+fg = "#ab47bc"
+[[icon.exts]]
+name = "svg"
+text = "ﰟ"
+fg = "#ffb13b"
+[[icon.exts]]
+name = "webp"
+text = ""
+fg = "#ab47bc"
+
+# ─── Audio / Video ──────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "mp3"
+text = ""
+fg = "#ab47bc"
+[[icon.exts]]
+name = "wav"
+text = ""
+fg = "#ab47bc"
+[[icon.exts]]
+name = "flac"
+text = ""
+fg = "#ab47bc"
+[[icon.exts]]
+name = "mp4"
+text = ""
+fg = "#ec407a"
+[[icon.exts]]
+name = "mkv"
+text = ""
+fg = "#ec407a"
+[[icon.exts]]
+name = "mov"
+text = ""
+fg = "#ec407a"
+
+# ─── Archives ───────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "zip"
+text = ""
+fg = "#fbc02d"
+[[icon.exts]]
+name = "tar"
+text = ""
+fg = "#fbc02d"
+[[icon.exts]]
+name = "gz"
+text = ""
+fg = "#fbc02d"
+[[icon.exts]]
+name = "7z"
+text = ""
+fg = "#fbc02d"
+
+# ─── Special filenames ──────────────────────────────────────────────────────
+[[icon.files]]
+name = "Cargo.toml"
+text = ""
+fg = "#dea584"
+[[icon.files]]
+name = "package.json"
+text = ""
+fg = "#cb3837"
+[[icon.files]]
+name = "tsconfig.json"
+text = ""
+fg = "#3178c6"
+[[icon.files]]
+name = "Dockerfile"
+text = ""
+fg = "#0db7ed"
+[[icon.files]]
+name = "Makefile"
+text = ""
+fg = "#90a4ae"
+[[icon.files]]
+name = "README.md"
+text = ""
+fg = "#42a5f5"
+[[icon.files]]
+name = "LICENSE"
+text = ""
+fg = "#fdd835"
+[[icon.files]]
+name = ".gitignore"
+text = ""
+fg = "#f44336"
+[[icon.files]]
+name = ".env"
+text = ""
+fg = "#fdd835"

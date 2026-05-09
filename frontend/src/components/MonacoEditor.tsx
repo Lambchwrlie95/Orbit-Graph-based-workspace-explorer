@@ -197,6 +197,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [minimapEnabled, setMinimapEnabled] = useState(() => readBooleanSetting("orbit:settings:monacoMinimap", false));
   
   const language = detectLanguage(filePath);
   
@@ -237,6 +238,16 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
       editor.focus();
     }
   }, [filePath, content]);
+
+  useEffect(() => {
+    const refreshSettings = () => {
+      const enabled = readBooleanSetting("orbit:settings:monacoMinimap", false);
+      setMinimapEnabled(enabled);
+      editorRef.current?.updateOptions({ minimap: { enabled } });
+    };
+    document.addEventListener("orbit:settings-changed", refreshSettings);
+    return () => document.removeEventListener("orbit:settings-changed", refreshSettings);
+  }, []);
   
   // Handle content changes
   const handleChange = useCallback((value: string | undefined) => {
@@ -245,64 +256,50 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
     }
   }, [onChange]);
   
-  // Configure editor options
+  // Light defaults — minimap, smooth animations, suggestions, format-on-paste
+  // and bracket-pair colorization are all OFF by default. They're nice but
+  // they're also Monaco's biggest CPU costs. Re-enable per-feature later via
+  // an Editor Mode setting if needed.
   const editorOptions: editor.IStandaloneEditorConstructionOptions = {
-    // Display
     lineNumbers: 'on',
-    minimap: {
-      enabled: true,
-      showSlider: 'mouseover',
-    },
+    minimap: { enabled: minimapEnabled },
     wordWrap: 'on',
     fontSize: 14,
     fontFamily: 'JetBrains Mono, Fira Code, Consolas, monospace',
-    
-    // Behavior
+
     readOnly,
     automaticLayout: true,
     scrollBeyondLastLine: false,
-    smoothScrolling: true,
-    cursorSmoothCaretAnimation: 'on',
-    
-    // Editing
+    smoothScrolling: false,
+    cursorSmoothCaretAnimation: 'off',
+
     tabSize: 2,
     insertSpaces: true,
     detectIndentation: true,
     trimAutoWhitespace: true,
-    
-    // Search
-    find: {
-      addExtraSpaceOnTop: false,
-    },
-    
-    // Appearance
+
+    find: { addExtraSpaceOnTop: false },
+
     renderLineHighlight: 'all',
     renderWhitespace: 'selection',
-    renderControlCharacters: true,
-    
-    // Folding
+    renderControlCharacters: false,
+
     folding: true,
     foldingStrategy: 'auto',
     showFoldingControls: 'mouseover',
-    
-    // Guides
+
     guides: {
-      bracketPairs: true,
+      bracketPairs: false,
       indentation: true,
     },
-    
-    // Bracket matching
-    bracketPairColorization: {
-      enabled: true,
-    },
-    
-    // Quick suggestions
-    quickSuggestions: true,
-    suggestOnTriggerCharacters: true,
-    acceptSuggestionOnEnter: 'on',
-    
-    // Formatting
-    formatOnPaste: true,
+
+    bracketPairColorization: { enabled: false },
+
+    quickSuggestions: false,
+    suggestOnTriggerCharacters: false,
+    acceptSuggestionOnEnter: 'off',
+
+    formatOnPaste: false,
     formatOnType: false,
   };
   
@@ -356,3 +353,13 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
 };
 
 export default MonacoEditor;
+
+function readBooleanSetting(key: string, fallback: boolean) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
+    return typeof parsed === "boolean" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}

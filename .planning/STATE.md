@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Orbit Desktop Experience
 status: stabilizing
-stopped_at: Desktop launcher and graph icon-theme wiring verified
-last_updated: "2026-05-09T01:41:20Z"
-last_activity: 2026-05-08
+stopped_at: Command palette, settings panel, and performance presets wired
+last_updated: "2026-05-09T18:45:00Z"
+last_activity: 2026-05-09
 progress:
   total_phases: 8
   completed_phases: 7
@@ -71,7 +71,7 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 
 **Current Phase**: Phase 8 partial implementation and stabilization
 **Current Activity**: The workbench now follows the graph-file-manager reference more closely: a thin top menu, left sidebar for Explorer/Search/Assets/Status, right sidebar for Inspector/Code, and the center surface reserved for the graph only. Bookmarks are localStorage-backed, the inspector now owns text/image/code previews, image dimensions/colors, and code analysis panels, graph/search/folder actions route into side panels rather than replacing the graph center, and frontend Tauri calls now pass through a typed command boundary checked against the Rust registry.
-**Last activity**: 2026-05-08 — Tightened desktop launcher install/uninstall behavior and verified icon plumbing. Install now removes known stale Orbit launcher variants before writing `orbit.desktop`; uninstall removes known Orbit desktop-entry variants; desktop cache refresh includes `xdg-desktop-menu forceupdate` and KDE service cache refresh when available; desktop-entry categories were normalized so templates pass `desktop-file-validate`. The Rust icon-theme Tauri commands are now present in the frontend typed command catalog, and Graph icon mode resolves glyph/color through the active icon theme with hardcoded glyphs as fallback. The v2 TODO is not fully complete yet: Explorer Grid/Columns components exist, but the current side Explorer surface only exposes List and Tree.
+**Last activity**: 2026-05-09 — Completed the half-wired rename flow: the inspector inline rename input renders, submits on Enter/blur, cancels on Escape, and `main.tsx` refreshes/re-selects the renamed item. Added a Ctrl+K command palette with Open folder, Rescan workspace, Toggle labels, Toggle icons mode, Open selected in `$EDITOR`, Copy selected path, Open icon editor, Open themes folder, Clear thumbnail cache, and Settings. Added a sectioned Settings panel for General, Performance, Editor, Graph, Assets, Icons, and External Apps. Performance presets now persist and drive graph node limits, graph icon overlay caps, thumbnail memory caps, Monaco minimap behavior, and the deep-scan flag. Right-click context menu wiring is present for New File, New Folder, Rename, Copy path, Open, and Open in `$EDITOR`; verified by code inspection and build checks, but not yet with manual native filesystem UAT.
 **Developer handoff**: See `.planning/HANDOFF.md` for the current baseline, dirty worktree notes, graph state, and next priorities.
 
 **v1.0 Progress**: [##########] 100% COMPLETE
@@ -245,7 +245,7 @@ Stopped at: Graph-first workbench refactor with typed command boundary and build
 Resume file: `.planning/phases/07-asset-mode/07-asset-mode-SUMMARY.md`
 Handoff file: `.planning/HANDOFF.md`
 
-Next: Add deeper smoke tests, finish Phase 8 markdown/backlinks, and complete asset duplicate/similar-image flows
+Next: Add deeper smoke tests/manual UAT for context-menu filesystem actions, finish Phase 8 markdown/backlinks, expose Explorer Grid/Columns in the side Explorer surface, and complete asset duplicate/similar-image flows
 
 ---
 

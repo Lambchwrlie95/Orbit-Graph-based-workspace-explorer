@@ -1,5 +1,5 @@
-import React, { memo } from "react";
-import { Copy, ExternalLink, FileCode, FolderOpen, Image as ImageIcon, RefreshCcw } from "lucide-react";
+import React, { memo, useState } from "react";
+import { Copy, ExternalLink, FileCode, FolderOpen, Image as ImageIcon, RefreshCcw, Pencil } from "lucide-react";
 import { FileRecord, PreviewPayload } from "../types";
 import { formatBytes, formatDate, isImageFile, isTextFile, shortPath } from "../utils";
 import { isEditableFile } from "./CodeMode";
@@ -7,6 +7,7 @@ import { CodeAnalysisPanel } from "./inspector/CodeAnalysisPanel";
 import { ImageAnalysisPanel } from "./inspector/ImageAnalysisPanel";
 import { MarkdownAnalysisPanel } from "./inspector/MarkdownAnalysisPanel";
 import { useIconTheme } from "../hooks/useIconTheme";
+import { tauriInvoke } from "../lib/tauriCommands";
 
 interface InspectorProps {
   record: FileRecord | null;
@@ -17,6 +18,7 @@ interface InspectorProps {
   onSelectPath?: (path: string) => void;
   onNavigate?: (path: string) => void;
   onEdit?: (record: FileRecord) => void;
+  onRenamed?: (oldPath: string, newPath: string) => void;
 }
 
 type PreviewKind = "text" | "image" | "directory" | "binary" | "error";
@@ -30,8 +32,35 @@ function InspectorComponent({
   onSelectPath,
   onNavigate,
   onEdit,
+  onRenamed,
 }: InspectorProps) {
   const { resolve: resolveIcon } = useIconTheme();
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const startRename = () => {
+    if (!record) return;
+    setRenameValue(record.name);
+    setRenameError(null);
+    setRenaming(true);
+  };
+  const submitRename = async () => {
+    if (!record || !renameValue.trim() || renameValue === record.name) {
+      setRenaming(false);
+      return;
+    }
+    try {
+      const newPath = await tauriInvoke("rename", {
+        path: record.path,
+        newName: renameValue.trim(),
+      });
+      onRenamed?.(record.path, newPath);
+      setRenaming(false);
+    } catch (e) {
+      setRenameError(String(e));
+    }
+  };
   if (!record) {
     return (
       <div className="inspector sidebar-panel">
@@ -86,6 +115,13 @@ function InspectorComponent({
             >
               <Copy size={13} strokeWidth={2} />
             </button>
+            <button
+              type="button"
+              onClick={startRename}
+              title="Rename"
+            >
+              <Pencil size={13} strokeWidth={2} />
+            </button>
             {!record.isDir && onEdit && isEditableFile(record) && (
               <button
                 type="button"
@@ -110,8 +146,31 @@ function InspectorComponent({
                 {icon.text}
               </span>
               <div className="record-title">
-                <h3 title={record.name}>{record.name}</h3>
-                <p title={record.path}>{shortPath(record.path)}</p>
+                {renaming ? (
+                  <>
+                    <input
+                      autoFocus
+                      type="text"
+                      className="inspector-rename-input"
+                      value={renameValue}
+                      onChange={(e) => {
+                        setRenameValue(e.target.value);
+                        setRenameError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void submitRename();
+                        else if (e.key === "Escape") setRenaming(false);
+                      }}
+                      onBlur={() => void submitRename()}
+                    />
+                    {renameError && <p className="inspector-rename-error">{renameError}</p>}
+                  </>
+                ) : (
+                  <>
+                    <h3 title={record.name}>{record.name}</h3>
+                    <p title={record.path}>{shortPath(record.path)}</p>
+                  </>
+                )}
               </div>
             </div>
           );

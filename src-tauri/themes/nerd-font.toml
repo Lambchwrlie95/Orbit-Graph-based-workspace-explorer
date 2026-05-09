@@ -338,3 +338,1047 @@ fg = "#94a3b8"
 name = "log"
 text = "\uF18D"
 fg = "#94a3b8"
+
+# \u2500\u2500\u2500 Languages (extended) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "lua"
+text = "\uE620"
+fg = "#51a0cf"
+[[icon.exts]]
+name = "zig"
+text = "\uE6A9"
+fg = "#f7a41d"
+[[icon.exts]]
+name = "nim"
+text = "\uE677"
+fg = "#f3d400"
+[[icon.exts]]
+name = "cr"
+text = "\uE62F"
+fg = "#000000"
+[[icon.exts]]
+name = "ex"
+text = "\uE62D"
+fg = "#a074c4"
+[[icon.exts]]
+name = "exs"
+text = "\uE62D"
+fg = "#a074c4"
+[[icon.exts]]
+name = "erl"
+text = "\uE7B1"
+fg = "#a90533"
+[[icon.exts]]
+name = "hrl"
+text = "\uE7B1"
+fg = "#a90533"
+[[icon.exts]]
+name = "hs"
+text = "\uE777"
+fg = "#a074c4"
+[[icon.exts]]
+name = "lhs"
+text = "\uE777"
+fg = "#a074c4"
+[[icon.exts]]
+name = "ml"
+text = "\uE67A"
+fg = "#e37933"
+[[icon.exts]]
+name = "mli"
+text = "\uE67A"
+fg = "#e37933"
+[[icon.exts]]
+name = "scala"
+text = "\uE737"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "sc"
+text = "\uE737"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "clj"
+text = "\uE768"
+fg = "#8dc149"
+[[icon.exts]]
+name = "cljs"
+text = "\uE76A"
+fg = "#519aba"
+[[icon.exts]]
+name = "edn"
+text = "\uE768"
+fg = "#519aba"
+[[icon.exts]]
+name = "fs"
+text = "\uE7A7"
+fg = "#519aba"
+[[icon.exts]]
+name = "fsx"
+text = "\uE7A7"
+fg = "#519aba"
+[[icon.exts]]
+name = "dart"
+text = "\uE798"
+fg = "#03589c"
+[[icon.exts]]
+name = "groovy"
+text = "\uE775"
+fg = "#4298b8"
+[[icon.exts]]
+name = "r"
+text = "\uF25D"
+fg = "#358a5b"
+[[icon.exts]]
+name = "rmd"
+text = "\uF25D"
+fg = "#519aba"
+[[icon.exts]]
+name = "jl"
+text = "\uE624"
+fg = "#a270ba"
+[[icon.exts]]
+name = "sol"
+text = "\uE6B5"
+fg = "#363636"
+[[icon.exts]]
+name = "vala"
+text = "\uE69E"
+fg = "#7239b3"
+[[icon.exts]]
+name = "nix"
+text = "\uF313"
+fg = "#7e7eff"
+[[icon.exts]]
+name = "asm"
+text = "\uE637"
+fg = "#a074c4"
+[[icon.exts]]
+name = "s"
+text = "\uE637"
+fg = "#a074c4"
+[[icon.exts]]
+name = "ada"
+text = "\uE637"
+fg = "#a074c4"
+[[icon.exts]]
+name = "pas"
+text = "\uE637"
+fg = "#0096d8"
+[[icon.exts]]
+name = "f90"
+text = "\uE637"
+fg = "#734f96"
+[[icon.exts]]
+name = "f95"
+text = "\uE637"
+fg = "#734f96"
+[[icon.exts]]
+name = "vhd"
+text = "\uF85A"
+fg = "#a074c4"
+[[icon.exts]]
+name = "v"
+text = "\uF85A"
+fg = "#a074c4"
+[[icon.exts]]
+name = "sv"
+text = "\uF85A"
+fg = "#a074c4"
+
+# \u2500\u2500\u2500 Web frontend (extended) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "astro"
+text = "\uE6B3"
+fg = "#ff5d01"
+[[icon.exts]]
+name = "mdx"
+text = "\uE719"
+fg = "#519aba"
+[[icon.exts]]
+name = "ejs"
+text = "\uE618"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "hbs"
+text = "\uE60F"
+fg = "#f0772b"
+[[icon.exts]]
+name = "liquid"
+text = "\uE60F"
+fg = "#7ab55c"
+[[icon.exts]]
+name = "pug"
+text = "\uE686"
+fg = "#a86454"
+[[icon.exts]]
+name = "twig"
+text = "\uE61C"
+fg = "#aabf47"
+[[icon.exts]]
+name = "haml"
+text = "\uE664"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "slim"
+text = "\uE664"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "less"
+text = "\uE60B"
+fg = "#519aba"
+[[icon.exts]]
+name = "stylus"
+text = "\uE600"
+fg = "#8dc149"
+[[icon.exts]]
+name = "sass"
+text = "\uE603"
+fg = "#f55385"
+[[icon.exts]]
+name = "graphql"
+text = "\uE662"
+fg = "#e10098"
+[[icon.exts]]
+name = "gql"
+text = "\uE662"
+fg = "#e10098"
+
+# \u2500\u2500\u2500 Shaders / GPU \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "glsl"
+text = "\uE676"
+fg = "#5586a4"
+[[icon.exts]]
+name = "frag"
+text = "\uE676"
+fg = "#5586a4"
+[[icon.exts]]
+name = "vert"
+text = "\uE676"
+fg = "#5586a4"
+[[icon.exts]]
+name = "comp"
+text = "\uE676"
+fg = "#5586a4"
+[[icon.exts]]
+name = "hlsl"
+text = "\uE676"
+fg = "#a074c4"
+[[icon.exts]]
+name = "wgsl"
+text = "\uE676"
+fg = "#519aba"
+
+# \u2500\u2500\u2500 Schemas / IDLs \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "proto"
+text = "\uE60B"
+fg = "#519aba"
+[[icon.exts]]
+name = "thrift"
+text = "\uE60B"
+fg = "#a074c4"
+[[icon.exts]]
+name = "capnp"
+text = "\uE60B"
+fg = "#519aba"
+[[icon.exts]]
+name = "avsc"
+text = "\uE60B"
+fg = "#cbcb41"
+
+# \u2500\u2500\u2500 Config files (extended) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "ini"
+text = "\uE615"
+fg = "#6d8086"
+[[icon.exts]]
+name = "cfg"
+text = "\uE615"
+fg = "#6d8086"
+[[icon.exts]]
+name = "conf"
+text = "\uE615"
+fg = "#6d8086"
+[[icon.exts]]
+name = "env"
+text = "\uF462"
+fg = "#faf743"
+[[icon.exts]]
+name = "properties"
+text = "\uE615"
+fg = "#6d8086"
+[[icon.exts]]
+name = "tfvars"
+text = "\uF1BB"
+fg = "#5c4ee5"
+[[icon.exts]]
+name = "tf"
+text = "\uF1BB"
+fg = "#5c4ee5"
+[[icon.exts]]
+name = "hcl"
+text = "\uF1BB"
+fg = "#5c4ee5"
+[[icon.exts]]
+name = "pp"
+text = "\uE631"
+fg = "#ffae1a"
+[[icon.exts]]
+name = "j2"
+text = "\uE66F"
+fg = "#b03931"
+
+# \u2500\u2500\u2500 Data formats \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "csv"
+text = "\uF1C3"
+fg = "#89e051"
+[[icon.exts]]
+name = "tsv"
+text = "\uF1C3"
+fg = "#89e051"
+[[icon.exts]]
+name = "jsonl"
+text = "\uE60B"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "ndjson"
+text = "\uE60B"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "parquet"
+text = "\uF1C0"
+fg = "#a074c4"
+[[icon.exts]]
+name = "arrow"
+text = "\uF1C0"
+fg = "#a074c4"
+[[icon.exts]]
+name = "feather"
+text = "\uF1C0"
+fg = "#a074c4"
+[[icon.exts]]
+name = "orc"
+text = "\uF1C0"
+fg = "#a074c4"
+[[icon.exts]]
+name = "h5"
+text = "\uF1C0"
+fg = "#519aba"
+[[icon.exts]]
+name = "hdf5"
+text = "\uF1C0"
+fg = "#519aba"
+[[icon.exts]]
+name = "zarr"
+text = "\uF1C0"
+fg = "#519aba"
+[[icon.exts]]
+name = "npy"
+text = "\uF1C0"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "npz"
+text = "\uF1C0"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "db"
+text = "\uF1C0"
+fg = "#dad8d8"
+[[icon.exts]]
+name = "sqlite"
+text = "\uE7C4"
+fg = "#519aba"
+[[icon.exts]]
+name = "sqlite3"
+text = "\uE7C4"
+fg = "#519aba"
+
+# \u2500\u2500\u2500 Notebooks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "ipynb"
+text = "\uE678"
+fg = "#f37726"
+
+# \u2500\u2500\u2500 Documents (office) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "doc"
+text = "\uF1C2"
+fg = "#185abd"
+[[icon.exts]]
+name = "docx"
+text = "\uF1C2"
+fg = "#185abd"
+[[icon.exts]]
+name = "xls"
+text = "\uF1C3"
+fg = "#107c41"
+[[icon.exts]]
+name = "xlsx"
+text = "\uF1C3"
+fg = "#107c41"
+[[icon.exts]]
+name = "ppt"
+text = "\uF1C4"
+fg = "#d24726"
+[[icon.exts]]
+name = "pptx"
+text = "\uF1C4"
+fg = "#d24726"
+[[icon.exts]]
+name = "odt"
+text = "\uF1C2"
+fg = "#185abd"
+[[icon.exts]]
+name = "ods"
+text = "\uF1C3"
+fg = "#107c41"
+[[icon.exts]]
+name = "odp"
+text = "\uF1C4"
+fg = "#d24726"
+[[icon.exts]]
+name = "rtf"
+text = "\uF1C2"
+fg = "#519aba"
+[[icon.exts]]
+name = "epub"
+text = "\uF02D"
+fg = "#79b8ff"
+[[icon.exts]]
+name = "mobi"
+text = "\uF02D"
+fg = "#79b8ff"
+[[icon.exts]]
+name = "azw"
+text = "\uF02D"
+fg = "#79b8ff"
+[[icon.exts]]
+name = "azw3"
+text = "\uF02D"
+fg = "#79b8ff"
+[[icon.exts]]
+name = "fb2"
+text = "\uF02D"
+fg = "#79b8ff"
+[[icon.exts]]
+name = "djvu"
+text = "\uF02D"
+fg = "#79b8ff"
+
+# \u2500\u2500\u2500 Media (extended) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "mov"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.exts]]
+name = "webm"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.exts]]
+name = "avi"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.exts]]
+name = "flv"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.exts]]
+name = "m4v"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.exts]]
+name = "ogv"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.exts]]
+name = "ogg"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "opus"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "m4a"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "aac"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "aiff"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "ape"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "wma"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "alac"
+text = "\uF001"
+fg = "#a78bfa"
+
+# \u2500\u2500\u2500 Images (extended) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "bmp"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "tiff"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "tif"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "heic"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "heif"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "avif"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "raw"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "psd"
+text = "\uE7B8"
+fg = "#26c9ff"
+[[icon.exts]]
+name = "ai"
+text = "\uE7B4"
+fg = "#ff7700"
+[[icon.exts]]
+name = "xcf"
+text = "\uF1C5"
+fg = "#635b46"
+[[icon.exts]]
+name = "kra"
+text = "\uF1C5"
+fg = "#3daee9"
+[[icon.exts]]
+name = "fig"
+text = "\uF6E2"
+fg = "#f24e1e"
+[[icon.exts]]
+name = "sketch"
+text = "\uF6E2"
+fg = "#fdb300"
+
+# \u2500\u2500\u2500 Fonts \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "ttf"
+text = "\uF031"
+fg = "#dad8d8"
+[[icon.exts]]
+name = "otf"
+text = "\uF031"
+fg = "#dad8d8"
+[[icon.exts]]
+name = "woff"
+text = "\uF031"
+fg = "#dad8d8"
+[[icon.exts]]
+name = "woff2"
+text = "\uF031"
+fg = "#dad8d8"
+[[icon.exts]]
+name = "eot"
+text = "\uF031"
+fg = "#dad8d8"
+
+# \u2500\u2500\u2500 3D / CAD \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "blend"
+text = "\uF1B2"
+fg = "#ea7600"
+[[icon.exts]]
+name = "fbx"
+text = "\uF1B2"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "obj"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "gltf"
+text = "\uF1B2"
+fg = "#87b249"
+[[icon.exts]]
+name = "glb"
+text = "\uF1B2"
+fg = "#87b249"
+[[icon.exts]]
+name = "dae"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "stl"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "ply"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "usd"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "usdz"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "3ds"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "3mf"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "step"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "stp"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "iges"
+text = "\uF1B2"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "dwg"
+text = "\uF1B2"
+fg = "#cb2733"
+[[icon.exts]]
+name = "dxf"
+text = "\uF1B2"
+fg = "#cb2733"
+
+# \u2500\u2500\u2500 GIS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "kml"
+text = "\uF124"
+fg = "#3a9c47"
+[[icon.exts]]
+name = "kmz"
+text = "\uF124"
+fg = "#3a9c47"
+[[icon.exts]]
+name = "gpx"
+text = "\uF124"
+fg = "#3a9c47"
+[[icon.exts]]
+name = "geojson"
+text = "\uF124"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "shp"
+text = "\uF124"
+fg = "#3a9c47"
+[[icon.exts]]
+name = "gpkg"
+text = "\uF124"
+fg = "#3a9c47"
+
+# \u2500\u2500\u2500 Archives (extended) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "bz2"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "xz"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "zst"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "lz"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "lzma"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "iso"
+text = "\uF1C0"
+fg = "#a074c4"
+[[icon.exts]]
+name = "img"
+text = "\uF1C0"
+fg = "#a074c4"
+[[icon.exts]]
+name = "dmg"
+text = "\uF1C0"
+fg = "#a074c4"
+
+# \u2500\u2500\u2500 Binaries / packages \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "exe"
+text = "\uF17A"
+fg = "#9f9f9f"
+[[icon.exts]]
+name = "msi"
+text = "\uF17A"
+fg = "#9f9f9f"
+[[icon.exts]]
+name = "dll"
+text = "\uF17A"
+fg = "#9f9f9f"
+[[icon.exts]]
+name = "so"
+text = "\uF17C"
+fg = "#dcb67a"
+[[icon.exts]]
+name = "dylib"
+text = "\uF179"
+fg = "#dad8d8"
+[[icon.exts]]
+name = "deb"
+text = "\uE77D"
+fg = "#a80030"
+[[icon.exts]]
+name = "rpm"
+text = "\uF17C"
+fg = "#cc0000"
+[[icon.exts]]
+name = "pkg"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "appimage"
+text = "\uF17C"
+fg = "#73c991"
+[[icon.exts]]
+name = "snap"
+text = "\uF17C"
+fg = "#82bea0"
+[[icon.exts]]
+name = "flatpak"
+text = "\uF17C"
+fg = "#4a86cf"
+[[icon.exts]]
+name = "apk"
+text = "\uE70E"
+fg = "#a4c439"
+
+# \u2500\u2500\u2500 Misc \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.exts]]
+name = "patch"
+text = "\uF440"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "diff"
+text = "\uF440"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "bak"
+text = "\uF1DA"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "tmp"
+text = "\uF1DA"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "swp"
+text = "\uF1DA"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "torrent"
+text = "\uF019"
+fg = "#519aba"
+
+# \u2500\u2500\u2500 Special filenames (extended) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.files]]
+name = "pyproject.toml"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.files]]
+name = "requirements.txt"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.files]]
+name = "Pipfile"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.files]]
+name = "Pipfile.lock"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.files]]
+name = "poetry.lock"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.files]]
+name = "setup.py"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.files]]
+name = "yarn.lock"
+text = "\uE6A7"
+fg = "#2c8ebb"
+[[icon.files]]
+name = "pnpm-lock.yaml"
+text = "\uE865"
+fg = "#f9ad00"
+[[icon.files]]
+name = "deno.json"
+text = "\uE628"
+fg = "#000000"
+[[icon.files]]
+name = "deno.jsonc"
+text = "\uE628"
+fg = "#000000"
+[[icon.files]]
+name = "bun.lockb"
+text = "\uE74E"
+fg = "#fbf0df"
+[[icon.files]]
+name = ".editorconfig"
+text = "\uE652"
+fg = "#94a3b8"
+[[icon.files]]
+name = ".prettierrc"
+text = "\uE6B4"
+fg = "#c596c7"
+[[icon.files]]
+name = ".prettierrc.json"
+text = "\uE6B4"
+fg = "#c596c7"
+[[icon.files]]
+name = ".eslintrc"
+text = "\uE655"
+fg = "#4b32c3"
+[[icon.files]]
+name = ".eslintrc.js"
+text = "\uE655"
+fg = "#4b32c3"
+[[icon.files]]
+name = ".eslintrc.json"
+text = "\uE655"
+fg = "#4b32c3"
+[[icon.files]]
+name = ".stylelintrc"
+text = "\uE695"
+fg = "#bbb8b8"
+[[icon.files]]
+name = ".babelrc"
+text = "\uE639"
+fg = "#cbcb41"
+[[icon.files]]
+name = ".nvmrc"
+text = "\uE718"
+fg = "#83cd29"
+[[icon.files]]
+name = ".python-version"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.files]]
+name = ".ruby-version"
+text = "\uE739"
+fg = "#cc3e44"
+[[icon.files]]
+name = ".tool-versions"
+text = "\uF425"
+fg = "#519aba"
+[[icon.files]]
+name = ".envrc"
+text = "\uF462"
+fg = "#faf743"
+[[icon.files]]
+name = "mise.toml"
+text = "\uF425"
+fg = "#519aba"
+[[icon.files]]
+name = ".gitattributes"
+text = "\uE702"
+fg = "#41535b"
+[[icon.files]]
+name = ".gitmodules"
+text = "\uE702"
+fg = "#41535b"
+[[icon.files]]
+name = "CMakeLists.txt"
+text = "\uE673"
+fg = "#6d8086"
+[[icon.files]]
+name = "build.gradle"
+text = "\uE660"
+fg = "#02303a"
+[[icon.files]]
+name = "build.gradle.kts"
+text = "\uE660"
+fg = "#02303a"
+[[icon.files]]
+name = "settings.gradle"
+text = "\uE660"
+fg = "#02303a"
+[[icon.files]]
+name = "pom.xml"
+text = "\uE674"
+fg = "#cc3e44"
+[[icon.files]]
+name = "BUILD"
+text = "\uE63A"
+fg = "#76d275"
+[[icon.files]]
+name = "BUILD.bazel"
+text = "\uE63A"
+fg = "#76d275"
+[[icon.files]]
+name = "WORKSPACE"
+text = "\uE63A"
+fg = "#76d275"
+[[icon.files]]
+name = "MODULE.bazel"
+text = "\uE63A"
+fg = "#76d275"
+[[icon.files]]
+name = "Procfile"
+text = "\uE77F"
+fg = "#a074c4"
+[[icon.files]]
+name = "vite.config.ts"
+text = "\uF40A"
+fg = "#646cff"
+[[icon.files]]
+name = "vite.config.js"
+text = "\uF40A"
+fg = "#646cff"
+[[icon.files]]
+name = "tailwind.config.js"
+text = "\uE6A8"
+fg = "#06b6d4"
+[[icon.files]]
+name = "tailwind.config.ts"
+text = "\uE6A8"
+fg = "#06b6d4"
+[[icon.files]]
+name = "next.config.js"
+text = "\uE756"
+fg = "#cbcb41"
+[[icon.files]]
+name = "nuxt.config.ts"
+text = "\uE6A6"
+fg = "#00dc82"
+[[icon.files]]
+name = "rollup.config.js"
+text = "\uE74E"
+fg = "#cbcb41"
+[[icon.files]]
+name = "webpack.config.js"
+text = "\uF072"
+fg = "#519aba"
+[[icon.files]]
+name = "tauri.conf.json"
+text = "\uE7A8"
+fg = "#fbbf24"
+[[icon.files]]
+name = "CHANGELOG.md"
+text = "\uF48A"
+fg = "#cbcb41"
+[[icon.files]]
+name = "CONTRIBUTING.md"
+text = "\uF48A"
+fg = "#7ab55c"
+[[icon.files]]
+name = "CODE_OF_CONDUCT.md"
+text = "\uF48A"
+fg = "#cbcb41"
+[[icon.files]]
+name = "AUTHORS"
+text = "\uF02D"
+fg = "#cbcb41"
+
+# \u2500\u2500\u2500 More folder names \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+[[icon.dirs]]
+name = "tests"
+text = "\uF188"
+fg = "#fbbf24"
+[[icon.dirs]]
+name = "test"
+text = "\uF188"
+fg = "#fbbf24"
+[[icon.dirs]]
+name = "__tests__"
+text = "\uF188"
+fg = "#fbbf24"
+[[icon.dirs]]
+name = "docs"
+text = "\uF02D"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "doc"
+text = "\uF02D"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "examples"
+text = "\uF120"
+fg = "#a78bfa"
+[[icon.dirs]]
+name = "scripts"
+text = "\uF489"
+fg = "#4d5a5e"
+[[icon.dirs]]
+name = "assets"
+text = "\uF1C5"
+fg = "#fbbf24"
+[[icon.dirs]]
+name = "public"
+text = "\uF0AC"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "static"
+text = "\uF0AC"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "vendor"
+text = "\uE5FA"
+fg = "#cbcb41"
+[[icon.dirs]]
+name = ".vscode"
+text = "\uE70C"
+fg = "#0078d4"
+[[icon.dirs]]
+name = ".idea"
+text = "\uE7B5"
+fg = "#aa3aff"
+[[icon.dirs]]
+name = ".husky"
+text = "\uF7AB"
+fg = "#42b883"
+[[icon.dirs]]
+name = "node_modules"
+text = "\uE5FA"
+fg = "#cbcb41"
+[[icon.dirs]]
+name = "venv"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.dirs]]
+name = ".venv"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.dirs]]
+name = "__pycache__"
+text = "\uE73C"
+fg = "#94a3b8"
