@@ -280,6 +280,13 @@ dd {
   color: #a8bbc8;
   font-size: 10px;
   font-weight: 800;
+  /* Same fallback chain as graph glyphs so Inspector + tree icons stay
+     consistent across themes and don't show empty boxes for ◉ ⬡ etc. */
+  font-family:
+    "Symbols Nerd Font", "SymbolsNerdFont", "JetBrainsMono Nerd Font",
+    "Hack Nerd Font", "FiraCode Nerd Font", "Symbola",
+    "Noto Sans Symbols 2", "Noto Sans Symbols", "Apple Symbols",
+    "Segoe UI Symbol", "DejaVu Sans", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 .file-icon.folder {
@@ -2862,6 +2869,7 @@ dt {
 .graph-workbench .graph-canvas {
   position: absolute;
   inset: 0;
+  z-index: 1;
 }
 
 .graph-commandbar {
@@ -2869,11 +2877,13 @@ dt {
   z-index: 4;
   top: 10px;
   left: 10px;
-  right: 10px;
-  display: grid;
-  grid-template-columns: auto auto;
+  /* Leave room on the right for the minimap (~150px) so the toggle group never
+     slides under it when the canvas is narrow. */
+  right: 160px;
+  display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   pointer-events: none;
 }
 
@@ -2928,15 +2938,16 @@ dt {
 }
 
 .graph-switches {
-  justify-self: end;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  margin-left: auto;
 }
 
 .graph-workbench .graph-stats {
   top: 52px;
   left: 10px;
-  max-width: min(760px, calc(100% - 300px));
+  /* Stop short of the minimap on the right edge */
+  max-width: min(760px, calc(100% - 320px));
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -3611,6 +3622,56 @@ dt {
   left: 118px;
 }
 
+.menu-popover-icons {
+  left: 60px;
+  min-width: 220px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.menu-section-label {
+  padding: 6px 8px 2px;
+  color: var(--orbit-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.menu-section-empty {
+  padding: 6px 8px;
+  color: var(--orbit-faint);
+  font-style: italic;
+}
+
+.menu-item-check {
+  width: 12px;
+  margin-right: 6px;
+  color: var(--orbit-accent-2);
+  font-size: 11px;
+  text-align: center;
+}
+
+.menu-item-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-item-tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--orbit-border);
+  border-radius: 3px;
+  color: var(--orbit-faint);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.menu-item.menu-item-checked {
+  background: rgba(125, 211, 252, 0.06);
+}
+
 .menu-item {
   display: flex;
   width: 100%;
@@ -4164,13 +4225,21 @@ dt {
   inset: 0;
   pointer-events: none;
   overflow: hidden;
-  z-index: 4;
+  z-index: 3;
 }
 
 .graph-node-glyph {
   position: absolute;
   transform: translate(-50%, -50%);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  /* Nerd Font themes need their PUA glyphs first; fall back to symbol fonts
+     for the bundled Unicode-shape theme (◉ ⬡ ⬖ ⊞ etc) — most monospace
+     fonts on Linux don't carry these, which is why glyphs were rendering
+     as empty boxes. */
+  font-family:
+    "Symbols Nerd Font", "SymbolsNerdFont", "JetBrainsMono Nerd Font",
+    "Hack Nerd Font", "FiraCode Nerd Font", "Symbola",
+    "Noto Sans Symbols 2", "Noto Sans Symbols", "Apple Symbols",
+    "Segoe UI Symbol", "DejaVu Sans", ui-monospace, "SF Mono", Menlo, monospace;
   font-weight: 600;
   line-height: 1;
   text-align: center;
@@ -4179,7 +4248,7 @@ dt {
     0 1px 4px rgba(0, 0, 0, 0.6);
   user-select: none;
   transition: opacity 0.2s ease;
-  will-change: transform, left, top;
+  will-change: transform;
 }
 
 .preview-kind-badge {

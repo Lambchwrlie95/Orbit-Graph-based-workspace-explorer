@@ -1,0 +1,340 @@
+name = "Nerd Font"
+author = "Orbit (Yazi-compatible)"
+version = "1.0"
+
+# This theme uses Nerd Font (https://www.nerdfonts.com/) Private-Use-Area
+# glyphs. They render as boxes ("tofu") if you don't have a Nerd Font
+# installed AND configured for Orbit's UI font. The glyph palette mirrors
+# yazi-rs/yazi defaults so users coming from Yazi feel at home.
+
+# ─── Defaults ────────────────────────────────────────────────────────────────
+[icon.default_file]
+text = "\uF15B"
+fg = "#a8bbc8"
+
+[icon.default_dir]
+text = "\uF07B"
+fg = "#73c991"
+
+[icon.default_cluster]
+text = "\uF24D"
+fg = "#f59e0b"
+
+# ─── Folder names ───────────────────────────────────────────────────────────
+[[icon.dirs]]
+name = ".git"
+text = "\uE702"
+fg = "#f14e32"
+[[icon.dirs]]
+name = ".github"
+text = "\uF408"
+fg = "#a8bbc8"
+[[icon.dirs]]
+name = "node_modules"
+text = "\uE5FA"
+fg = "#cbcb41"
+[[icon.dirs]]
+name = "src"
+text = "\uF121"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "target"
+text = "\uF1C6"
+fg = "#fca5a5"
+[[icon.dirs]]
+name = "dist"
+text = "\uE5FC"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "build"
+text = "\uE5FC"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = ".cache"
+text = "\uF49B"
+fg = "#94a3b8"
+[[icon.dirs]]
+name = "Documents"
+text = "\uF02D"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "Downloads"
+text = "\uF498"
+fg = "#7dd3fc"
+[[icon.dirs]]
+name = "Pictures"
+text = "\uF03E"
+fg = "#fbbf24"
+[[icon.dirs]]
+name = "Music"
+text = "\uF025"
+fg = "#a78bfa"
+[[icon.dirs]]
+name = "Videos"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.dirs]]
+name = "Desktop"
+text = "\uF108"
+fg = "#7dd3fc"
+
+# ─── Special filenames ──────────────────────────────────────────────────────
+[[icon.files]]
+name = "Cargo.toml"
+text = "\uE7A8"
+fg = "#dea584"
+[[icon.files]]
+name = "Cargo.lock"
+text = "\uE7A8"
+fg = "#dea584"
+[[icon.files]]
+name = "package.json"
+text = "\uE718"
+fg = "#83cd29"
+[[icon.files]]
+name = "package-lock.json"
+text = "\uE718"
+fg = "#83cd29"
+[[icon.files]]
+name = "tsconfig.json"
+text = "\uE628"
+fg = "#519aba"
+[[icon.files]]
+name = "Dockerfile"
+text = "\uF308"
+fg = "#384d54"
+[[icon.files]]
+name = "docker-compose.yml"
+text = "\uF308"
+fg = "#384d54"
+[[icon.files]]
+name = "Makefile"
+text = "\uE673"
+fg = "#6d8086"
+[[icon.files]]
+name = "README.md"
+text = "\uF48A"
+fg = "#519aba"
+[[icon.files]]
+name = "LICENSE"
+text = "\uF02D"
+fg = "#cbcb41"
+[[icon.files]]
+name = ".gitignore"
+text = "\uE702"
+fg = "#41535b"
+[[icon.files]]
+name = ".env"
+text = "\uF462"
+fg = "#faf743"
+
+# ─── Extensions ─────────────────────────────────────────────────────────────
+[[icon.exts]]
+name = "ts"
+text = "\uE628"
+fg = "#519aba"
+[[icon.exts]]
+name = "tsx"
+text = "\uE7BA"
+fg = "#1354bf"
+[[icon.exts]]
+name = "js"
+text = "\uE74E"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "jsx"
+text = "\uE7BA"
+fg = "#20c2e3"
+[[icon.exts]]
+name = "rs"
+text = "\uE7A8"
+fg = "#dea584"
+[[icon.exts]]
+name = "py"
+text = "\uE73C"
+fg = "#ffbc03"
+[[icon.exts]]
+name = "go"
+text = "\uE626"
+fg = "#519aba"
+[[icon.exts]]
+name = "java"
+text = "\uE738"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "kt"
+text = "\uE634"
+fg = "#7f52ff"
+[[icon.exts]]
+name = "c"
+text = "\uE61E"
+fg = "#599eff"
+[[icon.exts]]
+name = "cpp"
+text = "\uE61D"
+fg = "#519aba"
+[[icon.exts]]
+name = "h"
+text = "\uF0FD"
+fg = "#a074c4"
+[[icon.exts]]
+name = "rb"
+text = "\uE739"
+fg = "#cc3e44"
+[[icon.exts]]
+name = "php"
+text = "\uE73D"
+fg = "#a074c4"
+[[icon.exts]]
+name = "swift"
+text = "\uE755"
+fg = "#e37933"
+
+[[icon.exts]]
+name = "sh"
+text = "\uF489"
+fg = "#4d5a5e"
+[[icon.exts]]
+name = "bash"
+text = "\uF489"
+fg = "#4d5a5e"
+
+[[icon.exts]]
+name = "md"
+text = "\uF48A"
+fg = "#519aba"
+[[icon.exts]]
+name = "txt"
+text = "\uF15C"
+fg = "#89e051"
+[[icon.exts]]
+name = "pdf"
+text = "\uF1C1"
+fg = "#b30b00"
+
+[[icon.exts]]
+name = "html"
+text = "\uF13B"
+fg = "#e34c26"
+[[icon.exts]]
+name = "css"
+text = "\uE749"
+fg = "#42a5f5"
+[[icon.exts]]
+name = "scss"
+text = "\uE603"
+fg = "#f55385"
+[[icon.exts]]
+name = "vue"
+text = "\uFD42"
+fg = "#8dc149"
+[[icon.exts]]
+name = "svelte"
+text = "\uE697"
+fg = "#ff3e00"
+
+[[icon.exts]]
+name = "json"
+text = "\uE60B"
+fg = "#cbcb41"
+[[icon.exts]]
+name = "toml"
+text = "\uE6B2"
+fg = "#9c4221"
+[[icon.exts]]
+name = "yaml"
+text = "\uE6B2"
+fg = "#6d8086"
+[[icon.exts]]
+name = "yml"
+text = "\uE6B2"
+fg = "#6d8086"
+[[icon.exts]]
+name = "xml"
+text = "\uF72D"
+fg = "#e37933"
+
+[[icon.exts]]
+name = "sql"
+text = "\uF1C0"
+fg = "#dad8d8"
+
+[[icon.exts]]
+name = "png"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "jpg"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "jpeg"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "gif"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "webp"
+text = "\uF1C5"
+fg = "#a074c4"
+[[icon.exts]]
+name = "svg"
+text = "\uFC1F"
+fg = "#ffb13b"
+[[icon.exts]]
+name = "ico"
+text = "\uF1C5"
+fg = "#cbcb41"
+
+[[icon.exts]]
+name = "mp3"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "wav"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "flac"
+text = "\uF001"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "mp4"
+text = "\uF03D"
+fg = "#f472b6"
+[[icon.exts]]
+name = "mkv"
+text = "\uF03D"
+fg = "#f472b6"
+
+[[icon.exts]]
+name = "zip"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "tar"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "gz"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "7z"
+text = "\uF1C6"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "rar"
+text = "\uF1C6"
+fg = "#fbbf24"
+
+[[icon.exts]]
+name = "lock"
+text = "\uF023"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "log"
+text = "\uF18D"
+fg = "#94a3b8"

@@ -46,8 +46,9 @@ pub fn load_graph(
             WHERE path = ?1 OR path LIKE ?2 ESCAPE '\'
             ORDER BY
               CASE WHEN path = ?1 THEN 0 ELSE 1 END ASC,
-              is_dir DESC,
               length(substr(path, length(?1) + 2)) - length(replace(substr(path, length(?1) + 2), '/', '')) + 1 ASC,
+              parent_path COLLATE NOCASE ASC,
+              is_dir DESC,
               name COLLATE NOCASE ASC
             LIMIT ?3
             "#,

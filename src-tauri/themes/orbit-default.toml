@@ -1,0 +1,475 @@
+name = "Orbit Default"
+author = "Orbit"
+version = "1.0"
+
+# ─── Defaults ────────────────────────────────────────────────────────────────
+[icon.default_file]
+text = "·"
+fg = "#a8bbc8"
+
+[icon.default_dir]
+text = "▢"
+fg = "#73c991"
+
+[icon.default_cluster]
+text = "◉"
+fg = "#f59e0b"
+
+# ─── Folder names (highest-priority O(1) hash lookup for dirs) ────────────
+[[icon.dirs]]
+name = ".git"
+text = "◆"
+fg = "#f14e32"
+
+[[icon.dirs]]
+name = "node_modules"
+text = "◓"
+fg = "#cbcb41"
+
+[[icon.dirs]]
+name = "target"
+text = "◓"
+fg = "#fca5a5"
+
+[[icon.dirs]]
+name = ".cache"
+text = "◓"
+fg = "#94a3b8"
+
+[[icon.dirs]]
+name = "dist"
+text = "◧"
+fg = "#7dd3fc"
+
+[[icon.dirs]]
+name = "build"
+text = "◧"
+fg = "#7dd3fc"
+
+# ─── Special filenames ──────────────────────────────────────────────────────
+[[icon.files]]
+name = "Cargo.toml"
+text = "⬖"
+fg = "#fca5a5"
+
+[[icon.files]]
+name = "Cargo.lock"
+text = "⚿"
+fg = "#fca5a5"
+
+[[icon.files]]
+name = "package.json"
+text = "⊞"
+fg = "#86efac"
+
+[[icon.files]]
+name = "package-lock.json"
+text = "⚿"
+fg = "#86efac"
+
+[[icon.files]]
+name = "tsconfig.json"
+text = "⬡"
+fg = "#7dd3fc"
+
+[[icon.files]]
+name = "Dockerfile"
+text = "◫"
+fg = "#7dd3fc"
+
+[[icon.files]]
+name = "README.md"
+text = "≡"
+fg = "#c4b5fd"
+
+[[icon.files]]
+name = "LICENSE"
+text = "≡"
+fg = "#fbbf24"
+
+[[icon.files]]
+name = ".gitignore"
+text = "◆"
+fg = "#f14e32"
+
+[[icon.files]]
+name = ".env"
+text = "⊟"
+fg = "#86efac"
+
+# ─── Extensions ─────────────────────────────────────────────────────────────
+# TypeScript / JavaScript
+[[icon.exts]]
+name = "ts"
+text = "⬡"
+fg = "#7dd3fc"
+[[icon.exts]]
+name = "tsx"
+text = "⬡"
+fg = "#7dd3fc"
+[[icon.exts]]
+name = "js"
+text = "◈"
+fg = "#7dd3fc"
+[[icon.exts]]
+name = "jsx"
+text = "◈"
+fg = "#7dd3fc"
+[[icon.exts]]
+name = "mjs"
+text = "◈"
+fg = "#7dd3fc"
+[[icon.exts]]
+name = "cjs"
+text = "◈"
+fg = "#7dd3fc"
+
+# Rust
+[[icon.exts]]
+name = "rs"
+text = "⬖"
+fg = "#fca5a5"
+
+# Python
+[[icon.exts]]
+name = "py"
+text = "◇"
+fg = "#fde047"
+[[icon.exts]]
+name = "pyi"
+text = "◇"
+fg = "#fde047"
+[[icon.exts]]
+name = "pyw"
+text = "◇"
+fg = "#fde047"
+
+# Go
+[[icon.exts]]
+name = "go"
+text = "⬢"
+fg = "#7ee8ba"
+
+# JVM
+[[icon.exts]]
+name = "java"
+text = "◉"
+fg = "#fdba74"
+[[icon.exts]]
+name = "kt"
+text = "◉"
+fg = "#fdba74"
+[[icon.exts]]
+name = "scala"
+text = "◉"
+fg = "#fdba74"
+
+# C / C++
+[[icon.exts]]
+name = "c"
+text = "◑"
+fg = "#93c5fd"
+[[icon.exts]]
+name = "cpp"
+text = "◑"
+fg = "#93c5fd"
+[[icon.exts]]
+name = "cc"
+text = "◑"
+fg = "#93c5fd"
+[[icon.exts]]
+name = "h"
+text = "◑"
+fg = "#93c5fd"
+[[icon.exts]]
+name = "hpp"
+text = "◑"
+fg = "#93c5fd"
+
+# Other languages
+[[icon.exts]]
+name = "rb"
+text = "◆"
+fg = "#fca5a5"
+[[icon.exts]]
+name = "php"
+text = "◈"
+fg = "#a5b4fc"
+[[icon.exts]]
+name = "swift"
+text = "◐"
+fg = "#fb923c"
+[[icon.exts]]
+name = "cs"
+text = "◎"
+fg = "#c4b5fd"
+
+# Shell
+[[icon.exts]]
+name = "sh"
+text = "▸"
+fg = "#86efac"
+[[icon.exts]]
+name = "bash"
+text = "▸"
+fg = "#86efac"
+[[icon.exts]]
+name = "zsh"
+text = "▸"
+fg = "#86efac"
+[[icon.exts]]
+name = "fish"
+text = "▸"
+fg = "#86efac"
+
+# Markup / docs
+[[icon.exts]]
+name = "md"
+text = "≡"
+fg = "#c4b5fd"
+[[icon.exts]]
+name = "mdx"
+text = "≡"
+fg = "#c4b5fd"
+[[icon.exts]]
+name = "rst"
+text = "≡"
+fg = "#c4b5fd"
+[[icon.exts]]
+name = "txt"
+text = "≡"
+fg = "#a8bbc8"
+[[icon.exts]]
+name = "tex"
+text = "≡"
+fg = "#fde047"
+
+# Web
+[[icon.exts]]
+name = "html"
+text = "◫"
+fg = "#f472b6"
+[[icon.exts]]
+name = "htm"
+text = "◫"
+fg = "#f472b6"
+[[icon.exts]]
+name = "vue"
+text = "◫"
+fg = "#86efac"
+[[icon.exts]]
+name = "svelte"
+text = "◫"
+fg = "#fb923c"
+[[icon.exts]]
+name = "astro"
+text = "◫"
+fg = "#fb923c"
+
+# CSS
+[[icon.exts]]
+name = "css"
+text = "◌"
+fg = "#fdba74"
+[[icon.exts]]
+name = "scss"
+text = "◌"
+fg = "#fdba74"
+[[icon.exts]]
+name = "sass"
+text = "◌"
+fg = "#fdba74"
+[[icon.exts]]
+name = "less"
+text = "◌"
+fg = "#fdba74"
+
+# Data / config
+[[icon.exts]]
+name = "json"
+text = "⊞"
+fg = "#86efac"
+[[icon.exts]]
+name = "json5"
+text = "⊞"
+fg = "#86efac"
+[[icon.exts]]
+name = "jsonc"
+text = "⊞"
+fg = "#86efac"
+[[icon.exts]]
+name = "toml"
+text = "⊟"
+fg = "#86efac"
+[[icon.exts]]
+name = "yaml"
+text = "⊟"
+fg = "#86efac"
+[[icon.exts]]
+name = "yml"
+text = "⊟"
+fg = "#86efac"
+[[icon.exts]]
+name = "xml"
+text = "⊟"
+fg = "#86efac"
+[[icon.exts]]
+name = "ini"
+text = "⊟"
+fg = "#86efac"
+[[icon.exts]]
+name = "conf"
+text = "⊟"
+fg = "#86efac"
+[[icon.exts]]
+name = "env"
+text = "⊟"
+fg = "#86efac"
+
+# Database
+[[icon.exts]]
+name = "sql"
+text = "⊠"
+fg = "#fca5a5"
+[[icon.exts]]
+name = "graphql"
+text = "⊕"
+fg = "#f472b6"
+[[icon.exts]]
+name = "gql"
+text = "⊕"
+fg = "#f472b6"
+
+# Images
+[[icon.exts]]
+name = "png"
+text = "▣"
+fg = "#38bdf8"
+[[icon.exts]]
+name = "jpg"
+text = "▣"
+fg = "#38bdf8"
+[[icon.exts]]
+name = "jpeg"
+text = "▣"
+fg = "#38bdf8"
+[[icon.exts]]
+name = "gif"
+text = "▣"
+fg = "#38bdf8"
+[[icon.exts]]
+name = "webp"
+text = "▣"
+fg = "#38bdf8"
+[[icon.exts]]
+name = "bmp"
+text = "▣"
+fg = "#38bdf8"
+[[icon.exts]]
+name = "ico"
+text = "▣"
+fg = "#38bdf8"
+[[icon.exts]]
+name = "svg"
+text = "◈"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "tiff"
+text = "▣"
+fg = "#38bdf8"
+
+# Documents
+[[icon.exts]]
+name = "pdf"
+text = "▤"
+fg = "#fca5a5"
+[[icon.exts]]
+name = "doc"
+text = "▦"
+fg = "#7dd3fc"
+[[icon.exts]]
+name = "docx"
+text = "▦"
+fg = "#7dd3fc"
+[[icon.exts]]
+name = "xls"
+text = "▧"
+fg = "#86efac"
+[[icon.exts]]
+name = "xlsx"
+text = "▧"
+fg = "#86efac"
+[[icon.exts]]
+name = "csv"
+text = "▧"
+fg = "#86efac"
+
+# Archives
+[[icon.exts]]
+name = "zip"
+text = "▩"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "tar"
+text = "▩"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "gz"
+text = "▩"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "7z"
+text = "▩"
+fg = "#fbbf24"
+[[icon.exts]]
+name = "rar"
+text = "▩"
+fg = "#fbbf24"
+
+# Media
+[[icon.exts]]
+name = "mp3"
+text = "♪"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "wav"
+text = "♪"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "flac"
+text = "♪"
+fg = "#a78bfa"
+[[icon.exts]]
+name = "mp4"
+text = "▶"
+fg = "#f472b6"
+[[icon.exts]]
+name = "mkv"
+text = "▶"
+fg = "#f472b6"
+[[icon.exts]]
+name = "mov"
+text = "▶"
+fg = "#f472b6"
+[[icon.exts]]
+name = "webm"
+text = "▶"
+fg = "#f472b6"
+
+# Misc
+[[icon.exts]]
+name = "lock"
+text = "⚿"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "log"
+text = "≣"
+fg = "#94a3b8"
+[[icon.exts]]
+name = "diff"
+text = "≣"
+fg = "#fb923c"
+[[icon.exts]]
+name = "patch"
+text = "≣"
+fg = "#fb923c"

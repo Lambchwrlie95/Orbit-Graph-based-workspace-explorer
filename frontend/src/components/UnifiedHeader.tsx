@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { tauriInvoke } from "../lib/tauriCommands";
+import type { IconThemeMeta } from "../types";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Window } from "@tauri-apps/api/window";
 import {
@@ -67,7 +68,49 @@ export function UnifiedHeader({
   onNavigateToPath,
 }: UnifiedHeaderProps) {
   const win = useMemo(() => getTauriWindow(), []);
-  const [openMenu, setOpenMenu] = useState<"file" | "view" | "run" | "panels" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"file" | "view" | "run" | "panels" | "icons" | null>(null);
+  const [iconThemes, setIconThemes] = useState<IconThemeMeta[]>([]);
+  const [activeIconTheme, setActiveIconTheme] = useState<string | null>(null);
+
+  const refreshIconThemes = useCallback(async () => {
+    try {
+      const [list, active] = await Promise.all([
+        tauriInvoke("list_icon_themes"),
+        tauriInvoke("get_active_icon_theme"),
+      ]);
+      setIconThemes(list);
+      setActiveIconTheme(active.meta.id);
+    } catch {
+      /* ignore — themes are best-effort */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshIconThemes();
+  }, [refreshIconThemes]);
+
+  const switchIconTheme = useCallback(
+    async (id: string) => {
+      try {
+        await tauriInvoke("set_active_icon_theme", { id });
+        setActiveIconTheme(id);
+        document.dispatchEvent(new CustomEvent("orbit:icon-theme-changed"));
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
+  const openIconThemesDir = useCallback(async () => {
+    try {
+      const dir = await tauriInvoke("open_icon_themes_dir");
+      await tauriInvoke("open_path", { path: dir });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathInput, setPathInput] = useState(currentPath || workspacePath || "");
   const pathInputRef = useRef<HTMLInputElement>(null);
@@ -299,6 +342,36 @@ export function UnifiedHeader({
               <MenuItem label="Explorer" onClick={() => runMenuAction(onShowExplorer)} />
               <MenuItem label="Search" onClick={() => runMenuAction(onShowSearch)} />
               <MenuItem label="Assets" onClick={() => runMenuAction(onShowAssets)} />
+              <MenuSeparator />
+              <MenuItem label="Icon Theme..." onClick={() => setOpenMenu("icons")} />
+            </>
+          )}
+
+          {openMenu === "icons" && (
+            <>
+              <div className="menu-section-label">Icon theme</div>
+              {iconThemes.length === 0 && (
+                <div className="menu-section-empty">No themes found</div>
+              )}
+              {iconThemes.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={activeIconTheme === t.id}
+                  className={`menu-item ${activeIconTheme === t.id ? "menu-item-checked" : ""}`}
+                  onClick={() => runMenuAction(() => void switchIconTheme(t.id))}
+                  title={t.path}
+                >
+                  <span className="menu-item-check">{activeIconTheme === t.id ? "●" : ""}</span>
+                  <span className="menu-item-label">{t.name}</span>
+                  {t.builtin && <span className="menu-item-tag">built-in</span>}
+                </button>
+              ))}
+              <MenuSeparator />
+              <MenuItem label="Open themes folder" onClick={() => runMenuAction(() => void openIconThemesDir())} />
+              <MenuItem label="Reload themes" onClick={() => runMenuAction(() => void refreshIconThemes())} />
+              <MenuItem label="← Back" onClick={() => setOpenMenu("view")} />
             </>
           )}
 

@@ -5,7 +5,9 @@ import { ArrowLeft, Maximize, Target } from "lucide-react";
 import { GraphEdge, GraphNode, GraphPayload } from "../types";
 import { formatBytes } from "../utils";
 import { usePersistedState } from "../hooks/usePersistedState";
-import { glyphForPath } from "../lib/fileGlyphs";
+import { iconRuleForPath } from "../lib/fileGlyphs";
+import { tauriInvoke } from "../lib/tauriCommands";
+import type { IconThemePayload } from "../types";
 
 type NodeView = "spheres" | "icons";
 
@@ -28,7 +30,7 @@ const PREF = {
   folders: "orbit:graph:showFolders",
   dim: "orbit:graph:dimUnrelated",
   types: "orbit:graph:visibleTypes",
-  nodeView: "orbit:graph:nodeView",
+  nodeView: "orbit:graph:nodeView:v2",
 };
 
 const serializeTypeSet = (set: Set<NodeType>) => JSON.stringify(Array.from(set));
@@ -41,7 +43,7 @@ const deserializeTypeSet = (raw: string): Set<NodeType> => {
   }
 };
 
-type LayoutMode = "orbit" | "tree" | "force";
+type LayoutMode = "orbit" | "tree";
 type GraphDisplayNode = GraphNode & { x: number; y: number; depth: number; childCount: number };
 
 interface GraphViewProps {
@@ -74,6 +76,7 @@ function GraphViewComponent({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
+  const iconThemeRef = useRef<IconThemePayload | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
   const selectedNodeRef = useRef<string | null>(null);
   const navHistoryRef = useRef<string[]>(navHistory);
@@ -90,7 +93,8 @@ function GraphViewComponent({
     new Set(ALL_NODE_TYPES),
     { serialize: serializeTypeSet, deserialize: deserializeTypeSet },
   );
-  const [nodeView, setNodeView] = usePersistedState<NodeView>(PREF.nodeView, "spheres");
+  const [nodeView, setNodeView] = usePersistedState<NodeView>(PREF.nodeView, "icons");
+  const [iconTheme, setIconTheme] = useState<IconThemePayload | null>(null);
   const [iconOverlay, setIconOverlay] = useState<
     Array<{ id: string; x: number; y: number; size: number; glyph: string; color: string; opacity: number }>
   >([]);
@@ -102,6 +106,60 @@ function GraphViewComponent({
 
   /** Match Sigma wheel / double-click step (see DEFAULT_ZOOMING_RATIO in sigma) */
   const ZOOM_FACTOR = 1.5;
+
+  useEffect(() => {
+    let cancelled = false;
+    tauriInvoke("get_active_icon_theme")
+      .then((theme) => {
+        if (!cancelled) {
+          iconThemeRef.current = theme;
+          setIconTheme(theme);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          iconThemeRef.current = null;
+          setIconTheme(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    iconThemeRef.current = iconTheme;
+    // Refresh cached glyph attrs on every existing node so a theme switch
+    // hot-swaps the overlay without rebuilding the graph.
+    const graph = graphRef.current;
+    if (graph) {
+      graph.forEachNode((node, attrs) => {
+        const icon = iconRuleForPath(
+          attrs.path as string,
+          attrs.isDir as boolean,
+          attrs.isCluster as boolean,
+          iconTheme,
+        );
+        graph.setNodeAttribute(node, "glyphText", icon.text);
+        graph.setNodeAttribute(node, "glyphColor", icon.fg ?? (attrs.baseColor as string));
+      });
+    }
+    rendererRef.current?.scheduleRefresh();
+  }, [iconTheme]);
+
+  // Listen for theme switches from elsewhere in the app (picker etc).
+  useEffect(() => {
+    const handler = () => {
+      tauriInvoke("get_active_icon_theme")
+        .then((theme) => {
+          iconThemeRef.current = theme;
+          setIconTheme(theme);
+        })
+        .catch(() => {});
+    };
+    document.addEventListener("orbit:icon-theme-changed", handler);
+    return () => document.removeEventListener("orbit:icon-theme-changed", handler);
+  }, []);
 
   const flushZoomDebounce = () => {
     if (cameraZoomTimeoutRef.current) {
@@ -195,20 +253,27 @@ function GraphViewComponent({
 
     for (const node of displayNodes) {
       const baseSize = getNodeSize(node);
+      // Resolve glyph + color ONCE per node (path-derived; never changes).
+      // The overlay reads these attrs directly so it never re-runs the
+      // glob/map pipeline per frame.
+      const icon = iconRuleForPath(node.path, node.isDir, node.isCluster, iconThemeRef.current);
+      const baseColor = getNodeColor(node);
       graph.addNode(String(node.id), {
         label: node.label,
         x: node.x,
         y: node.y,
         size: baseSize,
         baseSize,
-        color: getNodeColor(node),
-        baseColor: getNodeColor(node),
+        color: baseColor,
+        baseColor,
         path: node.path,
         isDir: node.isDir,
         isCluster: node.isCluster,
         extension: node.extension,
         clusterSummary: node.clusterSummary,
         childCount: node.childCount,
+        glyphText: icon.text,
+        glyphColor: icon.fg ?? baseColor,
       });
     }
 
@@ -244,7 +309,7 @@ function GraphViewComponent({
       zIndex: true,
       minCameraRatio: 0.03,
       maxCameraRatio: 8,
-      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current),
+      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current, nodeView),
       edgeReducer: (edge, data) => reduceEdge(edge, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated),
     });
 
@@ -309,7 +374,18 @@ function GraphViewComponent({
     // Project node positions to viewport coords for the icon overlay layer.
     // Throttled via afterRender so it follows pan/zoom without thrashing React.
     let overlayRaf: number | null = null;
+    let lastOverlayKey = "";
     const updateOverlay = () => {
+      // Only compute the overlay when icons mode is on. In spheres mode the
+      // glyph layer is hidden, so building 200+ HTML divs every frame is pure
+      // waste.
+      if (nodeView !== "icons") {
+        if (lastOverlayKey !== "") {
+          lastOverlayKey = "";
+          setIconOverlay([]);
+        }
+        return;
+      }
       if (overlayRaf !== null) return;
       overlayRaf = requestAnimationFrame(() => {
         overlayRaf = null;
@@ -323,10 +399,6 @@ function GraphViewComponent({
           opacity: number;
         }> = [];
         graph.forEachNode((node, attrs) => {
-          const viewport = renderer.graphToViewport({
-            x: attrs.x as number,
-            y: attrs.y as number,
-          });
           const display = renderer.getNodeDisplayData(node);
           const sizeOnScreen = display?.size ?? (attrs.size as number) ?? 6;
           const baseColor = (attrs.baseColor as string) ?? (attrs.color as string);
@@ -335,24 +407,45 @@ function GraphViewComponent({
             baseColor &&
             renderedColor &&
             renderedColor.toLowerCase() !== baseColor.toLowerCase();
+          const viewport = renderer.graphToViewport({
+            x: attrs.x as number,
+            y: attrs.y as number,
+          });
+          const { width, height } = renderer.getDimensions();
+          if (
+            viewport.x < -40 ||
+            viewport.y < -40 ||
+            viewport.x > width + 40 ||
+            viewport.y > height + 40
+          ) {
+            return;
+          }
+          // Cached at node-add time — no per-frame glob/map work.
+          const glyph = (attrs.glyphText as string) ?? "·";
+          const glyphColor = (attrs.glyphColor as string) ?? baseColor ?? "#a8bbc8";
           points.push({
             id: node,
             x: viewport.x,
             y: viewport.y,
             size: sizeOnScreen,
-            glyph: glyphForPath(
-              attrs.path as string,
-              attrs.isDir as boolean,
-              attrs.isCluster as boolean,
-            ),
-            color: baseColor ?? "#a8bbc8",
+            glyph,
+            color: glyphColor,
             opacity: isDimmed ? 0.35 : 1,
           });
         });
+        // Cheap fingerprint to skip React renders when nothing visible moved.
+        // Round to whole pixels — sub-pixel jitter from camera animation isn't
+        // worth a re-render for a 200-element list.
+        const key = points
+          .map((p) => `${p.id}:${p.x | 0}:${p.y | 0}:${p.size | 0}:${p.opacity}:${p.glyph}:${p.color}`)
+          .join("|");
+        if (key === lastOverlayKey) return;
+        lastOverlayKey = key;
         setIconOverlay(points);
       });
     };
     renderer.on("afterRender", updateOverlay);
+    updateOverlay();
 
     // Only animate camera on first render, not on updates
     if (isFirstRenderRef.current) {
@@ -369,16 +462,23 @@ function GraphViewComponent({
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, showLabels, dimUnrelated, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
+  }, [displayPayload, displayNodes, showLabels, dimUnrelated, nodeView, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
 
   const focusSelected = () => {
     const renderer = rendererRef.current;
     const graph = graphRef.current;
     const selected = selectedNodeRef.current;
     if (!renderer || !graph || !selected || !graph.hasNode(selected)) return;
-    const x = graph.getNodeAttribute(selected, "x") as number;
-    const y = graph.getNodeAttribute(selected, "y") as number;
-    renderer.getCamera().animate({ x, y, ratio: 0.58 }, { duration: 320 });
+    // Sigma's camera coords are normalized framed-graph space, NOT raw layout
+    // coordinates. Use getNodeDisplayData to get the correct (x,y) in camera
+    // space, otherwise large layouts collapse the view to (0,0) and the graph
+    // appears to disappear.
+    const display = renderer.getNodeDisplayData(selected);
+    if (!display) return;
+    renderer.getCamera().animate(
+      { x: display.x, y: display.y, ratio: 0.45 },
+      { duration: 320 },
+    );
   };
 
   const fitGraph = () => {
@@ -439,7 +539,7 @@ function GraphViewComponent({
     <div className="graph-wrap graph-workbench">
       <div className="graph-commandbar">
         <div className="graph-mode-tabs" aria-label="Graph layout">
-          {(["orbit", "tree", "force"] as LayoutMode[]).map((mode) => (
+          {(["orbit", "tree"] as LayoutMode[]).map((mode) => (
             <button
               key={mode}
               className={layoutMode === mode ? "active" : ""}
@@ -465,17 +565,33 @@ function GraphViewComponent({
         </div>
 
         <div className="graph-switches">
-          <button className={showFolders ? "active" : ""} onClick={() => setShowFolders((value) => !value)}>
+          <button
+            className={showFolders ? "active" : ""}
+            onClick={() => setShowFolders((value) => !value)}
+            title="Show folder nodes"
+          >
             Folders
           </button>
-          <button className={showFiles ? "active" : ""} onClick={() => setShowFiles((value) => !value)}>
+          <button
+            className={showFiles ? "active" : ""}
+            onClick={() => setShowFiles((value) => !value)}
+            title="Show file nodes"
+          >
             Files
           </button>
-          <button className={showLabels ? "active" : ""} onClick={() => setShowLabels((value) => !value)}>
+          <button
+            className={showLabels ? "active" : ""}
+            onClick={() => setShowLabels((value) => !value)}
+            title="Show node labels"
+          >
             Labels
           </button>
-          <button className={dimUnrelated ? "active" : ""} onClick={() => setDimUnrelated((value) => !value)}>
-            Focus
+          <button
+            className={dimUnrelated ? "active" : ""}
+            onClick={() => setDimUnrelated((value) => !value)}
+            title="Dim unrelated nodes when one is hovered/selected"
+          >
+            Dim
           </button>
         </div>
       </div>
@@ -568,29 +684,30 @@ function GraphViewComponent({
             <p>{payload ? "No nodes match the current graph filters" : "Scan a workspace to render the graph"}</p>
           </div>
         )}
-        {nodeView === "icons" && (
-          <div className="graph-icon-overlay" aria-hidden>
-            {iconOverlay.map((point) => {
-              const fontSize = Math.max(11, Math.min(30, point.size * 1.6));
-              return (
-                <span
-                  key={point.id}
-                  className="graph-node-glyph"
-                  style={{
-                    left: point.x,
-                    top: point.y,
-                    fontSize: `${fontSize}px`,
-                    color: point.color,
-                    opacity: point.opacity,
-                  }}
-                >
-                  {point.glyph}
-                </span>
-              );
-            })}
-          </div>
-        )}
       </div>
+
+      {nodeView === "icons" && (
+        <div className="graph-icon-overlay" aria-hidden>
+          {iconOverlay.map((point) => {
+            const fontSize = Math.max(12, Math.min(28, point.size * 1.85));
+            return (
+              <span
+                key={point.id}
+                className="graph-node-glyph"
+                style={{
+                  left: point.x,
+                  top: point.y,
+                  fontSize: `${fontSize}px`,
+                  color: point.color,
+                  opacity: point.opacity,
+                }}
+              >
+                {point.glyph}
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -598,7 +715,6 @@ function GraphViewComponent({
 function layoutNodes(nodes: GraphNode[], edges: GraphEdge[], mode: LayoutMode): GraphDisplayNode[] {
   if (nodes.length === 0) return [];
   if (mode === "tree") return treeLayout(nodes, edges);
-  if (mode === "force") return forceLayout(nodes, edges);
   return orbitLayout(nodes, edges);
 }
 
@@ -671,6 +787,11 @@ function placeOrbit(
 }
 
 function treeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
+  // Mermaid-ish top-down tree: each leaf gets a fixed slot of horizontal space,
+  // parents sit at the centroid of their children's slots, and rows are spaced
+  // generously so labels don't collide.
+  const LEAF_GAP = 110;
+  const ROW_GAP = 150;
   const tree = hierarchy(nodes, edges);
   const placed = new Map<number, GraphDisplayNode>();
   let leafIndex = 0;
@@ -681,13 +802,13 @@ function treeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphDisplayNode[] 
     const kids = tree.children.get(id) ?? [];
     let x: number;
     if (kids.length === 0) {
-      x = leafIndex * 54;
+      x = leafIndex * LEAF_GAP;
       leafIndex += 1;
     } else {
       const childXs = kids.map((child) => place(child, depth + 1));
       x = childXs.reduce((sum, childX) => sum + childX, 0) / childXs.length;
     }
-    placed.set(id, { ...node, x, y: depth * 86, depth, childCount: kids.length });
+    placed.set(id, { ...node, x, y: depth * ROW_GAP, depth, childCount: kids.length });
     return x;
   };
 
@@ -699,63 +820,8 @@ function treeLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphDisplayNode[] 
   return nodes.map((node, index) => {
     const placedNode = placed.get(node.id);
     if (!placedNode) return fallbackNode(node, index, 0, 0);
-    return { ...placedNode, x: placedNode.x - mid, y: placedNode.y - 90 };
-  });
-}
-
-function forceLayout(nodes: GraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
-  const positions = new Map<number, { x: number; y: number; vx: number; vy: number }>();
-  for (const [index, node] of nodes.entries()) {
-    const angle = seededAngle(node.id);
-    const radius = 80 + (index % 14) * 16;
-    positions.set(node.id, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, vx: 0, vy: 0 });
-  }
-
-  for (let iteration = 0; iteration < 90; iteration += 1) {
-    for (let i = 0; i < nodes.length; i += 1) {
-      for (let j = i + 1; j < nodes.length; j += 1) {
-        const a = positions.get(nodes[i].id)!;
-        const b = positions.get(nodes[j].id)!;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-        const force = 2100 / (dist * dist);
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        a.vx -= fx;
-        a.vy -= fy;
-        b.vx += fx;
-        b.vy += fy;
-      }
-    }
-
-    for (const edge of edges) {
-      const a = positions.get(edge.sourceId);
-      const b = positions.get(edge.targetId);
-      if (!a || !b) continue;
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const force = (dist - 88) * 0.012;
-      a.vx += (dx / dist) * force;
-      a.vy += (dy / dist) * force;
-      b.vx -= (dx / dist) * force;
-      b.vy -= (dy / dist) * force;
-    }
-
-    for (const node of nodes) {
-      const p = positions.get(node.id)!;
-      p.vx *= 0.82;
-      p.vy *= 0.82;
-      p.x = clamp(p.x + p.vx, -620, 620);
-      p.y = clamp(p.y + p.vy, -460, 460);
-    }
-  }
-
-  const childCounts = childCountsById(edges);
-  return nodes.map((node, index) => {
-    const p = positions.get(node.id);
-    return p ? { ...node, x: p.x, y: p.y, depth: 0, childCount: childCounts.get(node.id) ?? 0 } : fallbackNode(node, index, 0, 0);
+    // Sigma uses Y-up internally; flip so depth grows downward visually.
+    return { ...placedNode, x: placedNode.x - mid, y: -(placedNode.y - ROW_GAP) };
   });
 }
 
@@ -790,14 +856,6 @@ function subtreeWeight(id: number, children: Map<number, number[]>, seen = new S
   return Math.max(1, Math.min(48, kids.reduce((sum, child) => sum + subtreeWeight(child, children, seen), 0)));
 }
 
-function childCountsById(edges: GraphEdge[]) {
-  const counts = new Map<number, number>();
-  for (const edge of edges) {
-    if (edge.edgeType === "contains") counts.set(edge.sourceId, (counts.get(edge.sourceId) ?? 0) + 1);
-  }
-  return counts;
-}
-
 function fallbackNode(node: GraphNode, index: number, depth: number, childCount: number): GraphDisplayNode {
   const angle = seededAngle(node.id);
   const radius = 120 + (index % 18) * 18;
@@ -813,10 +871,17 @@ function reduceNode(
   dimUnrelated: boolean,
   navHistory: string[] = [],
   breadcrumbNodes: GraphNode[] = [],
+  nodeView: NodeView = "spheres",
 ) {
   const isHovered = hovered === node;
   const isSelected = selected === node;
-  const baseSize = Number(data.baseSize ?? data.size ?? 5);
+  // In icons mode the HTML overlay IS the visual. Collapse the WebGL sphere
+  // to ~1px (kept as an anchor for hit-testing) so the glyph isn't sitting
+  // on top of a competing sphere.
+  const rawBase = Number(data.baseSize ?? data.size ?? 5);
+  const baseSize = nodeView === "icons"
+    ? (isHovered || isSelected ? Math.max(2, rawBase * 0.4) : 1.5)
+    : rawBase;
   const connectedToActive = (hovered || selected) ? isConnected(graph, node, hovered ?? selected!) : false;
   const nodePath = data.path as string;
   const isInNavHistory = navHistory.includes(nodePath);
@@ -963,9 +1028,9 @@ function getNodeSize(node: GraphDisplayNode): number {
 }
 
 function getNodeColor(node: GraphNode): string {
-  if (node.isCluster) return "#f59e0b";
-  if (node.isDir) return "#73c991";
-  return colorForExtension(node.extension);
+  // Drive node fill from the legend bucket so a swatch in the legend always
+  // matches the corresponding sphere on the canvas.
+  return NODE_TYPE_CONFIG[getNodeType(node)].color;
 }
 
 function edgeColor(edge: GraphEdge): string {
@@ -974,18 +1039,6 @@ function edgeColor(edge: GraphEdge): string {
   if (edge.edgeType === "import") return "#c9a0dc";
   if (edge.edgeType === "markdown_link") return "#7ee8ba";
   return "#5f8fc3";
-}
-
-function colorForExtension(extension?: string | null): string {
-  if (!extension) return "#94a3b8";
-  const ext = extension.toLowerCase();
-  if (["png", "jpg", "jpeg", "svg", "webp", "gif", "bmp", "ico"].includes(ext)) return "#38bdf8";
-  if (["rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "cpp", "c", "h", "hpp"].includes(ext)) return "#a78bfa";
-  if (["md", "txt", "rtf"].includes(ext)) return "#d4d4d4";
-  if (["json", "toml", "yaml", "yml", "xml", "ini", "conf"].includes(ext)) return "#f5c542";
-  if (["css", "scss", "sass", "less", "html", "htm"].includes(ext)) return "#f472b6";
-  if (["pdf", "doc", "docx"].includes(ext)) return "#fb923c";
-  return "#94a3b8";
 }
 
 type NodeType = 'folder' | 'code' | 'image' | 'text' | 'config' | 'web' | 'document' | 'other' | 'cluster';
@@ -1167,10 +1220,6 @@ function shortNodePath(path: string) {
 function seededAngle(id: number) {
   const x = Math.sin(Math.abs(id) * 999.13) * 10000;
   return (x - Math.floor(x)) * Math.PI * 2;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
 }
 
 export const GraphView = memo(GraphViewComponent);

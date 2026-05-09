@@ -492,6 +492,43 @@ function App() {
     };
   }, [chooseFolder]);
 
+  // External fs changes (folders created in another app, files moved, etc.) are
+  // not piped through Tauri yet. When the window regains focus, kick off a
+  // background rescan so newly-created folders show up without the user having
+  // to click "Scan". Debounced so app-switching doesn't thrash the indexer.
+  useEffect(() => {
+    if (!rootPath) return;
+    let lastRescan = 0;
+    const RESCAN_COOLDOWN_MS = 2_500;
+    const refresh = async () => {
+      const now = Date.now();
+      const target = currentPath || rootPath;
+      // Always re-list the visible folder for cheap/instant feedback
+      void loadChildren(target);
+      // Don't burn CPU on every alt-tab — rescan at most every few seconds
+      if (now - lastRescan < RESCAN_COOLDOWN_MS) return;
+      lastRescan = now;
+      try {
+        await tauriInvoke("scan_workspace", { rootPath });
+        await loadChildren(target);
+        await loadGraph(target);
+        await checkCacheStatus(rootPath);
+      } catch (err) {
+        console.warn("Background rescan failed:", err);
+      }
+    };
+    const onFocus = () => void refresh();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [rootPath, currentPath, loadChildren, loadGraph, checkCacheStatus]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -525,11 +562,55 @@ function App() {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent("orbit:edit-path"));
       }
+
+      // Ignore the rest while typing in inputs / contenteditable
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable === true;
+      if (isTyping || e.metaKey || e.ctrlKey || e.altKey) return;
+
+      // Alt/Backspace - graph back navigation
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        if (graphNavHistory.length > 0) {
+          const previous = graphNavHistory[graphNavHistory.length - 1];
+          setGraphNavHistory(graphNavHistory.slice(0, -1));
+          setBreadcrumbNodes(breadcrumbNodes.filter((n) => n.path !== previous));
+          setCurrentPath(previous);
+          showLeftPanel("explorer");
+          void loadGraph(previous);
+        }
+      }
+      // Space - quick-launch the OS image viewer when an image is selected
+      if (e.key === " " && selected && !selected.isDir) {
+        const ext = (selected.extension ?? "").toLowerCase();
+        if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tiff", "svg"].includes(ext)) {
+          e.preventDefault();
+          void openPath(selected.path);
+          return;
+        }
+      }
+
+      // Enter - open / drill into the selection
+      if (e.key === "Enter" && selected) {
+        e.preventDefault();
+        if (selected.isDir) {
+          setCurrentPath(selected.path);
+          showLeftPanel("explorer");
+          void loadGraph(selected.path);
+        } else if (isEditableFile(selected)) {
+          void handleOpenInEditor(selected);
+        } else {
+          void openPath(selected.path);
+        }
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [graphNavHistory, breadcrumbNodes, selected, handleOpenInEditor, openPath, loadGraph, showLeftPanel]);
 
   const leftPanelLabel = {
     explorer: "Explorer",
@@ -559,8 +640,12 @@ function App() {
         onShowInspector={() => showRightPanel("inspector")}
         onShowCode={() => showRightPanel("code")}
         onNavigateToPath={(path) => {
-          console.log("[Main] onNavigateToPath called:", path);
+          if (!path) return;
+          // Path-bar / breadcrumb navigation: jump explorer + graph and ensure
+          // the left panel is visible so the user actually sees the change.
           setCurrentPath(path);
+          setLeftPanel("explorer");
+          setLeftCollapsed(false);
           void loadGraph(path);
         }}
       />
@@ -738,7 +823,7 @@ function App() {
               onEdit={handleOpenInEditor}
             />
           ) : (
-            <CodeMode />
+            <CodeMode selectedFile={selected} />
           )}
         </aside>
       </section>

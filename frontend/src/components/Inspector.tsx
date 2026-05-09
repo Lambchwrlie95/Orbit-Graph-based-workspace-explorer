@@ -6,6 +6,7 @@ import { isEditableFile } from "./CodeMode";
 import { CodeAnalysisPanel } from "./inspector/CodeAnalysisPanel";
 import { ImageAnalysisPanel } from "./inspector/ImageAnalysisPanel";
 import { MarkdownAnalysisPanel } from "./inspector/MarkdownAnalysisPanel";
+import { useIconTheme } from "../hooks/useIconTheme";
 
 interface InspectorProps {
   record: FileRecord | null;
@@ -20,30 +21,6 @@ interface InspectorProps {
 
 type PreviewKind = "text" | "image" | "directory" | "binary" | "error";
 
-function fileTypeGlyph(ext?: string | null): string {
-  const e = (ext ?? "").toLowerCase();
-  if (e === "ts" || e === "tsx") return "⬡";
-  if (e === "js" || e === "jsx" || e === "mjs" || e === "cjs") return "◈";
-  if (e === "rs") return "⬖";
-  if (e === "py" || e === "pyi" || e === "pyw") return "◇";
-  if (e === "go") return "⬡";
-  if (e === "java" || e === "kt" || e === "scala") return "◉";
-  if (e === "c" || e === "cpp" || e === "cc" || e === "h" || e === "hpp") return "◑";
-  if (e === "cs") return "◎";
-  if (e === "rb") return "◆";
-  if (e === "swift") return "◐";
-  if (e === "sh" || e === "bash" || e === "zsh") return "▸";
-  if (e === "md" || e === "mdx") return "≡";
-  if (e === "html" || e === "htm") return "◫";
-  if (e === "css" || e === "scss" || e === "sass" || e === "less") return "◌";
-  if (e === "json") return "⊞";
-  if (e === "toml" || e === "yaml" || e === "yml" || e === "xml" || e === "ini") return "⊟";
-  if (e === "sql") return "⊞";
-  if (e === "svg" || e === "png" || e === "jpg" || e === "jpeg" || e === "gif" || e === "webp") return "◈";
-  if (e === "pdf") return "≡";
-  return "·";
-}
-
 function InspectorComponent({
   record,
   preview,
@@ -54,6 +31,7 @@ function InspectorComponent({
   onNavigate,
   onEdit,
 }: InspectorProps) {
+  const { resolve: resolveIcon } = useIconTheme();
   if (!record) {
     return (
       <div className="inspector sidebar-panel">
@@ -83,9 +61,6 @@ function InspectorComponent({
         <div className="panel-title-row">
           <div className="panel-title-copy">
             <h2>Inspector</h2>
-            <p className="panel-subtitle" title={record.path}>
-              {shortPath(record.path)}
-            </p>
           </div>
           <div className="panel-actions">
             <button
@@ -124,15 +99,23 @@ function InspectorComponent({
           </div>
         </div>
 
-        <div className="record-header">
-          <span className={`file-icon large ${record.isDir ? "folder" : ""}`}>
-            {record.isDir ? "⊞" : fileTypeGlyph(record.extension)}
-          </span>
-          <div className="record-title">
-            <h3 title={record.name}>{record.name}</h3>
-            <p title={record.path}>{record.path}</p>
-          </div>
-        </div>
+        {(() => {
+          const icon = resolveIcon(record.path, record.isDir, false);
+          return (
+            <div className="record-header">
+              <span
+                className={`file-icon large ${record.isDir ? "folder" : ""}`}
+                style={icon.fg ? { color: icon.fg } : undefined}
+              >
+                {icon.text}
+              </span>
+              <div className="record-title">
+                <h3 title={record.name}>{record.name}</h3>
+                <p title={record.path}>{shortPath(record.path)}</p>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="metadata-section">
           <h4>◈ Information</h4>
@@ -183,36 +166,8 @@ function InspectorComponent({
           </dl>
         </div>
 
-        <div className="actions-section">
-          <h4>⚡ Actions</h4>
-          <div className="action-row">
-            <button className="primary" onClick={() => onOpen(record.path)}>
-              {record.isDir ? "Open Folder" : "Open File"}
-            </button>
-            {!record.isDir && onEdit && isEditableFile(record) && (
-              <button
-                className="secondary"
-                onClick={() => onEdit(record)}
-                title="Edit in Code Mode"
-              >
-                <FileCode size={14} style={{ marginRight: 4, display: "inline" }} />
-                Edit
-              </button>
-            )}
-            <button onClick={() => void navigator.clipboard?.writeText(record.path)}>
-              Copy Path
-            </button>
-          </div>
-
-          {record.parentPath && onNavigate && (
-            <button
-              className="secondary"
-              onClick={() => onNavigate(record.parentPath!)}
-            >
-              Show in Folder
-            </button>
-          )}
-        </div>
+{/* Quick-action text buttons removed — the icon row at the top of the panel
+            already exposes Open / Show in folder / Copy path / Edit. */}
 
         {canPreview && (
           <PreviewSection
@@ -314,20 +269,21 @@ function PreviewSection({
         </div>
       </div>
 
-      <div className="preview-heading-block">
-        <div className="preview-title-row">
-          <div className="preview-title" title={previewTitle}>
-            {previewTitle}
+{/* For images we keep the heading minimal — the file name and path are
+          already shown in the record header above. Avoid repeating them. */}
+      {!isImage && (
+        <div className="preview-heading-block">
+          <div className="preview-title-row">
+            <div className="preview-title" title={previewTitle}>
+              {previewTitle}
+            </div>
+            <span className={`preview-kind-badge preview-kind-${previewKind}`}>
+              {previewKind}
+            </span>
           </div>
-          <span className={`preview-kind-badge preview-kind-${previewKind}`}>
-            {previewKind}
-          </span>
+          <p className="preview-summary">{previewSummary}</p>
         </div>
-        <p className="preview-summary">{previewSummary}</p>
-        <span className="preview-path-label" title={record.path}>
-          {record.path}
-        </span>
-      </div>
+      )}
 
       {isLoadingPreview ? (
         <div className="empty-state small">

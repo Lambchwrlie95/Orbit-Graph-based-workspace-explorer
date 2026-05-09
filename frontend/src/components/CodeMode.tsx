@@ -42,6 +42,8 @@ function resolveLocalLink(sourceFile: string, target: string): string {
 
 export interface CodeModeProps {
   className?: string;
+  /** When set and the file is editable, auto-open it on mount/change. */
+  selectedFile?: FileRecord | null;
 }
 
 // Text/code file extensions that can be edited
@@ -167,7 +169,7 @@ export function isEditableFile(file: FileRecord): boolean {
   return EDITABLE_EXTENSIONS.has(extension);
 }
 
-export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
+export const CodeMode: React.FC<CodeModeProps> = ({ className = '', selectedFile = null }) => {
   // Editor store
   const {
     openFiles,
@@ -297,6 +299,15 @@ export const CodeMode: React.FC<CodeModeProps> = ({ className = '' }) => {
       void loadFile(activeFile);
     }
   }, [activeFile, fileContents, loadFile]);
+
+  // When the user selects a file elsewhere and switches to the Code tab, mount/open it here
+  // automatically so the editor is never empty after a selection.
+  useEffect(() => {
+    if (!selectedFile || selectedFile.isDir) return;
+    if (!isEditableFile(selectedFile)) return;
+    if (selectedFile.path === activeFile) return;
+    void loadFile(selectedFile.path);
+  }, [selectedFile, activeFile, loadFile]);
 
   return (
     <div className={`code-mode ${className}`} style={{

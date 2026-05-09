@@ -10,6 +10,7 @@ mod commands;
 mod db;
 mod git_status;
 mod graph;
+mod icon_theme;
 mod image_analyzer;
 mod image_hash;
 mod logger;
@@ -167,6 +168,21 @@ fn get_preview(path: String) -> Result<PreviewPayload, String> {
 
 #[tauri::command]
 fn open_path(path: String) -> Result<(), String> {
+    // On Linux a bare `open::that` defers to `xdg-open`, which uses
+    // `~/.config/mimeapps.list` to pick the application for each MIME type.
+    // If that mapping is wrong the file lands in the user's web browser. We
+    // can't rewrite that file from here, but we at least prefer `xdg-open`
+    // explicitly and surface a useful error on failure so the user knows to
+    // run `xdg-mime default <app>.desktop <mime>` if the wrong app launches.
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        if let Ok(status) = Command::new("xdg-open").arg(&path).status() {
+            if status.success() {
+                return Ok(());
+            }
+        }
+    }
     open::that(&path).map_err(|e| e.to_string())
 }
 
@@ -186,6 +202,30 @@ fn check_cache_status(root_path: String, state: State<'_, AppState>) -> Result<C
 #[tauri::command]
 fn get_performance_metrics() -> PerformanceMetrics {
     performance::get_performance_metrics()
+}
+
+#[tauri::command]
+fn list_icon_themes() -> Result<Vec<icon_theme::IconThemeMeta>, String> {
+    icon_theme::cmd_list_themes()
+}
+
+#[tauri::command]
+fn get_active_icon_theme() -> Result<icon_theme::ThemePayload, String> {
+    icon_theme::cmd_get_active_theme()
+}
+
+#[tauri::command]
+fn set_active_icon_theme(id: String) -> Result<(), String> {
+    icon_theme::cmd_set_active_theme(id)
+}
+
+#[tauri::command]
+fn open_icon_themes_dir() -> Result<String, String> {
+    let dir = icon_theme::themes_dir()?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.to_string_lossy().to_string();
+    let _ = open::that(&path);
+    Ok(path)
 }
 
 #[tauri::command]
@@ -257,6 +297,10 @@ fn main() {
             commands::thumbnail::delete_thumbnails,
             commands::thumbnail::get_supported_thumbnail_sizes,
             commands::thumbnail::get_thumbnail_base_path,
+            list_icon_themes,
+            get_active_icon_theme,
+            set_active_icon_theme,
+            open_icon_themes_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Orbit");

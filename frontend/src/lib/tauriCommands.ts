@@ -8,6 +8,8 @@ import type {
   GraphPayload,
   GraphRequest,
   ImageMetadataResult,
+  IconThemeMeta,
+  IconThemePayload,
   MarkdownAnalysis,
   OperationStats,
   PerformanceMetrics,
@@ -61,6 +63,10 @@ export const TAURI_COMMANDS = [
   "delete_thumbnails",
   "get_supported_thumbnail_sizes",
   "get_thumbnail_base_path",
+  "list_icon_themes",
+  "get_active_icon_theme",
+  "set_active_icon_theme",
+  "open_icon_themes_dir",
 ] as const;
 
 export type TauriCommand = typeof TAURI_COMMANDS[number];
@@ -112,6 +118,10 @@ type CommandArgsMap = {
   delete_thumbnails: { fileId: number };
   get_supported_thumbnail_sizes: undefined;
   get_thumbnail_base_path: undefined;
+  list_icon_themes: undefined;
+  get_active_icon_theme: undefined;
+  set_active_icon_theme: { id: string };
+  open_icon_themes_dir: undefined;
 };
 
 type CommandResultMap = {
@@ -156,6 +166,10 @@ type CommandResultMap = {
   delete_thumbnails: void;
   get_supported_thumbnail_sizes: number[];
   get_thumbnail_base_path: string;
+  list_icon_themes: IconThemeMeta[];
+  get_active_icon_theme: IconThemePayload;
+  set_active_icon_theme: void;
+  open_icon_themes_dir: string;
 };
 
 type CommandArgs<C extends TauriCommand> = CommandArgsMap[C];

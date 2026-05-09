@@ -216,3 +216,33 @@ export interface ThumbnailInfo {
   width: number;
   height: number;
 }
+
+export interface IconRule {
+  text: string;
+  fg?: string | null;
+}
+
+export interface IconThemeMeta {
+  id: string;
+  name: string;
+  author?: string | null;
+  version?: string | null;
+  path: string;
+  builtin: boolean;
+}
+
+export interface IconGlobRule {
+  pattern: string;
+  rule: IconRule;
+}
+
+export interface IconThemePayload {
+  meta: IconThemeMeta;
+  byExt: Record<string, IconRule>;
+  byFilename: Record<string, IconRule>;
+  byDirname: Record<string, IconRule>;
+  globs: IconGlobRule[];
+  defaultFile: IconRule;
+  defaultDir: IconRule;
+  defaultCluster: IconRule;
+}

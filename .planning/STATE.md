@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Orbit Desktop Experience
 status: stabilizing
-stopped_at: Graph-first workbench restored; typed Tauri command boundary and smoke checks added
-last_updated: "2026-05-01T05:39:47Z"
-last_activity: 2026-05-01
+stopped_at: Desktop launcher and graph icon-theme wiring verified
+last_updated: "2026-05-09T01:41:20Z"
+last_activity: 2026-05-08
 progress:
   total_phases: 8
   completed_phases: 7
@@ -71,7 +71,7 @@ All 4 phases of v1.0 Orbit Foundation have been successfully completed:
 
 **Current Phase**: Phase 8 partial implementation and stabilization
 **Current Activity**: The workbench now follows the graph-file-manager reference more closely: a thin top menu, left sidebar for Explorer/Search/Assets/Status, right sidebar for Inspector/Code, and the center surface reserved for the graph only. Bookmarks are localStorage-backed, the inspector now owns text/image/code previews, image dimensions/colors, and code analysis panels, graph/search/folder actions route into side panels rather than replacing the graph center, and frontend Tauri calls now pass through a typed command boundary checked against the Rust registry.
-**Last activity**: 2026-05-01 — Reworked the Orbit app shell around a graph-only center, added a reference-style top menu, restored bookmarks, integrated image/code preview analysis in the right inspector, centralized typed Tauri command calls, added command-registry drift checking and browser smoke script, ran frontend build, Rust tests, and a 1440x900 Chromium smoke screenshot. **UI improvements**: Unified single-bar header (28px) combining branding, workspace, actions, and window controls; removed native OS menu bar for cleaner frameless window; removed performance warning UI in favor of React.memo optimizations; added Help dialogs (About, Keyboard Shortcuts); created dev desktop entry for easy development launching.
+**Last activity**: 2026-05-08 — Tightened desktop launcher install/uninstall behavior and verified icon plumbing. Install now removes known stale Orbit launcher variants before writing `orbit.desktop`; uninstall removes known Orbit desktop-entry variants; desktop cache refresh includes `xdg-desktop-menu forceupdate` and KDE service cache refresh when available; desktop-entry categories were normalized so templates pass `desktop-file-validate`. The Rust icon-theme Tauri commands are now present in the frontend typed command catalog, and Graph icon mode resolves glyph/color through the active icon theme with hardcoded glyphs as fallback. The v2 TODO is not fully complete yet: Explorer Grid/Columns components exist, but the current side Explorer surface only exposes List and Tree.
 **Developer handoff**: See `.planning/HANDOFF.md` for the current baseline, dirty worktree notes, graph state, and next priorities.
 
 **v1.0 Progress**: [##########] 100% COMPLETE
@@ -207,6 +207,8 @@ See: `.planning/v1.0-COMPLETION.md` (milestone summary)
 - `cargo test` passes 12/12 as of 2026-05-01.
 - `cargo clippy --all-targets -- -D warnings` passes as of 2026-05-01.
 - Headless Chromium smoke screenshot at 1440x900 confirms the graph-only center and side panels render.
+- Desktop launcher templates and the live user launcher entry pass `desktop-file-validate` as of 2026-05-08; current live user launcher entry is `~/.local/share/applications/orbit.desktop`.
+- Icon verification as of 2026-05-08: `npm run commands:check` passes with 45 commands, `npm run frontend:build` passes, `cargo test` passes 25/25 including icon-theme parser tests, `npm run frontend:smoke` passes in headless Chromium, and installed `orbit.png` icons exist at 32/128/256/512px with valid non-empty PNG data.
 - Deeper smoke tests are still needed around scan, graph load with real data, thumbnail/image commands, bookmarks persistence, menu actions, and UI side-panel flows before treating the v2.0 claims as fully validated.
 
 ---

@@ -1,6 +1,8 @@
 /** Unicode glyph + semantic color per file extension. */
 /** Shared by EditorTabs, the Icons view of the graph, and the Inspector. */
 
+import type { IconRule, IconThemePayload } from "../types";
+
 export interface FileGlyphInfo {
   glyph: string;
   color: string;
@@ -80,4 +82,47 @@ export function colorForPath(path: string, isDir: boolean, isCluster?: boolean):
   if (isDir) return "#73c991";
   const ext = path.split(".").pop();
   return colorForExtension(ext);
+}
+
+export function iconRuleForPath(
+  path: string,
+  isDir: boolean,
+  isCluster: boolean | undefined,
+  theme?: IconThemePayload | null,
+): IconRule {
+  if (!theme) {
+    return {
+      text: glyphForPath(path, isDir, isCluster),
+      fg: colorForPath(path, isDir, isCluster),
+    };
+  }
+
+  if (isCluster) return theme.defaultCluster;
+
+  for (const glob of theme.globs) {
+    if (globMatches(glob.pattern, path)) return glob.rule;
+  }
+
+  const basename = path.split("/").filter(Boolean).pop() ?? path;
+  if (isDir) return theme.byDirname[basename] ?? theme.defaultDir;
+
+  const filenameRule = theme.byFilename[basename];
+  if (filenameRule) return filenameRule;
+
+  const ext = basename.includes(".") ? basename.split(".").pop()?.toLowerCase() : "";
+  return (ext ? theme.byExt[ext] : undefined) ?? theme.defaultFile;
+}
+
+function globMatches(pattern: string, path: string): boolean {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "\u0000")
+    .replace(/\*/g, "[^/]*")
+    .replace(/\u0000/g, ".*")
+    .replace(/\?/g, "[^/]");
+  try {
+    return new RegExp(`^${escaped}$`).test(path);
+  } catch {
+    return false;
+  }
 }

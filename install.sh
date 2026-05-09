@@ -2,10 +2,10 @@
 # ╔═══════════════════════════════════════════════════════╗
 # ║             Orbit — Install Script                     ║
 # ║  Graph-first file intelligence IDE                     ║
+# ║  Builds from source (Arch / pacman -S style workflow)  ║
 # ╚═══════════════════════════════════════════════════════╝
 set -euo pipefail
 
-# ── Colours ──────────────────────────────────────────────
 RESET='\033[0m'
 BOLD='\033[1m'
 RED='\033[0;31m'
@@ -23,16 +23,43 @@ step() { echo -e "\n${BOLD}${CYAN}◆${RESET} ${BOLD}$*${RESET}"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_NAME="orbit"
 BIN_NAME="orbit"
-APPIMAGE_NAME="Orbit.AppImage"
 
-# Installation paths
+WANTS_HELP=0
+for arg in "$@"; do
+  case "$arg" in
+    --help|-h) WANTS_HELP=1 ;;
+  esac
+done
+
+DESKTOP_IDS=(
+  "orbit.desktop"
+  "orbit-folder.desktop"
+  "orbit-dev.desktop"
+  "Orbit.desktop"
+  "local.orbit.file-intelligence.desktop"
+)
+
+# Re-launch in a terminal when triggered from a file manager so the user sees
+# build output instead of the script silently dying with `set -e`.
+if [[ "$WANTS_HELP" == 0 ]] && [ ! -t 1 ] && [ -z "${ORBIT_INSTALL_TTY:-}" ]; then
+  for term in alacritty kitty ghostty foot wezterm gnome-terminal konsole xterm; do
+    if command -v "$term" >/dev/null 2>&1; then
+      export ORBIT_INSTALL_TTY=1
+      case "$term" in
+        gnome-terminal) exec "$term" -- bash "$0" "$@" ;;
+        konsole)        exec "$term" -e bash "$0" "$@" ;;
+        *)              exec "$term" -e bash "$0" "$@" ;;
+      esac
+    fi
+  done
+fi
+
 BIN_DIR="${HOME}/.local/bin"
 APPS_DIR="${HOME}/.local/share/applications"
 ICONS_DIR="${HOME}/.local/share/icons/hicolor"
 DATA_DIR="${HOME}/.local/share/orbit"
 
 RELEASE_BIN="${SCRIPT_DIR}/src-tauri/target/release/${BIN_NAME}"
-APPIMAGE_PATH="${SCRIPT_DIR}/target/release/bundle/appimage/${APPIMAGE_NAME}"
 
 # ── Banner ────────────────────────────────────────────────
 echo ""
@@ -42,33 +69,38 @@ echo "  │  ⬡  Orbit  ·  File Intelligence IDE    │"
 echo "  ╰─────────────────────────────────────────╯"
 echo -e "${RESET}"
 
-# ── Parse args ───────────────────────────────────────────
-MODE="auto"
-BUILD=0
+# ── Args ─────────────────────────────────────────────────
 LINK=0
+SKIP_BUILD=0
+NO_BUILD=0
 for arg in "$@"; do
   case "$arg" in
-    --build)    BUILD=1 ;;
-    --appimage) MODE="appimage" ;;
-    --binary)   MODE="binary" ;;
-    --link)     LINK=1 ;;
-    --dev)      LINK=1 ;;
+    --link|--dev)  LINK=1 ;;
+    --skip-build)  SKIP_BUILD=1 ;;
+    --no-build)    NO_BUILD=1; SKIP_BUILD=1 ;;
     --help|-h)
       echo "Usage: ./install.sh [options]"
       echo ""
-      echo "Options:"
-      echo "  --build      Build from source before installing"
-      echo "  --appimage   Install AppImage (default when available)"
-      echo "  --binary     Install raw release binary"
-      echo "  --link, --dev  Symlink the release binary instead of copying"
-      echo "                 — every cargo build --release is auto-picked-up"
-      echo "                 next launch, no reinstall needed."
-      echo "  --help       Show this help"
+      echo "  Builds Orbit from source (frontend + cargo --release) and"
+      echo "  installs it to your user prefix (\$HOME/.local). No AppImage,"
+      echo "  no system files. Re-running re-builds incrementally and"
+      echo "  re-installs in place."
       echo ""
-      echo "What gets installed:"
-      echo "  ${BIN_DIR}/${BIN_NAME}        ← launcher/symlink"
+      echo "Options:"
+      echo "  --link, --dev    Symlink the release binary instead of copying."
+      echo "                   Future cargo --release builds are picked up"
+      echo "                   on next launch — no reinstall needed."
+      echo "  --skip-build     Use whatever is already in target/release."
+      echo "  --no-build       Same as --skip-build (stricter — fail if"
+      echo "                   the binary is missing)."
+      echo "  --help, -h       Show this help"
+      echo ""
+      echo "Files written:"
+      echo "  ${BIN_DIR}/${BIN_NAME}           ← binary or symlink"
       echo "  ${APPS_DIR}/${APP_NAME}.desktop"
       echo "  ${ICONS_DIR}/<size>/apps/${APP_NAME}.png"
+      echo ""
+      echo "Uninstall: ./uninstall.sh   (wipes everything by default)"
       exit 0
       ;;
   esac
@@ -77,71 +109,60 @@ done
 # ── Prerequisites ────────────────────────────────────────
 step "Checking prerequisites"
 
-check_cmd() {
+REQ_OK=1
+require() {
   if command -v "$1" &>/dev/null; then
     ok "$1 found"
   else
-    warn "$1 not found — ${2:-may be needed}"
+    warn "$1 missing — $2"
+    REQ_OK=0
   fi
 }
 
-check_cmd cargo    "required to build from source (https://rustup.rs/)"
-check_cmd node     "required to build frontend"
-check_cmd npm      "required to build frontend"
+if [[ "$SKIP_BUILD" == 0 ]]; then
+  require cargo "install rustup (https://rustup.rs/) then 'rustup default stable'"
+  require node  "install via your package manager (e.g. pacman -S nodejs npm)"
+  require npm   "ships with node — re-check your nodejs install"
+  require pkg-config "needed by Tauri build (pacman -S pkgconf)"
+  if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null && ! pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
+    warn "webkit2gtk-4.1 missing — install with: pacman -S webkit2gtk-4.1"
+    REQ_OK=0
+  else
+    ok "webkit2gtk found"
+  fi
+  if [[ "$REQ_OK" == 0 ]]; then
+    die "Missing build prerequisites. Install them and re-run, or use --skip-build."
+  fi
+else
+  ok "Build skipped — using existing binary"
+fi
 
-# ── Optional build step ───────────────────────────────────
-if [[ "$BUILD" == 1 ]]; then
-  step "Building Orbit from source"
-  info "Building frontend…"
-  cd "${SCRIPT_DIR}/frontend" && npm install --silent && npm run build 2>&1 | tail -3
-  info "Building Rust binary (release)…"
-  cd "${SCRIPT_DIR}/src-tauri" && cargo build --release 2>&1 | grep -E "^error|Compiling orbit|Finished" || true
+# ── Build from source ────────────────────────────────────
+if [[ "$SKIP_BUILD" == 0 ]]; then
+  step "Building frontend"
+  cd "${SCRIPT_DIR}/frontend"
+  if [[ ! -d node_modules ]]; then
+    info "Installing frontend deps (npm install)…"
+    npm install --silent
+  fi
+  npm run build 2>&1 | tail -3
+  ok "Frontend bundled → ${DIM}frontend/dist/${RESET}"
+
+  step "Building Rust binary (release) — first build can take several minutes"
+  cd "${SCRIPT_DIR}/src-tauri"
+  # Stream cargo output so the user sees progress on long compiles
+  cargo build --release 2>&1 | grep -E "^(error|warning: unused|   Compiling orbit|   Compiling tauri|    Finished)" || true
+  if [[ ! -f "$RELEASE_BIN" ]]; then
+    die "Build finished but binary not found at ${RELEASE_BIN}"
+  fi
+  ok "Built → ${DIM}${RELEASE_BIN}${RESET}"
   cd "${SCRIPT_DIR}"
-  ok "Build complete"
-fi
-
-# ── Determine what to install ─────────────────────────────
-step "Locating artifact"
-
-INSTALL_TYPE=""
-if [[ "$MODE" == "appimage" ]] || ([[ "$MODE" == "auto" ]] && [[ -f "$APPIMAGE_PATH" ]]); then
-  if [[ -f "$APPIMAGE_PATH" ]]; then
-    INSTALL_TYPE="appimage"
-    ARTIFACT="$APPIMAGE_PATH"
-    ok "AppImage found at ${DIM}${APPIMAGE_PATH}${RESET}"
-  else
-    warn "AppImage not found — falling back to binary"
-    MODE="binary"
-  fi
-fi
-
-if [[ "$MODE" == "binary" ]] || ([[ "$MODE" == "auto" ]] && [[ "$INSTALL_TYPE" == "" ]]); then
-  if [[ -f "$RELEASE_BIN" ]]; then
-    INSTALL_TYPE="binary"
-    ARTIFACT="$RELEASE_BIN"
-    ok "Release binary found at ${DIM}${RELEASE_BIN}${RESET}"
-  else
-    warn "No prebuilt artifact found — auto-building from source"
-    info "(use  ./install.sh --build  to skip this prompt next time)"
-    step "Building Orbit from source"
-    info "Building frontend…"
-    cd "${SCRIPT_DIR}/frontend" && npm install --silent && npm run build 2>&1 | tail -3
-    info "Building Rust binary (release)… this can take several minutes"
-    cd "${SCRIPT_DIR}/src-tauri" && cargo build --release 2>&1 | grep -E "^error|Compiling orbit|Finished" || true
-    cd "${SCRIPT_DIR}"
-    if [[ -f "$RELEASE_BIN" ]]; then
-      INSTALL_TYPE="binary"
-      ARTIFACT="$RELEASE_BIN"
-      ok "Build complete → ${DIM}${RELEASE_BIN}${RESET}"
-    else
-      die "Build finished but binary not found at ${RELEASE_BIN}"
-    fi
-  fi
+elif [[ "$NO_BUILD" == 1 ]] && [[ ! -f "$RELEASE_BIN" ]]; then
+  die "--no-build set but ${RELEASE_BIN} doesn't exist."
 fi
 
 # ── Create directories ────────────────────────────────────
 step "Creating directories"
-
 for dir in "$BIN_DIR" "$APPS_DIR" \
            "${ICONS_DIR}/32x32/apps" \
            "${ICONS_DIR}/128x128/apps" \
@@ -152,31 +173,21 @@ for dir in "$BIN_DIR" "$APPS_DIR" \
 done
 ok "Directories ready"
 
-# ── Install binary / AppImage ─────────────────────────────
+# ── Install binary ───────────────────────────────────────
 step "Installing executable"
-
 DEST_EXEC="${BIN_DIR}/${BIN_NAME}"
-
-if [[ "$INSTALL_TYPE" == "appimage" ]]; then
-  cp "$ARTIFACT" "${DATA_DIR}/${APPIMAGE_NAME}"
-  chmod +x "${DATA_DIR}/${APPIMAGE_NAME}"
-  ln -sf "${DATA_DIR}/${APPIMAGE_NAME}" "$DEST_EXEC"
-  ok "AppImage installed → ${DIM}${DATA_DIR}/${APPIMAGE_NAME}${RESET}"
-  ok "Symlink created  → ${DIM}${DEST_EXEC}${RESET}"
-elif [[ "$LINK" == 1 ]]; then
-  rm -f "$DEST_EXEC"
-  ln -s "$ARTIFACT" "$DEST_EXEC"
-  ok "Symlink created   → ${DIM}${DEST_EXEC}${RESET}"
-  info "Tracking ${DIM}${ARTIFACT}${RESET}"
-  info "Future ${BOLD}cargo build --release${RESET} runs are picked up on next launch."
+rm -f "$DEST_EXEC"
+if [[ "$LINK" == 1 ]]; then
+  ln -s "$RELEASE_BIN" "$DEST_EXEC"
+  ok "Symlink → ${DIM}${DEST_EXEC} → ${RELEASE_BIN}${RESET}"
+  info "Future ${BOLD}cargo build --release${RESET} runs are picked up automatically."
 else
-  install -m 755 "$ARTIFACT" "$DEST_EXEC"
+  install -m 755 "$RELEASE_BIN" "$DEST_EXEC"
   ok "Binary installed → ${DIM}${DEST_EXEC}${RESET}"
 fi
 
-# ── Install icons ─────────────────────────────────────────
+# ── Install icons ────────────────────────────────────────
 step "Installing icons"
-
 ICON_SRC="${SCRIPT_DIR}/src-tauri/icons"
 for size in 32 128 256 512; do
   src="${ICON_SRC}/${size}x${size}.png"
@@ -185,12 +196,19 @@ for size in 32 128 256 512; do
     cp "$src" "$dst"
     ok "${size}×${size} icon installed"
   else
-    warn "Icon ${size}x${size}.png not found — skipping"
+    warn "Icon ${size}x${size}.png missing — skipping"
   fi
 done
 
-# ── Create desktop entry ──────────────────────────────────
+# ── Desktop entry ────────────────────────────────────────
 step "Creating desktop entry"
+for desktop_id in "${DESKTOP_IDS[@]}"; do
+  desktop_path="${APPS_DIR}/${desktop_id}"
+  if [[ "$desktop_id" != "${APP_NAME}.desktop" && -e "$desktop_path" ]]; then
+    rm -f "$desktop_path"
+    ok "Removed stale launcher ${DIM}${desktop_path}${RESET}"
+  fi
+done
 
 cat > "${APPS_DIR}/${APP_NAME}.desktop" << DESKTOP
 [Desktop Entry]
@@ -201,7 +219,7 @@ Exec=${DEST_EXEC} %F
 Icon=${APP_NAME}
 Type=Application
 Terminal=false
-Categories=System;FileTools;FileManager;Development;IDE;
+Categories=System;FileTools;FileManager;
 StartupNotify=true
 StartupWMClass=orbit
 MimeType=inode/directory;
@@ -212,40 +230,47 @@ Actions=NewWindow;
 Name=Open New Window
 Exec=${DEST_EXEC}
 DESKTOP
-
 ok "Desktop entry written → ${DIM}${APPS_DIR}/${APP_NAME}.desktop${RESET}"
 
-# ── Refresh caches ─────────────────────────────────────────
+# ── Refresh caches ───────────────────────────────────────
 step "Refreshing system caches"
-
 if command -v gtk-update-icon-cache &>/dev/null; then
   gtk-update-icon-cache -f -t "${ICONS_DIR}" 2>/dev/null && ok "Icon cache updated" || true
-fi
-if command -v update-icon-caches &>/dev/null; then
-  update-icon-caches "${ICONS_DIR}" 2>/dev/null || true
 fi
 if command -v update-desktop-database &>/dev/null; then
   update-desktop-database "${APPS_DIR}" 2>/dev/null && ok "Desktop database updated" || true
 fi
+if command -v xdg-desktop-menu &>/dev/null; then
+  xdg-desktop-menu forceupdate 2>/dev/null && ok "Desktop menu refreshed" || true
+fi
+if command -v kbuildsycoca6 &>/dev/null; then
+  kbuildsycoca6 --noincremental 2>/dev/null && ok "KDE service cache refreshed" || true
+elif command -v kbuildsycoca5 &>/dev/null; then
+  kbuildsycoca5 --noincremental 2>/dev/null && ok "KDE service cache refreshed" || true
+fi
 
-# ── PATH hint ─────────────────────────────────────────────
+# ── PATH hint ────────────────────────────────────────────
 PATH_OK=0
-if echo "${PATH}" | grep -q "${BIN_DIR}"; then PATH_OK=1; fi
+echo "${PATH}" | grep -q "${BIN_DIR}" && PATH_OK=1
 
-# ── Done ──────────────────────────────────────────────────
+# ── Done ────────────────────────────────────────────────
 echo ""
-echo -e "${BOLD}${GREEN}  ✓  Orbit installed successfully!${RESET}"
+echo -e "${BOLD}${GREEN}  ✓  Orbit installed.${RESET}"
 echo ""
-echo -e "  Launch from your app menu by searching ${BOLD}Orbit${RESET}"
-echo -e "  or run from the terminal:"
+echo -e "  Launch from your app menu (search ${BOLD}Orbit${RESET}) or run:"
+echo -e "    ${BOLD}${CYAN}orbit${RESET}  [path]"
 echo ""
 if [[ "$PATH_OK" == 0 ]]; then
-  echo -e "  ${YELLOW}⚠  ${BIN_DIR} is not in your PATH${RESET}"
+  echo -e "  ${YELLOW}⚠  ${BIN_DIR} is not in your \$PATH${RESET}"
   echo -e "  Add this to your shell config:"
   echo -e "  ${DIM}export PATH=\"\$HOME/.local/bin:\$PATH\"${RESET}"
   echo ""
 fi
-echo -e "  ${BOLD}${CYAN}orbit${RESET}  [path]"
+echo -e "  Uninstall (full wipe — pacman -Rns style):"
+echo -e "    ${DIM}./uninstall.sh${RESET}"
 echo ""
-echo -e "  To uninstall:  ${DIM}./uninstall.sh${RESET}"
-echo ""
+
+if [ -n "${ORBIT_INSTALL_TTY:-}" ] && [ -t 0 ]; then
+  printf "  Press Enter to close this window…"
+  read -r _ || true
+fi
