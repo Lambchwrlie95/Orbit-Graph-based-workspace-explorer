@@ -54,7 +54,6 @@ export interface GraphRequest {
   rootPath: string;
   scopePath?: string;
   mode?: string;
-  limit?: number;
   expandedFolders?: string[];
 }
 

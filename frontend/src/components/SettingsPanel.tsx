@@ -9,10 +9,6 @@ interface SettingsPanelProps {
   onClose: () => void;
   performanceMode: PerformanceMode;
   onPerformanceModeChange: (mode: PerformanceMode) => void;
-  graphNodeLimit: number;
-  onGraphNodeLimitChange: (limit: number) => void;
-  iconOverlayCap: number;
-  onIconOverlayCapChange: (cap: number) => void;
   thumbnailMemoryCap: number;
   onThumbnailMemoryCapChange: (cap: number) => void;
   editorMode: EditorMode;
@@ -33,10 +29,6 @@ export function SettingsPanel({
   onClose,
   performanceMode,
   onPerformanceModeChange,
-  graphNodeLimit,
-  onGraphNodeLimitChange,
-  iconOverlayCap,
-  onIconOverlayCapChange,
   thumbnailMemoryCap,
   onThumbnailMemoryCapChange,
   editorMode,
@@ -94,8 +86,6 @@ export function SettingsPanel({
                 </button>
               ))}
             </div>
-            <NumberRow label="Graph node limit" value={graphNodeLimit} min={100} max={2000} step={50} onChange={onGraphNodeLimitChange} />
-            <NumberRow label="Icon overlay cap" value={iconOverlayCap} min={0} max={2000} step={50} onChange={onIconOverlayCapChange} />
             <NumberRow label="Thumbnail memory cap" value={thumbnailMemoryCap} min={50} max={2000} step={50} onChange={onThumbnailMemoryCapChange} />
             <ToggleRow label="Deep scan flag" checked={deepScan} onChange={onDeepScanChange} />
           </SettingsSection>

@@ -144,8 +144,8 @@ fn get_file(path: String, state: State<'_, AppState>) -> Result<Option<FileRecor
 #[tauri::command]
 fn load_graph(request: GraphRequest, state: State<'_, AppState>) -> Result<GraphPayload, String> {
     logger::log_event(format!(
-        "graph load: root={}, scope={:?}, mode={:?}, limit={:?}, expanded={:?}",
-        request.root_path, request.scope_path, request.mode, request.limit, 
+        "graph load: root={}, scope={:?}, mode={:?}, expanded={:?}",
+        request.root_path, request.scope_path, request.mode,
         request.expanded_folders.as_ref().map(|v| v.len())
     ));
     let start = std::time::Instant::now();
@@ -154,7 +154,6 @@ fn load_graph(request: GraphRequest, state: State<'_, AppState>) -> Result<Graph
         &request.root_path,
         request.scope_path.as_deref(),
         request.mode.as_deref().unwrap_or("workspace"),
-        request.limit,
         request.expanded_folders.as_deref(),
     );
     performance::record_operation("load_graph", start.elapsed().as_millis() as i64);
@@ -360,6 +359,81 @@ fn check_cache_status(root_path: String, state: State<'_, AppState>) -> Result<C
 #[tauri::command]
 fn get_performance_metrics() -> PerformanceMetrics {
     performance::get_performance_metrics()
+}
+
+#[cfg(test)]
+mod file_operation_tests {
+    use super::*;
+
+    #[test]
+    fn create_file_creates_file_in_existing_directory() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let created = create_file(
+            dir.path().to_string_lossy().to_string(),
+            "note.md".to_string(),
+        )
+        .expect("create file");
+
+        let path = std::path::Path::new(&created);
+        assert!(path.is_file());
+        assert_eq!(path.parent(), Some(dir.path()));
+    }
+
+    #[test]
+    fn create_folder_creates_child_directory() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let created = create_folder(
+            dir.path().to_string_lossy().to_string(),
+            "assets".to_string(),
+        )
+        .expect("create folder");
+
+        let path = std::path::Path::new(&created);
+        assert!(path.is_dir());
+        assert_eq!(path.parent(), Some(dir.path()));
+    }
+
+    #[test]
+    fn rename_moves_file_within_same_parent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let original = dir.path().join("draft.txt");
+        std::fs::write(&original, "orbit").expect("seed file");
+
+        let renamed = rename(
+            original.to_string_lossy().to_string(),
+            "final.txt".to_string(),
+        )
+        .expect("rename");
+
+        assert!(!original.exists());
+        assert_eq!(std::fs::read_to_string(&renamed).expect("renamed content"), "orbit");
+        assert_eq!(std::path::Path::new(&renamed).parent(), Some(dir.path()));
+    }
+
+    #[test]
+    fn file_operations_reject_path_separator_names() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let err = create_file(
+            dir.path().to_string_lossy().to_string(),
+            "nested/file.txt".to_string(),
+        )
+        .expect_err("separator rejected");
+
+        assert!(err.contains("path separators"));
+    }
+
+    #[test]
+    fn open_in_terminal_editor_accepts_explicit_command_template() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("open-me.txt");
+        std::fs::write(&file, "orbit").expect("seed file");
+
+        open_in_terminal_editor(
+            file.to_string_lossy().to_string(),
+            Some("true {file}".to_string()),
+        )
+        .expect("spawn no-op editor command");
+    }
 }
 
 #[tauri::command]

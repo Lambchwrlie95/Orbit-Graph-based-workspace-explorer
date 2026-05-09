@@ -1,6 +1,12 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
+import {
+  NodeCircleProgram,
+  createNodeCompoundProgram,
+  drawDiscNodeLabel,
+  type NodeLabelDrawingFunction,
+} from "sigma/rendering";
 import { ArrowLeft, Maximize, Target } from "lucide-react";
 import { GraphEdge, GraphNode, GraphPayload } from "../types";
 import { formatBytes } from "../utils";
@@ -32,10 +38,6 @@ const PREF = {
   types: "orbit:graph:visibleTypes",
   nodeView: "orbit:graph:nodeView:v2",
   minimap: "orbit:graph:showMinimap",
-};
-
-const SETTINGS_KEYS = {
-  iconOverlayCap: "orbit:settings:iconOverlayCap",
 };
 
 const serializeTypeSet = (set: Set<NodeType>) => JSON.stringify(Array.from(set));
@@ -100,11 +102,7 @@ function GraphViewComponent({
   );
   const [nodeView, setNodeView] = usePersistedState<NodeView>(PREF.nodeView, "icons");
   const [showMinimap, setShowMinimap] = usePersistedState<boolean>(PREF.minimap, false);
-  const [iconOverlayCap, setIconOverlayCap] = useState(() => readNumberSetting(SETTINGS_KEYS.iconOverlayCap, 250));
   const [iconTheme, setIconTheme] = useState<IconThemePayload | null>(null);
-  const [iconOverlay, setIconOverlay] = useState<
-    Array<{ id: string; x: number; y: number; size: number; glyph: string; color: string; opacity: number; emphasized: boolean }>
-  >([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [expandingCluster, setExpandingCluster] = useState<string | null>(null);
@@ -137,14 +135,11 @@ function GraphViewComponent({
   useEffect(() => {
     const toggleLabels = () => setShowLabels((value) => !value);
     const toggleIcons = () => setNodeView((value) => (value === "icons" ? "spheres" : "icons"));
-    const refreshSettings = () => setIconOverlayCap(readNumberSetting(SETTINGS_KEYS.iconOverlayCap, 250));
     document.addEventListener("orbit:graph:toggle-labels", toggleLabels);
     document.addEventListener("orbit:graph:toggle-icons", toggleIcons);
-    document.addEventListener("orbit:settings-changed", refreshSettings);
     return () => {
       document.removeEventListener("orbit:graph:toggle-labels", toggleLabels);
       document.removeEventListener("orbit:graph:toggle-icons", toggleIcons);
-      document.removeEventListener("orbit:settings-changed", refreshSettings);
     };
   }, [setNodeView, setShowLabels]);
 
@@ -295,6 +290,7 @@ function GraphViewComponent({
         childCount: node.childCount,
         glyphText: icon.text,
         glyphColor: icon.fg ?? baseColor,
+        forceLabel: nodeView === "icons",
       });
     }
 
@@ -316,8 +312,15 @@ function GraphViewComponent({
     }
 
     const renderer = new Sigma(graph, containerRef.current, {
-      renderLabels: showLabels,
+      renderLabels: nodeView === "icons" ? true : showLabels,
       renderEdgeLabels: false,
+      nodeProgramClasses: {
+        circle: createNodeCompoundProgram(
+          [NodeCircleProgram],
+          makeNodeLabelRenderer(nodeView, showLabels),
+          () => undefined,
+        ),
+      },
       labelColor: { color: "#d4d4d4" },
       labelFont: "Inter, system-ui, sans-serif",
       labelSize: 12,
@@ -334,13 +337,10 @@ function GraphViewComponent({
       zIndex: true,
       minCameraRatio: 0.03,
       maxCameraRatio: 8,
-      // Sigma's default zoomToSizeRatioFunction is Math.pow(ratio, 0.5),
-      // which makes nodes SHRINK as you zoom in (because ratio < 1 when
-      // zoomed in). That feels backwards — zooming in should bring you
-      // closer, so things grow. Invert it: 1 / sqrt(ratio) gives sublinear
-      // growth on zoom-in (≈1.4× at half-zoom, 2× at quarter-zoom) and
-      // sublinear shrink on zoom-out, matching real-world camera behavior.
-      zoomToSizeRatioFunction: (ratio: number) => 1 / Math.sqrt(Math.max(ratio, 0.001)),
+      // Sigma divides by this value when computing canvas label size. sqrt
+      // gives the expected camera behavior: zoom in => glyphs grow, zoom out
+      // => glyphs shrink.
+      zoomToSizeRatioFunction: (ratio: number) => Math.sqrt(Math.max(ratio, 0.001)),
       nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current, nodeView),
       edgeReducer: (edge, data) => reduceEdge(edge, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated),
     });
@@ -403,98 +403,6 @@ function GraphViewComponent({
 
     rendererRef.current = renderer;
 
-    // Project node positions to viewport coords for the icon overlay layer.
-    // Throttled via afterRender so it follows pan/zoom without thrashing React.
-    let overlayRaf: number | null = null;
-    let lastOverlayKey = "";
-    const updateOverlay = () => {
-      // Only compute the overlay when icons mode is on. In spheres mode the
-      // glyph layer is hidden, so building 200+ HTML divs every frame is pure
-      // waste.
-      if (nodeView !== "icons") {
-        if (lastOverlayKey !== "") {
-          lastOverlayKey = "";
-          setIconOverlay([]);
-        }
-        return;
-      }
-      if (overlayRaf !== null) return;
-      overlayRaf = requestAnimationFrame(() => {
-        overlayRaf = null;
-        const points: Array<{
-          id: string;
-          x: number;
-          y: number;
-          size: number;
-          glyph: string;
-          color: string;
-          opacity: number;
-          emphasized: boolean;
-        }> = [];
-        const cameraRatio = renderer.getCamera().getState().ratio;
-        const hoveredId = hoveredNodeRef.current;
-        const selectedId = selectedNodeRef.current;
-        graph.forEachNode((node, attrs) => {
-          // Use the natural baseSize (set at node-add time, untouched by
-          // the reducer) so big nodes get visibly bigger glyphs. Use the
-          // SAME zoomToSizeRatio curve Sigma uses for spheres (1/sqrt(ratio))
-          // so the overlay grows/shrinks in lockstep with the underlying
-          // sphere geometry — keeping edges visually anchored to the icon.
-          const naturalSize = Number(attrs.baseSize ?? 6);
-          const sizeOnScreen = naturalSize / Math.sqrt(Math.max(cameraRatio, 0.001));
-          const baseColor = (attrs.baseColor as string) ?? (attrs.color as string);
-          const renderedColor = (attrs.color as string) ?? baseColor;
-          const isDimmed =
-            baseColor &&
-            renderedColor &&
-            renderedColor.toLowerCase() !== baseColor.toLowerCase();
-          const viewport = renderer.graphToViewport({
-            x: attrs.x as number,
-            y: attrs.y as number,
-          });
-          const { width, height } = renderer.getDimensions();
-          if (
-            viewport.x < -40 ||
-            viewport.y < -40 ||
-            viewport.x > width + 40 ||
-            viewport.y > height + 40
-          ) {
-            return;
-          }
-          // Hard cap on overlay points to keep DOM cost bounded — even when
-          // graph caps grow. Beyond this we stop pushing; the underlying
-          // sphere is still visible (in icons-mode, painted canvas-bg, but
-          // the geometry remains for edges).
-          if (points.length >= iconOverlayCap) return;
-          // Cached at node-add time — no per-frame glob/map work.
-          const glyph = (attrs.glyphText as string) ?? "·";
-          const glyphColor = (attrs.glyphColor as string) ?? baseColor ?? "#a8bbc8";
-          const emphasized = node === hoveredId || node === selectedId;
-          points.push({
-            id: node,
-            x: viewport.x,
-            y: viewport.y,
-            size: sizeOnScreen,
-            glyph,
-            color: glyphColor,
-            opacity: isDimmed ? 0.32 : 1,
-            emphasized,
-          });
-        });
-        // Cheap fingerprint to skip React renders when nothing visible moved.
-        // Round to whole pixels — sub-pixel jitter from camera animation isn't
-        // worth a re-render for a 200-element list.
-        const key = points
-          .map((p) => `${p.id}:${p.x | 0}:${p.y | 0}:${p.size | 0}:${p.opacity}:${p.emphasized ? 1 : 0}:${p.glyph}:${p.color}`)
-          .join("|");
-        if (key === lastOverlayKey) return;
-        lastOverlayKey = key;
-        setIconOverlay(points);
-      });
-    };
-    renderer.on("afterRender", updateOverlay);
-    updateOverlay();
-
     // Only animate camera on first render, not on updates
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
@@ -510,7 +418,7 @@ function GraphViewComponent({
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, showLabels, dimUnrelated, nodeView, iconOverlayCap, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
+  }, [displayPayload, displayNodes, showLabels, dimUnrelated, nodeView, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
 
   const focusSelected = () => {
     const renderer = rendererRef.current;
@@ -659,7 +567,6 @@ function GraphViewComponent({
         <span>{graphStats.fileCount} files</span>
         <span>{graphStats.edgeCount} edges</span>
         {graphStats.totalSize > 0 && <span>{formatBytes(graphStats.totalSize)}</span>}
-        {displayPayload?.capped && <span className="capped-badge">Capped at {displayPayload.nodeLimit}</span>}
         {expandedFolders.length > 0 && <span className="expanded-badge">{expandedFolders.length} expanded</span>}
         {isLoading && <span className="loading-indicator">Loading...</span>}
       </div>
@@ -734,7 +641,14 @@ function GraphViewComponent({
       )}
 
       <div className="graph-canvas" ref={containerRef}>
-        {(!displayPayload || displayNodes.length === 0) && (
+        {isLoading && (
+          <div className="graph-loading-overlay" role="status" aria-live="polite">
+            <span className="orbit-spinner" aria-hidden />
+            <strong>Loading graph</strong>
+            <small>Index relationships are being prepared for this scope.</small>
+          </div>
+        )}
+        {!isLoading && (!displayPayload || displayNodes.length === 0) && (
           <div className="empty-state">
             {payload ? (
               (() => {
@@ -778,38 +692,6 @@ function GraphViewComponent({
           </div>
         )}
       </div>
-
-      {nodeView === "icons" && (
-        <div className="graph-icon-overlay" aria-hidden>
-          {iconOverlay.map((point) => {
-            // Glyph IS the node visual: size it so the rendered glyph roughly
-            // matches the (now invisible) sphere diameter — that way edges,
-            // which terminate at the sphere radius, visually meet the icon.
-            // ~1.9x sphere radius gives a glyph whose visual mass matches a
-            // disk of diameter 2*radius without overflowing past the edge
-            // termination point much.
-            const baseFont = Math.max(11, Math.min(40, point.size * 1.9));
-            // Emphasis bump goes through transform:scale, not font-size, so
-            // it doesn't trigger a layout/transition cascade every frame.
-            return (
-              <span
-                key={point.id}
-                className={`graph-node-glyph${point.emphasized ? " emphasized" : ""}`}
-                style={{
-                  // translate3d promotes the layer to its own GPU compositor
-                  // surface — matters for ~200 spans repositioned every frame.
-                  transform: `translate3d(${point.x}px, ${point.y}px, 0) translate(-50%, -50%)${point.emphasized ? " scale(1.35)" : ""}`,
-                  fontSize: `${baseFont}px`,
-                  color: point.emphasized ? "#ffe27a" : point.color,
-                  opacity: point.opacity,
-                }}
-              >
-                {point.glyph}
-              </span>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -1007,6 +889,8 @@ function reduceNode(
   let targetSize = baseSize;
   let targetZIndex = data.baseZIndex ?? 1;
   let targetLabel = data.label as string;
+  let targetGlyphOpacity = 1;
+  const targetForceLabel = iconsMode || Boolean(data.forceLabel);
 
   // In icons mode all visual feedback (color, dim, hover, select) lives in
   // the HTML overlay. The sphere stays a constant invisible disk so edges
@@ -1018,6 +902,7 @@ function reduceNode(
       targetColor = adjustColorBrightness(targetColor, 0.42);
       targetSize = Math.max(2, baseSize * 0.72);
     }
+    if (iconsMode) targetGlyphOpacity = 0.32;
     targetLabel = "";
     targetZIndex = 0;
   }
@@ -1057,7 +942,9 @@ function reduceNode(
     data.color === targetColor &&
     data.size === targetSize &&
     data.zIndex === targetZIndex &&
-    data.label === targetLabel
+    data.label === targetLabel &&
+    data.glyphOpacity === targetGlyphOpacity &&
+    data.forceLabel === targetForceLabel
   ) {
     return data; // Return same reference - no change
   }
@@ -1068,6 +955,8 @@ function reduceNode(
     size: targetSize,
     zIndex: targetZIndex,
     label: targetLabel,
+    glyphOpacity: targetGlyphOpacity,
+    forceLabel: targetForceLabel,
   };
 }
 
@@ -1343,19 +1232,40 @@ function shortNodePath(path: string) {
   return `.../${parts.slice(-3).join("/")}`;
 }
 
-function readNumberSetting(key: string, fallback: number) {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
-    return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function seededAngle(id: number) {
   const x = Math.sin(Math.abs(id) * 999.13) * 10000;
   return (x - Math.floor(x)) * Math.PI * 2;
+}
+
+function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabelDrawingFunction {
+  return (context, data, settings) => {
+    if (nodeView !== "icons") {
+      if (showNames) drawDiscNodeLabel(context, data, settings);
+      return;
+    }
+
+    const glyph = String((data as Record<string, unknown>).glyphText ?? "·");
+    const glyphColor = String((data as Record<string, unknown>).glyphColor ?? data.color ?? "#a8bbc8");
+    const opacity = Number((data as Record<string, unknown>).glyphOpacity ?? 1);
+    const fontSize = Math.max(12, Math.min(44, data.size * 2.45));
+
+    context.save();
+    context.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
+    context.fillStyle = glyphColor;
+    context.font = `600 ${fontSize}px "Symbols Nerd Font", "SymbolsNerdFont", "JetBrainsMono Nerd Font", "Hack Nerd Font", "FiraCode Nerd Font", "Symbola", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(glyph, data.x, data.y);
+
+    if (showNames && data.label) {
+      context.globalAlpha = Math.min(0.92, context.globalAlpha);
+      context.fillStyle = "#d4d4d4";
+      context.font = '600 11px Inter, system-ui, sans-serif';
+      context.textBaseline = "top";
+      context.fillText(String(data.label), data.x, data.y + fontSize * 0.52 + 3, 120);
+    }
+    context.restore();
+  };
 }
 
 export const GraphView = memo(GraphViewComponent);

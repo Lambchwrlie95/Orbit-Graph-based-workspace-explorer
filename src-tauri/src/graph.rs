@@ -1,22 +1,17 @@
-use std::collections::{HashMap, HashSet};
-use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::path::Path;
 
 use rusqlite::{params, Connection};
 
 use crate::db;
-use crate::models::{ClusterSummary, GraphEdge, GraphNode, GraphPayload};
-
-const DEFAULT_NODE_LIMIT: i64 = 200;
-const FOLDER_CLUSTER_THRESHOLD: i64 = 50;
+use crate::models::{GraphEdge, GraphNode, GraphPayload};
 
 pub fn load_graph(
     db_path: &Path,
     root_path: &str,
     scope_path: Option<&str>,
     mode: &str,
-    limit: Option<i64>,
-    expanded_folders: Option<&[String]>,
+    _expanded_folders: Option<&[String]>,
 ) -> Result<GraphPayload, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let root = canonicalize(root_path);
@@ -25,10 +20,9 @@ pub fn load_graph(
         return Err("Graph scope must stay inside the active workspace root".into());
     }
 
-    let node_limit = limit.unwrap_or(DEFAULT_NODE_LIMIT).clamp(100, 2_000);
     let scope_prefix = db::child_prefix(&scope);
     
-    // Get total count for capping info
+    // Keep the total so the UI can report visible vs. indexed counts.
     let total_in_scope: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM files WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\'",
@@ -37,7 +31,8 @@ pub fn load_graph(
         )
         .map_err(|e| e.to_string())?;
 
-    // Query nodes with folder-first, depth-first ordering
+    // Query every node in the requested scope. Scope selection is the boundary;
+    // the backend should not hide indexed files behind quantity caps.
     let mut node_stmt = conn
         .prepare(
             r#"
@@ -50,17 +45,14 @@ pub fn load_graph(
               parent_path COLLATE NOCASE ASC,
               is_dir DESC,
               name COLLATE NOCASE ASC
-            LIMIT ?3
             "#,
         )
         .map_err(|e| e.to_string())?;
 
     let mut nodes = Vec::new();
-    let mut selected_ids = HashSet::new();
-    let mut parent_child_counts: HashMap<i64, i64> = HashMap::new();
     let node_rows = node_stmt
         .query_map(
-            params![scope, db::child_prefix(&scope), node_limit * 2],
+            params![scope, db::child_prefix(&scope)],
             |row| {
                 Ok(GraphNode {
                     id: row.get(0)?,
@@ -82,93 +74,10 @@ pub fn load_graph(
 
     for row in node_rows {
         let node = row.map_err(|e| e.to_string())?;
-        selected_ids.insert(node.id);
         nodes.push(node);
     }
 
-    // Count children per parent for clustering
-    for node in &nodes {
-        if let Some(parent_id) = get_parent_id(&conn, &node.path)? {
-            *parent_child_counts.entry(parent_id).or_insert(0) += 1;
-        }
-    }
-
-    // Build expanded folders set
-    let expanded_set: HashSet<&str> = expanded_folders
-        .map(|folders| folders.iter().map(|s| s.as_str()).collect())
-        .unwrap_or_default();
-
-    // Apply folder clustering for folders with >50 children
-    let mut cluster_id = -1_i64;
-    let mut clustered_nodes: Vec<GraphNode> = Vec::new();
-    let mut nodes_to_hide: HashSet<i64> = HashSet::new();
-    
-    for node in &nodes {
-        if let Some(&child_count) = parent_child_counts.get(&node.id) {
-            if child_count > FOLDER_CLUSTER_THRESHOLD && !expanded_set.contains(node.path.as_str()) {
-                // This is an oversized folder that's not expanded - keep it but we'll add a cluster node
-                clustered_nodes.push(node.clone());
-                
-                // Get all children for this folder (for summary)
-                let all_children: Vec<&GraphNode> = nodes.iter()
-                    .filter(|n| {
-                        if let Some(parent_path) = &n.parent_path {
-                            parent_path == &node.path
-                        } else {
-                            false
-                        }
-                    })
-                    .collect();
-                
-                if all_children.len() > FOLDER_CLUSTER_THRESHOLD as usize {
-                    // Hide children beyond the first 20, add cluster node
-                    let to_show = 20;
-                    let to_hide = all_children.len() - to_show;
-                    
-                    for (idx, child) in all_children.iter().enumerate() {
-                        if idx >= to_show {
-                            nodes_to_hide.insert(child.id);
-                        }
-                    }
-                    
-                    // Compute cluster summary
-                    let summary = compute_cluster_summary(&all_children);
-                    
-                    // Add cluster node with summary
-                    clustered_nodes.push(GraphNode {
-                        id: cluster_id,
-                        label: format!("+{to_hide} more"),
-                        path: format!("{}/__cluster__", node.path),
-                        is_dir: true,
-                        size_bytes: summary.total_size,
-                        extension: None,
-                        parent_path: Some(node.path.clone()),
-                        is_cluster: true,
-                        child_count: Some(to_hide as i64),
-                        x: None,
-                        y: None,
-                        cluster_summary: Some(summary),
-                    });
-                    selected_ids.insert(cluster_id);
-                    cluster_id -= 1;
-                }
-            } else {
-                // Folder is either small or expanded - show all children
-                clustered_nodes.push(node.clone());
-            }
-        } else {
-            clustered_nodes.push(node.clone());
-        }
-    }
-    
-    // Filter out hidden nodes
-    let final_nodes: Vec<GraphNode> = clustered_nodes
-        .into_iter()
-        .filter(|n| !nodes_to_hide.contains(&n.id))
-        .take(node_limit as usize)
-        .collect();
-    
-    // Rebuild selected_ids based on final nodes
+    let final_nodes = nodes;
     let final_selected_ids: HashSet<i64> = final_nodes.iter().map(|n| n.id).collect();
 
     // Build edges: containment relationships
@@ -202,14 +111,13 @@ pub fn load_graph(
             WHERE (source.path = ?1 OR source.path LIKE ?2 ESCAPE '\')
               AND (target.path = ?1 OR target.path LIKE ?2 ESCAPE '\')
             ORDER BY e.edge_type ASC, e.id ASC
-            LIMIT ?3
             "#,
         )
         .map_err(|e| e.to_string())?;
 
     let edge_rows = edge_stmt
         .query_map(
-            params![scope, db::child_prefix(&scope), node_limit * 2],
+            params![scope, db::child_prefix(&scope)],
             |row| {
                 Ok(GraphEdge {
                     id: row.get(0)?,
@@ -234,8 +142,8 @@ pub fn load_graph(
         mode: mode.into(),
         nodes: with_radial_positions(final_nodes),
         edges,
-        capped: total_in_scope > node_limit,
-        node_limit,
+        capped: false,
+        node_limit: total_in_scope,
         total_in_scope,
     })
 }
@@ -282,36 +190,4 @@ fn canonicalize(path: &str) -> String {
         .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
         .to_string()
-}
-
-/// Compute summary statistics for a cluster of nodes
-fn compute_cluster_summary(children: &[&GraphNode]) -> ClusterSummary {
-    let total_children = children.len() as i64;
-    let file_count = children.iter().filter(|n| !n.is_dir).count() as i64;
-    let dir_count = children.iter().filter(|n| n.is_dir).count() as i64;
-    let total_size: i64 = children.iter().map(|n| n.size_bytes).sum();
-    
-    // Count extensions and get top 5
-    let mut ext_counts: HashMap<String, i64> = HashMap::new();
-    for child in children {
-        if let Some(ext) = &child.extension {
-            *ext_counts.entry(ext.clone()).or_insert(0) += 1;
-        }
-    }
-    
-    // Sort by count and take top 5
-    let mut ext_vec: Vec<(String, i64)> = ext_counts.into_iter().collect();
-    ext_vec.sort_by_key(|(_, count)| Reverse(*count));
-    let top_extensions: Vec<String> = ext_vec.into_iter()
-        .take(5)
-        .map(|(ext, _)| ext)
-        .collect();
-    
-    ClusterSummary {
-        total_children,
-        file_count,
-        dir_count,
-        total_size,
-        top_extensions,
-    }
 }

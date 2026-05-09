@@ -44,8 +44,6 @@ const BOOKMARKS_KEY = "orbit:bookmarks";
 const MAX_BOOKMARKS = 12;
 const SETTINGS_KEYS = {
   performanceMode: "orbit:settings:performanceMode",
-  graphNodeLimit: "orbit:settings:graphNodeLimit",
-  iconOverlayCap: "orbit:settings:iconOverlayCap",
   thumbnailMemoryCap: "orbit:settings:thumbnailMemoryCap",
   editorMode: "orbit:settings:editorMode",
   monacoMinimap: "orbit:settings:monacoMinimap",
@@ -55,11 +53,11 @@ const SETTINGS_KEYS = {
 
 const PERFORMANCE_PRESETS: Record<
   PerformanceMode,
-  { graphNodeLimit: number; iconOverlayCap: number; thumbnailMemoryCap: number; monacoMinimap: boolean; deepScan: boolean }
+  { thumbnailMemoryCap: number; monacoMinimap: boolean; deepScan: boolean }
 > = {
-  eco: { graphNodeLimit: 150, iconOverlayCap: 100, thumbnailMemoryCap: 100, monacoMinimap: false, deepScan: false },
-  balanced: { graphNodeLimit: 300, iconOverlayCap: 250, thumbnailMemoryCap: 300, monacoMinimap: false, deepScan: false },
-  full: { graphNodeLimit: 800, iconOverlayCap: 700, thumbnailMemoryCap: 800, monacoMinimap: true, deepScan: true },
+  eco: { thumbnailMemoryCap: 100, monacoMinimap: false, deepScan: false },
+  balanced: { thumbnailMemoryCap: 300, monacoMinimap: false, deepScan: false },
+  full: { thumbnailMemoryCap: 800, monacoMinimap: true, deepScan: true },
 };
 
 function persistSetting(key: string, value: unknown) {
@@ -105,6 +103,8 @@ function App() {
   const [breadcrumbNodes, setBreadcrumbNodes] = useState<GraphNode[]>([]); // Parent folder nodes to keep visible
   const [isGraphLoading, setIsGraphLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -115,8 +115,6 @@ function App() {
 
   const debouncedQuery = useDebounce(query, 300);
   const [performanceMode, setPerformanceMode] = usePersistedState<PerformanceMode>(SETTINGS_KEYS.performanceMode, "balanced");
-  const [graphNodeLimit, setGraphNodeLimit] = usePersistedState<number>(SETTINGS_KEYS.graphNodeLimit, 300);
-  const [iconOverlayCap, setIconOverlayCap] = usePersistedState<number>(SETTINGS_KEYS.iconOverlayCap, 250);
   const [thumbnailMemoryCap, setThumbnailMemoryCap] = usePersistedState<number>(SETTINGS_KEYS.thumbnailMemoryCap, 300);
   const [editorMode, setEditorMode] = usePersistedState<EditorMode>(SETTINGS_KEYS.editorMode, "light");
   const [monacoMinimap, setMonacoMinimap] = usePersistedState<boolean>(SETTINGS_KEYS.monacoMinimap, false);
@@ -152,17 +150,19 @@ function App() {
 
   const loadChildren = useCallback(async (path: string) => {
     if (!path) return;
+    let slowTimer: ReturnType<typeof setTimeout> | null = null;
     try {
       // Don't blast the status with "Loading..." for cached-cheap lookups —
       // most folders return in <50ms; only show the indicator if it's slow.
-      const slowTimer = setTimeout(() => setStatus("Loading…"), 120);
+      slowTimer = setTimeout(() => setStatus("Loading folder…"), 120);
       const result = await tauriInvoke("list_children", { parentPath: path });
-      clearTimeout(slowTimer);
       setChildren(result);
       setStatus(`${result.length} item${result.length === 1 ? "" : "s"}`);
     } catch (err) {
       setError(String(err));
       setStatus("Error loading directory");
+    } finally {
+      if (slowTimer) clearTimeout(slowTimer);
     }
   }, []);
 
@@ -181,18 +181,13 @@ function App() {
           rootPath,
           scopePath,
           mode: "workspace",
-          limit: graphNodeLimit,
           expandedFolders: expanded,
         },
       });
       console.log("[Main] loadGraph received payload:", payload?.nodes?.length, "nodes");
       setGraphPayload(payload);
       const duration = Math.round(performance.now() - startTime);
-      setStatus(
-        payload.capped
-          ? `Graph capped at ${payload.nodeLimit} nodes (${duration}ms)`
-          : `${payload.nodes.length} graph nodes (${duration}ms)`
-      );
+      setStatus(`${payload.nodes.length} graph nodes (${duration}ms)`);
     } catch (err) {
       console.error("[Main] loadGraph error:", err);
       setError(String(err));
@@ -200,7 +195,7 @@ function App() {
     } finally {
       setIsGraphLoading(false);
     }
-  }, [expandedGraphFolders, graphNodeLimit, rootPath]);
+  }, [expandedGraphFolders, rootPath]);
 
   const selectRecord = useCallback(async (record: FileRecord) => {
     setSelected(record);
@@ -244,6 +239,7 @@ function App() {
   }, []);
 
   const applyWorkspace = useCallback(async (path: string, statusText = "Workspace selected") => {
+    setIsWorkspaceLoading(true);
     setRootPath(path);
     setCurrentPath(path);
     setChildren([]);
@@ -260,6 +256,7 @@ function App() {
     // If the cache is fresh, populate the UI from it. Otherwise trigger a scan
     // so the user isn't left staring at an empty workbench.
     try {
+      setStatus("Checking workspace cache…");
       const status = await tauriInvoke("check_cache_status", { rootPath: path });
       setCacheStatus(status);
       if (status.fileCount > 0 && !status.isStale) {
@@ -302,6 +299,8 @@ function App() {
       console.error("applyWorkspace failed:", err);
       setError(String(err));
       setStatus("Workspace load failed");
+    } finally {
+      setIsWorkspaceLoading(false);
     }
   }, [checkCacheStatus, loadChildren, loadGraph]);
 
@@ -360,6 +359,7 @@ function App() {
 
   const scanWorkspace = useCallback(async () => {
     if (!rootPath) return;
+    setIsWorkspaceLoading(true);
     setError(null);
     setStatus("Scanning...");
     const scanStartTime = performance.now();
@@ -409,6 +409,8 @@ function App() {
     } catch (err) {
       setError(String(err));
       setStatus("Scan failed");
+    } finally {
+      setIsWorkspaceLoading(false);
     }
   }, [checkCacheStatus, loadChildren, loadGraph, logPath, rootPath]);
 
@@ -496,19 +498,15 @@ function App() {
   const applyPerformanceMode = useCallback((mode: PerformanceMode) => {
     const preset = PERFORMANCE_PRESETS[mode];
     setPerformanceMode(mode);
-    setGraphNodeLimit(preset.graphNodeLimit);
-    setIconOverlayCap(preset.iconOverlayCap);
     setThumbnailMemoryCap(preset.thumbnailMemoryCap);
     setMonacoMinimap(preset.monacoMinimap);
     setDeepScan(preset.deepScan);
-    persistSetting(SETTINGS_KEYS.graphNodeLimit, preset.graphNodeLimit);
-    persistSetting(SETTINGS_KEYS.iconOverlayCap, preset.iconOverlayCap);
     persistSetting(SETTINGS_KEYS.thumbnailMemoryCap, preset.thumbnailMemoryCap);
     persistSetting(SETTINGS_KEYS.monacoMinimap, preset.monacoMinimap);
     persistSetting(SETTINGS_KEYS.deepScan, preset.deepScan);
     document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
     setStatus(`Performance mode: ${mode === "full" ? "Full Visuals" : mode[0].toUpperCase() + mode.slice(1)}`);
-  }, [setDeepScan, setGraphNodeLimit, setIconOverlayCap, setMonacoMinimap, setPerformanceMode, setThumbnailMemoryCap]);
+  }, [setDeepScan, setMonacoMinimap, setPerformanceMode, setThumbnailMemoryCap]);
 
   useEffect(() => {
     const saved = localStorage.getItem(BOOKMARKS_KEY);
@@ -539,7 +537,8 @@ function App() {
         setCurrentPath(path);
         void checkCacheStatus(path);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setIsInitialLoading(false));
     tauriInvoke("get_log_path").then(setLogPath).catch(() => undefined);
   }, [checkCacheStatus]);
 
@@ -725,6 +724,19 @@ function App() {
     assets: "Assets",
   }[leftPanel];
 
+  const appBusy = isInitialLoading || isWorkspaceLoading || isGraphLoading || isCheckingCache || isSearching;
+  const busyLabel = isInitialLoading
+    ? "Starting Orbit…"
+    : isWorkspaceLoading
+      ? status
+      : isGraphLoading
+        ? "Loading graph…"
+        : isCheckingCache
+          ? "Checking cache…"
+          : isSearching
+            ? "Searching…"
+            : status;
+
   const paletteCommands = useMemo<PaletteCommand[]>(() => [
     { id: "open-folder", label: "Open folder", hint: "Workspace", run: chooseFolder },
     { id: "rescan", label: "Rescan workspace", hint: rootPath ? shortPath(rootPath) : "No workspace", disabled: !rootPath, run: () => void scanWorkspace() },
@@ -802,6 +814,13 @@ function App() {
           void loadGraph(path);
         }}
       />
+
+      {appBusy && (
+        <div className="app-loading-strip" role="status" aria-live="polite">
+          <div className="app-loading-bar" />
+          <span>{busyLabel}</span>
+        </div>
+      )}
 
       <section
         className={`workbench ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}
@@ -993,7 +1012,10 @@ function App() {
       <footer className="statusbar">
         <span>⬡ Graph</span>
         <span>◈ {leftPanelLabel}</span>
-        <span title={status}>{status}</span>
+        <span className={appBusy ? "status-busy" : ""} title={busyLabel}>
+          {appBusy && <i className="mini-spinner" aria-hidden />}
+          {busyLabel}
+        </span>
         <span>{selected ? `· ${selected.name}` : "◌ No selection"}</span>
         <span>{cacheStatus?.fileCount ? `⊞ ${cacheStatus.fileCount.toLocaleString()} indexed` : "⊟ No cache"}</span>
         {logPath && <span title={logPath}>≡ Log {shortPath(logPath)}</span>}
@@ -1023,18 +1045,6 @@ function App() {
         onClose={() => setSettingsOpen(false)}
         performanceMode={performanceMode}
         onPerformanceModeChange={applyPerformanceMode}
-        graphNodeLimit={graphNodeLimit}
-        onGraphNodeLimitChange={(value) => {
-          setGraphNodeLimit(value);
-          persistSetting(SETTINGS_KEYS.graphNodeLimit, value);
-          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
-        }}
-        iconOverlayCap={iconOverlayCap}
-        onIconOverlayCapChange={(value) => {
-          setIconOverlayCap(value);
-          persistSetting(SETTINGS_KEYS.iconOverlayCap, value);
-          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
-        }}
         thumbnailMemoryCap={thumbnailMemoryCap}
         onThumbnailMemoryCapChange={(value) => {
           setThumbnailMemoryCap(value);

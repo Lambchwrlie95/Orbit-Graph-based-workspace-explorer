@@ -29,12 +29,22 @@ fg = "#cbcb41"
 [[icon.dirs]]
 name = "target"
 text = "◓"
-fg = "#fca5a5"
+fg = "#fbbf24"
 
 [[icon.dirs]]
 name = ".cache"
 text = "◓"
 fg = "#94a3b8"
+
+[[icon.dirs]]
+name = ".config"
+text = "⊟"
+fg = "#86efac"
+
+[[icon.dirs]]
+name = "config"
+text = "⊟"
+fg = "#86efac"
 
 [[icon.dirs]]
 name = "dist"
@@ -44,6 +54,11 @@ fg = "#7dd3fc"
 [[icon.dirs]]
 name = "build"
 text = "◧"
+fg = "#7dd3fc"
+
+[[icon.dirs]]
+name = "fastfetch"
+text = "◈"
 fg = "#7dd3fc"
 
 # ─── Special filenames ──────────────────────────────────────────────────────

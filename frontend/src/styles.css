@@ -335,11 +335,6 @@ dd {
   color: #9bb0bd;
 }
 
-.graph-overlay .capped-badge {
-  color: #fbbf24;
-  font-weight: 600;
-}
-
 .graph-controls {
   position: absolute;
   z-index: 2;
@@ -1998,9 +1993,73 @@ button.secondary {
 
 .app-shell {
   grid-template-rows: 34px minmax(0, 1fr) 24px;
+  position: relative;
   background: var(--orbit-bg);
   color: var(--orbit-text);
   font-size: 12px;
+}
+
+.app-loading-strip {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  right: 0;
+  z-index: 8500;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.18);
+  background: rgba(11, 15, 18, 0.88);
+  color: var(--orbit-muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.app-loading-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  overflow: hidden;
+  background: rgba(125, 211, 252, 0.12);
+}
+
+.app-loading-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  background: linear-gradient(90deg, transparent, var(--orbit-accent-2), transparent);
+  animation: loading-slide 1.05s ease-in-out infinite;
+}
+
+@keyframes loading-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+.mini-spinner,
+.orbit-spinner {
+  display: inline-block;
+  border-radius: 50%;
+  border: 2px solid rgba(125, 211, 252, 0.18);
+  border-top-color: var(--orbit-accent-2);
+  animation: orbit-spin 0.8s linear infinite;
+}
+
+.mini-spinner {
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
 }
 
 .topbar,
@@ -2679,6 +2738,10 @@ dt {
   text-transform: capitalize;
 }
 
+.statusbar .status-busy {
+  color: var(--orbit-accent-2);
+}
+
 .asset-mode {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) 24px;
@@ -3152,6 +3215,37 @@ dt {
 .graph-workbench .empty-state {
   position: absolute;
   inset: 0;
+}
+
+.graph-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(125, 211, 252, 0.08), transparent 34%),
+    rgba(11, 15, 18, 0.72);
+  color: var(--orbit-text);
+  pointer-events: none;
+}
+
+.graph-loading-overlay .orbit-spinner {
+  width: 34px;
+  height: 34px;
+  border-width: 3px;
+}
+
+.graph-loading-overlay strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.graph-loading-overlay small {
+  color: var(--orbit-muted);
+  font-size: 11px;
 }
 
 .graph-reset-filters {
@@ -4233,54 +4327,6 @@ dt {
   border-radius: 50%;
   flex-shrink: 0;
   box-shadow: 0 0 4px rgba(255, 255, 255, 0.05);
-}
-
-/* Graph icon-view overlay — file-type glyphs floating over each node */
-.graph-icon-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 3;
-}
-
-.graph-node-glyph.emphasized {
-  text-shadow:
-    0 0 6px rgba(255, 226, 122, 0.7),
-    0 0 12px rgba(0, 0, 0, 0.6);
-  z-index: 5;
-}
-
-.graph-node-glyph {
-  position: absolute;
-  top: 0;
-  left: 0;
-  /* Nerd Font themes need their PUA glyphs first; fall back to symbol fonts
-     for the bundled Unicode-shape theme (◉ ⬡ ⬖ ⊞ etc) — most monospace
-     fonts on Linux don't carry these, which is why glyphs were rendering
-     as empty boxes. */
-  font-family:
-    "Symbols Nerd Font", "SymbolsNerdFont", "JetBrainsMono Nerd Font",
-    "Hack Nerd Font", "FiraCode Nerd Font", "Symbola",
-    "Noto Sans Symbols 2", "Noto Sans Symbols", "Apple Symbols",
-    "Segoe UI Symbol", "DejaVu Sans", ui-monospace, "SF Mono", Menlo, monospace;
-  font-weight: 600;
-  line-height: 1;
-  text-align: center;
-  text-shadow:
-    0 0 3px rgba(0, 0, 0, 0.85),
-    0 1px 4px rgba(0, 0, 0, 0.6);
-  user-select: none;
-  /* Position is driven by transform every frame — keep transform off the
-     transition list (otherwise pan/zoom would interpolate every step and
-     make the icons "swim" behind the spheres). Only emphasis-style props
-     animate. font-size is intentionally NOT transitioned — it changes as
-     zoom changes, and a 0.15s easing on every frame caused the lag the
-     user reported. */
-  transition: opacity 0.18s ease, color 0.15s ease;
-  will-change: transform;
-  /* Hint the browser to keep this on its own compositor layer */
-  backface-visibility: hidden;
 }
 
 .preview-kind-badge {

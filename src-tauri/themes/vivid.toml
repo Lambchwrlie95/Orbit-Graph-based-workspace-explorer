@@ -41,7 +41,7 @@ fg = "#22d3ee"
 [[icon.dirs]]
 name = "target"
 text = ""
-fg = "#fb7185"
+fg = "#facc15"
 [[icon.dirs]]
 name = "dist"
 text = ""
@@ -63,6 +63,14 @@ name = "docs"
 text = ""
 fg = "#60a5fa"
 [[icon.dirs]]
+name = ".config"
+text = ""
+fg = "#34d399"
+[[icon.dirs]]
+name = "config"
+text = ""
+fg = "#34d399"
+[[icon.dirs]]
 name = "assets"
 text = ""
 fg = "#fde68a"
@@ -78,6 +86,10 @@ fg = "#facc15"
 name = ".venv"
 text = ""
 fg = "#facc15"
+[[icon.dirs]]
+name = "fastfetch"
+text = ""
+fg = "#22d3ee"
 
 # ─── Languages ──────────────────────────────────────────────────────────────
 [[icon.exts]]

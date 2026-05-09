@@ -6,7 +6,7 @@ use base64::{engine::general_purpose, Engine as _};
 use crate::models::{PreviewMetaItem, PreviewPayload};
 
 const MAX_TEXT_PREVIEW_BYTES: usize = 32_000;
-const MAX_IMAGE_PREVIEW_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_IMAGE_PREVIEW_BYTES: u64 = 32 * 1024 * 1024;
 
 pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
     let target = Path::new(path);
@@ -67,7 +67,10 @@ pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
                 kind: "binary".into(),
                 title,
                 path: path.into(),
-                summary: "Image preview skipped because the file is larger than 8 MB.".into(),
+                summary: format!(
+                    "Image preview skipped because the file is larger than {} MB.",
+                    MAX_IMAGE_PREVIEW_BYTES / 1024 / 1024
+                ),
                 content: None,
                 metadata: meta,
             });

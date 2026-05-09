@@ -44,7 +44,7 @@ fg = "#42a5f5"
 [[icon.dirs]]
 name = "target"
 text = ""
-fg = "#ef9a9a"
+fg = "#ffb74d"
 [[icon.dirs]]
 name = "dist"
 text = ""
@@ -78,13 +78,21 @@ name = "scripts"
 text = ""
 fg = "#90a4ae"
 [[icon.dirs]]
+name = ".config"
+text = ""
+fg = "#66bb6a"
+[[icon.dirs]]
+name = "config"
+text = ""
+fg = "#66bb6a"
+[[icon.dirs]]
 name = ".vscode"
 text = ""
 fg = "#0078d4"
 [[icon.dirs]]
 name = ".idea"
 text = ""
-fg = "#aa3aff"
+fg = "#42a5f5"
 [[icon.dirs]]
 name = "venv"
 text = ""
@@ -108,11 +116,15 @@ fg = "#fdd835"
 [[icon.dirs]]
 name = "Music"
 text = ""
-fg = "#ab47bc"
+fg = "#42a5f5"
 [[icon.dirs]]
 name = "Videos"
 text = ""
-fg = "#ec407a"
+fg = "#42a5f5"
+[[icon.dirs]]
+name = "fastfetch"
+text = ""
+fg = "#42a5f5"
 
 # ─── Languages — Material brand colors ──────────────────────────────────────
 [[icon.exts]]

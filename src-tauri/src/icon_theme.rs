@@ -268,12 +268,19 @@ impl IconTheme {
         if let Some(r) = self.by_filename.get(&basename) {
             return r.clone();
         }
-        // 4. extension
-        if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
-            let key = ext.to_lowercase();
-            if let Some(r) = self.by_ext.get(&key) {
-                return r.clone();
+        // 4. extension / compound suffix. Longest suffix wins so rules like
+        // `blade.php` can beat the generic `php` icon.
+        let lowered = basename.to_lowercase();
+        let parts: Vec<&str> = lowered.split('.').collect();
+        if parts.len() > 1 {
+            for index in 1..parts.len() {
+                let suffix = parts[index..].join(".");
+                if let Some(r) = self.by_ext.get(&suffix) {
+                    return r.clone();
+                }
             }
+        } else if let Some(r) = self.by_ext.get(&lowered) {
+            return r.clone();
         }
         self.default_file.clone()
     }
@@ -557,6 +564,27 @@ mod tests {
         .unwrap();
         assert_eq!(theme.resolve("/p/Cargo.toml", false, false).text, "C");
         assert_eq!(theme.resolve("/p/foo.toml", false, false).text, "T");
+    }
+
+    #[test]
+    fn compound_extension_beats_generic_extension() {
+        let toml = r#"
+            name = "test"
+            [icon]
+            exts = [
+                { name = "php", text = "P" },
+                { name = "blade.php", text = "B" },
+            ]
+        "#;
+        let theme = IconTheme::from_toml(
+            toml,
+            "test",
+            &PathBuf::from("test.toml"),
+            false,
+        )
+        .unwrap();
+        assert_eq!(theme.resolve("/p/index.blade.php", false, false).text, "B");
+        assert_eq!(theme.resolve("/p/index.php", false, false).text, "P");
     }
 
     #[test]

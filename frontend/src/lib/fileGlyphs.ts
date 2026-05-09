@@ -97,20 +97,40 @@ export function iconRuleForPath(
     };
   }
 
-  if (isCluster) return theme.defaultCluster;
+  const normalize = (rule: IconRule): IconRule => ({
+    ...rule,
+    text: rule.text || glyphForPath(path, isDir, isCluster),
+    fg: rule.fg || colorForPath(path, isDir, isCluster),
+  });
+
+  if (isCluster) return normalize(theme.defaultCluster);
 
   for (const glob of theme.globs) {
-    if (globMatches(glob.pattern, path)) return glob.rule;
+    if (globMatches(glob.pattern, path)) return normalize(glob.rule);
   }
 
   const basename = path.split("/").filter(Boolean).pop() ?? path;
-  if (isDir) return theme.byDirname[basename] ?? theme.defaultDir;
+  if (isDir) return normalize(theme.byDirname[basename] ?? theme.defaultDir);
 
   const filenameRule = theme.byFilename[basename];
-  if (filenameRule) return filenameRule;
+  if (filenameRule) return normalize(filenameRule);
 
-  const ext = basename.includes(".") ? basename.split(".").pop()?.toLowerCase() : "";
-  return (ext ? theme.byExt[ext] : undefined) ?? theme.defaultFile;
+  const extRule = findExtensionRule(theme.byExt, basename);
+  return normalize(extRule ?? theme.defaultFile);
+}
+
+function findExtensionRule(byExt: Record<string, IconRule>, basename: string): IconRule | undefined {
+  const lowered = basename.toLowerCase();
+  const parts = lowered.split(".");
+  if (parts.length < 2) return byExt[lowered];
+
+  for (let index = 1; index < parts.length; index += 1) {
+    const suffix = parts.slice(index).join(".");
+    const rule = byExt[suffix];
+    if (rule) return rule;
+  }
+
+  return byExt[lowered];
 }
 
 function globMatches(pattern: string, path: string): boolean {
