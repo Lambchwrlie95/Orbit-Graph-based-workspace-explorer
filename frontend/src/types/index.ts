@@ -48,13 +48,15 @@ export interface GraphPayload {
   totalInScope: number;
 }
 
-export type Mode = "graph" | "explorer" | "assets" | "code" | "search";
+export type Mode = "graph" | "explorer" | "assets" | "search";
 
 export interface GraphRequest {
   rootPath: string;
   scopePath?: string;
   mode?: string;
   expandedFolders?: string[];
+  nodeLimit?: number;
+  maxCrossEdgesPerNode?: number;
 }
 
 export interface ClusterSummary {
@@ -233,6 +235,20 @@ export interface IconThemeMeta {
 export interface IconGlobRule {
   pattern: string;
   rule: IconRule;
+}
+
+export interface OmarchyColors {
+  background: string;
+  foreground: string;
+  accent: string;
+  cursor: string;
+  activeBorderColor: string;
+  selectionForeground: string;
+  selectionBackground: string;
+  /** ANSI color0–color15 */
+  palette: string[];
+  /** false when ~/.config/omarchy was not found */
+  available: boolean;
 }
 
 export interface IconThemePayload {

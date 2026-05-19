@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use tauri::State;
 
@@ -16,6 +18,7 @@ mod image_hash;
 mod logger;
 mod markdown_analyzer;
 mod models;
+mod omarchy;
 mod performance;
 mod preview;
 mod scanner;
@@ -44,8 +47,9 @@ fn choose_folder() -> Result<Option<String>, String> {
 
 #[tauri::command]
 fn default_root_path() -> Result<String, String> {
-    std::env::current_dir()
-        .map_err(|e| e.to_string())
+    dirs::home_dir()
+        .or_else(|| std::env::current_dir().ok())
+        .ok_or_else(|| "Could not resolve default root path".to_string())
         .and_then(|path| path.canonicalize().map_err(|e| e.to_string()))
         .map(|path| path.to_string_lossy().to_string())
 }
@@ -68,7 +72,6 @@ async fn scan_workspace(
 
     let (inserted_or_updated, skipped_unchanged) = {
         let _guard = state.db_write_lock.lock().map_err(|e| e.to_string())?;
-        db::clear_code_analysis_for_root(&state.db_path, &root)?;
         db::index_rows(&state.db_path, &root, &rows)?
     };
 
@@ -88,10 +91,10 @@ async fn scan_workspace(
         root,
         progress.duration_ms
     ));
-    
+
     // Record performance metric
     performance::record_operation("scan_workspace", progress.duration_ms as i64);
-    
+
     Ok(progress)
 }
 
@@ -101,7 +104,8 @@ fn list_children(
     state: State<'_, AppState>,
 ) -> Result<Vec<FileRecord>, String> {
     let start = std::time::Instant::now();
-    let result = db::children(&state.db_path, &parent_path, 1_000);
+    let result = db::children(&state.db_path, &parent_path, 1_000)
+        .map(|rows| merge_live_children(&parent_path, rows, 1_000));
     performance::record_operation("list_children", start.elapsed().as_millis() as i64);
     result
 }
@@ -117,11 +121,81 @@ fn list_children_paginated(
 }
 
 #[tauri::command]
-fn get_children_count(
-    parent_path: String,
-    state: State<'_, AppState>,
-) -> Result<i64, String> {
-    db::get_children_count(&state.db_path, &parent_path)
+fn get_children_count(parent_path: String, state: State<'_, AppState>) -> Result<i64, String> {
+    let cached = db::get_children_count(&state.db_path, &parent_path)?;
+    let live = fs::read_dir(&parent_path)
+        .map(|entries| entries.flatten().count() as i64)
+        .unwrap_or(0);
+    Ok(cached.max(live))
+}
+
+fn merge_live_children(
+    parent_path: &str,
+    mut cached: Vec<FileRecord>,
+    limit: usize,
+) -> Vec<FileRecord> {
+    let mut seen: HashSet<String> = cached.iter().map(|record| record.path.clone()).collect();
+    if let Ok(entries) = fs::read_dir(parent_path) {
+        for (idx, entry) in entries.flatten().enumerate() {
+            let path = entry.path();
+            let path_string = path.to_string_lossy().to_string();
+            if seen.insert(path_string.clone()) {
+                cached.push(live_file_record(path, path_string, parent_path, idx));
+            }
+        }
+    }
+    cached.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    cached.truncate(limit);
+    cached
+}
+
+fn live_file_record(
+    path: PathBuf,
+    path_string: String,
+    parent_path: &str,
+    idx: usize,
+) -> FileRecord {
+    let metadata = fs::symlink_metadata(&path).ok();
+    let is_dir = metadata.as_ref().map(|meta| meta.is_dir()).unwrap_or(false);
+    FileRecord {
+        id: -1_000_000_000 - idx as i64,
+        path: path_string,
+        name: path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        parent_path: Some(parent_path.to_string()),
+        extension: if is_dir {
+            None
+        } else {
+            path.extension()
+                .map(|ext| ext.to_string_lossy().to_ascii_lowercase())
+        },
+        mime_type: if is_dir {
+            Some("inode/directory".to_string())
+        } else {
+            None
+        },
+        size_bytes: metadata.as_ref().map(|meta| meta.len() as i64).unwrap_or(0),
+        modified_at: metadata
+            .as_ref()
+            .and_then(|meta| time_to_epoch(meta.modified())),
+        created_at: metadata
+            .as_ref()
+            .and_then(|meta| time_to_epoch(meta.created())),
+        is_dir,
+        metadata: None,
+    }
+}
+
+fn time_to_epoch(time: std::io::Result<SystemTime>) -> Option<i64> {
+    time.ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs() as i64)
 }
 
 #[tauri::command]
@@ -145,7 +219,9 @@ fn get_file(path: String, state: State<'_, AppState>) -> Result<Option<FileRecor
 fn load_graph(request: GraphRequest, state: State<'_, AppState>) -> Result<GraphPayload, String> {
     logger::log_event(format!(
         "graph load: root={}, scope={:?}, mode={:?}, expanded={:?}",
-        request.root_path, request.scope_path, request.mode,
+        request.root_path,
+        request.scope_path,
+        request.mode,
         request.expanded_folders.as_ref().map(|v| v.len())
     ));
     let start = std::time::Instant::now();
@@ -155,6 +231,8 @@ fn load_graph(request: GraphRequest, state: State<'_, AppState>) -> Result<Graph
         request.scope_path.as_deref(),
         request.mode.as_deref().unwrap_or("workspace"),
         request.expanded_folders.as_deref(),
+        request.node_limit,
+        request.max_cross_edges_per_node,
     );
     performance::record_operation("load_graph", start.elapsed().as_millis() as i64);
     result
@@ -214,20 +292,28 @@ fn open_in_terminal_editor(path: String, editor_command: Option<String>) -> Resu
     let quoted = format!("'{}'", path.replace('\'', r"'\''"));
 
     // 1. Explicit template wins.
-    let template = editor_command
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| std::env::var("ORBIT_TERMINAL_EDITOR").ok().filter(|s| !s.trim().is_empty()));
+    let template = editor_command.filter(|s| !s.trim().is_empty()).or_else(|| {
+        std::env::var("ORBIT_TERMINAL_EDITOR")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+    });
 
     let template = match template {
         Some(t) => Some(t),
         None => {
             // 2. $TERMINAL + $VISUAL/$EDITOR. Most Linux distros set neither
             //    out of the box, but ricer / dotfile setups almost always do.
-            let terminal = std::env::var("TERMINAL").ok().filter(|s| !s.trim().is_empty());
+            let terminal = std::env::var("TERMINAL")
+                .ok()
+                .filter(|s| !s.trim().is_empty());
             let editor = std::env::var("VISUAL")
                 .ok()
                 .filter(|s| !s.trim().is_empty())
-                .or_else(|| std::env::var("EDITOR").ok().filter(|s| !s.trim().is_empty()));
+                .or_else(|| {
+                    std::env::var("EDITOR")
+                        .ok()
+                        .filter(|s| !s.trim().is_empty())
+                });
             match (terminal, editor) {
                 (Some(t), Some(e)) => Some(format!("{t} -e {e} {{file}}")),
                 (Some(t), None) => Some(format!("{t} -e {{file}}")),
@@ -254,7 +340,11 @@ fn open_in_terminal_editor(path: String, editor_command: Option<String>) -> Resu
         let editor = std::env::var("VISUAL")
             .ok()
             .filter(|s| !s.trim().is_empty())
-            .or_else(|| std::env::var("EDITOR").ok().filter(|s| !s.trim().is_empty()));
+            .or_else(|| {
+                std::env::var("EDITOR")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            });
         if let Some(ed) = editor {
             return Command::new("xdg-terminal-exec")
                 .arg(ed)
@@ -269,7 +359,11 @@ fn open_in_terminal_editor(path: String, editor_command: Option<String>) -> Resu
     if let Some(editor) = std::env::var("VISUAL")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| std::env::var("EDITOR").ok().filter(|s| !s.trim().is_empty()))
+        .or_else(|| {
+            std::env::var("EDITOR")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        })
     {
         let parts: Vec<&str> = editor.split_whitespace().collect();
         if !parts.is_empty() {
@@ -349,7 +443,10 @@ fn rename(path: String, new_name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn check_cache_status(root_path: String, state: State<'_, AppState>) -> Result<CacheStatus, String> {
+fn check_cache_status(
+    root_path: String,
+    state: State<'_, AppState>,
+) -> Result<CacheStatus, String> {
     let start = std::time::Instant::now();
     let result = performance::check_cache_status(&state.db_path, &root_path);
     performance::record_operation("check_cache_status", start.elapsed().as_millis() as i64);
@@ -406,7 +503,10 @@ mod file_operation_tests {
         .expect("rename");
 
         assert!(!original.exists());
-        assert_eq!(std::fs::read_to_string(&renamed).expect("renamed content"), "orbit");
+        assert_eq!(
+            std::fs::read_to_string(&renamed).expect("renamed content"),
+            "orbit"
+        );
         assert_eq!(std::path::Path::new(&renamed).parent(), Some(dir.path()));
     }
 
@@ -471,6 +571,11 @@ fn delete_user_icon_theme(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn get_omarchy_colors() -> omarchy::OmarchyColors {
+    omarchy::read_omarchy_colors()
+}
+
+#[tauri::command]
 fn reset_performance_metrics() {
     performance::reset_performance_metrics();
 }
@@ -514,8 +619,6 @@ fn main() {
             get_performance_metrics,
             performance::get_operation_stats,
             reset_performance_metrics,
-            commands::file::read_file_for_edit,
-            commands::file::save_file,
             commands::analysis::analyze_code_file,
             commands::analysis::analyze_markdown_file,
             commands::analysis::batch_analyze_code_files,
@@ -545,6 +648,7 @@ fn main() {
             open_icon_themes_dir,
             save_user_icon_theme,
             delete_user_icon_theme,
+            get_omarchy_colors,
             open_in_terminal_editor,
             create_file,
             create_folder,

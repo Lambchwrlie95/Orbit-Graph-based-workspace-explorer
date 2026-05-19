@@ -1,8 +1,8 @@
 use image::{imageops::FilterType, ImageFormat};
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::collections::HashSet;
-use sha2::{Sha256, Digest};
 
 pub const THUMBNAIL_SIZES: [u32; 3] = [128, 256, 512];
 pub const THUMBNAIL_DIR: &str = "thumbnails";
@@ -17,7 +17,7 @@ impl ThumbnailGenerator {
         let base_path = app_data_dir.join(THUMBNAIL_DIR);
         // Create directory if it doesn't exist
         let _ = std::fs::create_dir_all(&base_path);
-        
+
         Self {
             base_path,
             processing: Arc::new(Mutex::new(HashSet::new())),
@@ -34,7 +34,10 @@ impl ThumbnailGenerator {
     ) -> Result<Option<PathBuf>, String> {
         // Validate size
         if !THUMBNAIL_SIZES.contains(&size) {
-            return Err(format!("Invalid thumbnail size: {}. Valid sizes: {:?}", size, THUMBNAIL_SIZES));
+            return Err(format!(
+                "Invalid thumbnail size: {}. Valid sizes: {:?}",
+                size, THUMBNAIL_SIZES
+            ));
         }
 
         // Check if thumbnail already exists and is valid
@@ -70,7 +73,7 @@ impl ThumbnailGenerator {
         size: u32,
     ) -> Result<Option<PathBuf>, String> {
         let key = format!("{}_{}", file_id, size);
-        
+
         // Mark as processing
         {
             let mut processing = self.processing.lock().map_err(|e| e.to_string())?;
@@ -97,7 +100,7 @@ impl ThumbnailGenerator {
         size: u32,
     ) -> Result<Option<PathBuf>, String> {
         let source_path = Path::new(file_path);
-        
+
         // Check if file exists
         if !source_path.exists() {
             return Ok(None);
@@ -107,23 +110,24 @@ impl ThumbnailGenerator {
         let file_hash = format!("{:x}", Sha256::digest(file_path.as_bytes()));
         let subdir = &file_hash[..2];
         let thumb_dir = self.base_path.join(subdir);
-        
+
         std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
-        
+
         let thumb_filename = format!("{}_{}.jpg", &file_hash[..16], size);
         let thumb_path = thumb_dir.join(&thumb_filename);
-        
+
         // Load and resize image
         let img = image::open(source_path).map_err(|e| e.to_string())?;
-        
+
         // Resize maintaining aspect ratio, fitting within size x size
         let thumbnail = img.resize(size, size, FilterType::Lanczos3);
         let (thumb_width, thumb_height) = (thumbnail.width(), thumbnail.height());
-        
+
         // Save thumbnail
-        thumbnail.save_with_format(&thumb_path, ImageFormat::Jpeg)
+        thumbnail
+            .save_with_format(&thumb_path, ImageFormat::Jpeg)
             .map_err(|e| e.to_string())?;
-        
+
         // Store in database
         let rel_path = Path::new(subdir).join(&thumb_filename);
         crate::db::upsert_thumbnail(
@@ -135,7 +139,7 @@ impl ThumbnailGenerator {
             thumb_width as i32,
             thumb_height as i32,
         )?;
-        
+
         Ok(Some(thumb_path))
     }
 
@@ -147,10 +151,10 @@ impl ThumbnailGenerator {
                 let _ = std::fs::remove_file(path);
             }
         }
-        
+
         // Delete database records
         crate::db::delete_thumbnails_for_file(db_path, file_id)?;
-        
+
         Ok(())
     }
 

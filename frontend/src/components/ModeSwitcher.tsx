@@ -1,5 +1,5 @@
 import React from 'react';
-import { Network, FolderTree, ImageIcon, Code, Search } from 'lucide-react';
+import { Network, FolderTree, ImageIcon, Search } from 'lucide-react';
 import { Mode as ModeId } from '../types';
 
 interface ModeDefinition {
@@ -12,7 +12,6 @@ const MODES: ModeDefinition[] = [
   { id: 'graph', label: 'Graph', icon: Network },
   { id: 'explorer', label: 'Explorer', icon: FolderTree },
   { id: 'assets', label: 'Assets', icon: ImageIcon },
-  { id: 'code', label: 'Code', icon: Code },
   { id: 'search', label: 'Search', icon: Search },
 ];
 

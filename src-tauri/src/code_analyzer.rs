@@ -1,6 +1,6 @@
 use regex::Regex;
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Code analysis result containing imports and exports
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,9 +28,9 @@ pub struct Export {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportType {
-    Local,    // Relative imports like ./ or ../
-    Package,  // Node modules, crates, pip packages
-    Std,      // Standard library
+    Local,   // Relative imports like ./ or ../
+    Package, // Node modules, crates, pip packages
+    Std,     // Standard library
 }
 
 /// Analyze a code file and extract imports and exports
@@ -50,7 +50,23 @@ pub fn analyze_file(path: &Path, content: &str) -> Option<CodeAnalysis> {
 pub fn is_code_file(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),
-        Some("js" | "jsx" | "ts" | "tsx" | "mjs" | "py" | "pyi" | "rs" | "java" | "go" | "rb" | "php" | "c" | "cpp" | "h" | "hpp")
+        Some(
+            "js" | "jsx"
+                | "ts"
+                | "tsx"
+                | "mjs"
+                | "py"
+                | "pyi"
+                | "rs"
+                | "java"
+                | "go"
+                | "rb"
+                | "php"
+                | "c"
+                | "cpp"
+                | "h"
+                | "hpp"
+        )
     )
 }
 
@@ -62,9 +78,9 @@ fn analyze_javascript(content: &str) -> Option<CodeAnalysis> {
     // import { foo, bar } from 'module'
     // import * as name from 'module'
     // import defaultExport from 'module'
-    let import_re = Regex::new(
-        r#"import\s+(?:(\{[^}]+\})|(\*\s+as\s+\w+)|(\w+))\s+from\s+['"]([^'"]+)['"]"#
-    ).ok()?;
+    let import_re =
+        Regex::new(r#"import\s+(?:(\{[^}]+\})|(\*\s+as\s+\w+)|(\w+))\s+from\s+['"]([^'"]+)['"]"#)
+            .ok()?;
 
     // Require pattern for CommonJS
     // const foo = require('module')
@@ -79,8 +95,9 @@ fn analyze_javascript(content: &str) -> Option<CodeAnalysis> {
     // export { foo, bar }
     // export default
     let export_named_re = Regex::new(
-        r"export\s+(?:default\s+)?(?:const|let|var|function|class|interface|type|enum)?\s+(\w+)"
-    ).ok()?;
+        r"export\s+(?:default\s+)?(?:const|let|var|function|class|interface|type|enum)?\s+(\w+)",
+    )
+    .ok()?;
 
     for line in content.lines() {
         let line = line.trim();
@@ -89,14 +106,21 @@ fn analyze_javascript(content: &str) -> Option<CodeAnalysis> {
         for cap in import_re.captures_iter(line) {
             let module_path = cap.get(4)?.as_str().to_string();
             let import_type = classify_js_import(&module_path);
-            
+
             // Extract name from the import
             let name = if let Some(m) = cap.get(3) {
                 // Default import
                 m.as_str().to_string()
             } else if let Some(m) = cap.get(1) {
                 // Named imports - extract first name
-                m.as_str().trim().trim_start_matches('{').trim_end_matches('}').split(',').next()?.trim().to_string()
+                m.as_str()
+                    .trim()
+                    .trim_start_matches('{')
+                    .trim_end_matches('}')
+                    .split(',')
+                    .next()?
+                    .trim()
+                    .to_string()
             } else if let Some(m) = cap.get(2) {
                 // Namespace import
                 m.as_str().to_string()
@@ -116,7 +140,9 @@ fn analyze_javascript(content: &str) -> Option<CodeAnalysis> {
             if let Some(path_match) = cap.get(2) {
                 let module_path = path_match.as_str().to_string();
                 let import_type = classify_js_import(&module_path);
-                let name = cap.get(1).map(|m| m.as_str().trim().to_string())
+                let name = cap
+                    .get(1)
+                    .map(|m| m.as_str().trim().to_string())
                     .unwrap_or_else(|| module_path.clone());
 
                 imports.push(Import {
@@ -145,7 +171,8 @@ fn analyze_javascript(content: &str) -> Option<CodeAnalysis> {
                     "default"
                 } else {
                     "export"
-                }.to_string();
+                }
+                .to_string();
 
                 exports.push(Export { name, export_type });
             }
@@ -188,13 +215,13 @@ fn analyze_python(content: &str) -> Option<CodeAnalysis> {
         if let Some(cap) = from_import_re.captures(line) {
             let module_path = cap.get(1)?.as_str().to_string();
             let names_str = cap.get(2)?.as_str();
-            
+
             for name in names_str.split(',') {
                 let name = name.trim();
                 if name.is_empty() || name.starts_with('#') {
                     continue;
                 }
-                
+
                 let import_type = classify_python_import(&module_path);
                 imports.push(Import {
                     name: name.split_whitespace().next()?.to_string(),
@@ -207,17 +234,17 @@ fn analyze_python(content: &str) -> Option<CodeAnalysis> {
         // Match import X
         if let Some(cap) = import_re.captures(line) {
             let names_str = cap.get(1)?.as_str();
-            
+
             for name in names_str.split(',') {
                 let name = name.trim();
                 if name.is_empty() || name.starts_with('#') {
                     continue;
                 }
-                
+
                 // Extract just the module name (handle "as" aliases)
                 let module_name = name.split_whitespace().next()?.to_string();
                 let import_type = classify_python_import(&module_name);
-                
+
                 imports.push(Import {
                     name: module_name.clone(),
                     path: module_name,
@@ -234,8 +261,9 @@ fn analyze_python(content: &str) -> Option<CodeAnalysis> {
                     "function"
                 } else {
                     "class"
-                }.to_string();
-                
+                }
+                .to_string();
+
                 exports.push(Export { name, export_type });
             }
         }
@@ -246,10 +274,31 @@ fn analyze_python(content: &str) -> Option<CodeAnalysis> {
 
 fn classify_python_import(module: &str) -> ImportType {
     let stdlib_modules = [
-        "os", "sys", "pathlib", "collections", "typing", "json", "re",
-        "datetime", "time", "math", "random", "hashlib", "urllib",
-        "http", "functools", "itertools", "contextlib", "dataclasses",
-        "enum", "abc", "io", "csv", "sqlite3", "logging", "unittest",
+        "os",
+        "sys",
+        "pathlib",
+        "collections",
+        "typing",
+        "json",
+        "re",
+        "datetime",
+        "time",
+        "math",
+        "random",
+        "hashlib",
+        "urllib",
+        "http",
+        "functools",
+        "itertools",
+        "contextlib",
+        "dataclasses",
+        "enum",
+        "abc",
+        "io",
+        "csv",
+        "sqlite3",
+        "logging",
+        "unittest",
     ];
 
     if module.starts_with('.') {
@@ -280,7 +329,9 @@ fn analyze_rust(content: &str) -> Option<CodeAnalysis> {
     // pub const
     // pub static
     // pub type
-    let pub_re = Regex::new(r"^pub\s+(?:\([^)]+\)\s+)?(?:fn|struct|enum|trait|const|static|type)\s+(\w+)").ok()?;
+    let pub_re =
+        Regex::new(r"^pub\s+(?:\([^)]+\)\s+)?(?:fn|struct|enum|trait|const|static|type)\s+(\w+)")
+            .ok()?;
     let pub_use_re = Regex::new(r"^pub\s+use\s+(.+);$").ok()?;
 
     for line in content.lines() {
@@ -290,9 +341,11 @@ fn analyze_rust(content: &str) -> Option<CodeAnalysis> {
         if let Some(cap) = use_re.captures(line) {
             let use_stmt = cap.get(1)?.as_str();
             let import_type = classify_rust_import(use_stmt);
-            
+
             // Extract the last component as the name
-            let name = use_stmt.split("::").last()
+            let name = use_stmt
+                .split("::")
+                .last()
                 .and_then(|s| s.split('{').next())
                 .and_then(|s| s.split('}').next())
                 .and_then(|s| s.split("as").next())
@@ -326,7 +379,8 @@ fn analyze_rust(content: &str) -> Option<CodeAnalysis> {
                     "type"
                 } else {
                     "item"
-                }.to_string();
+                }
+                .to_string();
 
                 exports.push(Export { name, export_type });
             }
@@ -348,7 +402,8 @@ fn analyze_rust(content: &str) -> Option<CodeAnalysis> {
 fn classify_rust_import(path: &str) -> ImportType {
     if path.starts_with("crate::") || path.starts_with("super::") || path.starts_with("self::") {
         ImportType::Local
-    } else if path.starts_with("std::") || path.starts_with("core::") || path.starts_with("alloc::") {
+    } else if path.starts_with("std::") || path.starts_with("core::") || path.starts_with("alloc::")
+    {
         ImportType::Std
     } else {
         ImportType::Package
@@ -366,7 +421,8 @@ fn analyze_java(content: &str) -> Option<CodeAnalysis> {
 
     // Java exports (public classes, interfaces, methods at class level)
     let pub_class_re = Regex::new(r"^public\s+(?:class|interface|enum|record)\s+(\w+)").ok()?;
-    let pub_method_re = Regex::new(r"^public\s+(?:static\s+)?(?:\w+<[^>]+>|\w+|void)\s+(\w+)\s*\(").ok()?;
+    let pub_method_re =
+        Regex::new(r"^public\s+(?:static\s+)?(?:\w+<[^>]+>|\w+|void)\s+(\w+)\s*\(").ok()?;
 
     for line in content.lines() {
         let line = line.trim();
@@ -396,7 +452,8 @@ fn analyze_java(content: &str) -> Option<CodeAnalysis> {
                     "record"
                 } else {
                     "class"
-                }.to_string();
+                }
+                .to_string();
 
                 exports.push(Export { name, export_type });
             }
@@ -461,13 +518,18 @@ fn analyze_go(content: &str) -> Option<CodeAnalysis> {
         if in_import_block || line.starts_with("import ") {
             if let Some(cap) = import_single_re.captures(line) {
                 let path = cap.get(2)?.as_str().to_string();
-                let name = cap.get(1)
+                let name = cap
+                    .get(1)
                     .map(|m| m.as_str().to_string())
                     .or_else(|| path.split('/').next_back().map(|s| s.to_string()))
                     .unwrap_or_else(|| path.clone());
-                
+
                 let import_type = classify_go_import(&path);
-                imports.push(Import { name, path, import_type });
+                imports.push(Import {
+                    name,
+                    path,
+                    import_type,
+                });
             }
         }
 
@@ -485,7 +547,8 @@ fn analyze_go(content: &str) -> Option<CodeAnalysis> {
                     "const"
                 } else {
                     "item"
-                }.to_string();
+                }
+                .to_string();
 
                 exports.push(Export { name, export_type });
             }
@@ -499,14 +562,13 @@ fn classify_go_import(path: &str) -> ImportType {
     // Standard library packages don't have dots in the first component
     // or are known stdlib packages
     let stdlib_packages = [
-        "fmt", "os", "io", "net", "http", "strings", "strconv",
-        "time", "math", "sync", "context", "encoding", "crypto",
-        "database", "html", "log", "path", "regexp", "sort",
-        "testing", "unicode", "unsafe",
+        "fmt", "os", "io", "net", "http", "strings", "strconv", "time", "math", "sync", "context",
+        "encoding", "crypto", "database", "html", "log", "path", "regexp", "sort", "testing",
+        "unicode", "unsafe",
     ];
 
     let first_part = path.split('/').next().unwrap_or("");
-    
+
     if first_part.contains('.') || first_part.starts_with("github.com") {
         ImportType::Package
     } else if stdlib_packages.contains(&first_part) {
@@ -579,9 +641,15 @@ pub fn my_function() {}
         assert!(matches!(classify_js_import("./utils"), ImportType::Local));
         assert!(matches!(classify_js_import("react"), ImportType::Package));
         assert!(matches!(classify_js_import("node:fs"), ImportType::Std));
-        
+
         assert!(matches!(classify_python_import("os"), ImportType::Std));
-        assert!(matches!(classify_python_import("numpy"), ImportType::Package));
-        assert!(matches!(classify_python_import(".utils"), ImportType::Local));
+        assert!(matches!(
+            classify_python_import("numpy"),
+            ImportType::Package
+        ));
+        assert!(matches!(
+            classify_python_import(".utils"),
+            ImportType::Local
+        ));
     }
 }

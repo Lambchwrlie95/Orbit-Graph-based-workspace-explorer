@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,25 @@ const IGNORED_DIR_NAMES: &[&str] = &[
 pub fn scan_root(root: &Path, max_entries: usize) -> Result<Vec<ScannedEntry>, String> {
     let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
     let mut rows = Vec::with_capacity(max_entries.min(10_000));
+    let mut seen = HashSet::new();
+
+    // The Explorer must never lie about the currently opened folder just
+    // because the deep scan hit its cap inside a huge subtree first. Seed the
+    // root and all direct children before walking descendants.
+    push_scanned_entry(&mut rows, &mut seen, &canonical_root, max_entries);
+    if rows.len() < max_entries {
+        if let Ok(entries) = fs::read_dir(&canonical_root) {
+            let mut direct_children: Vec<PathBuf> =
+                entries.flatten().map(|entry| entry.path()).collect();
+            direct_children.sort_by_key(|a| filename(a).to_lowercase());
+            for path in direct_children {
+                if rows.len() >= max_entries {
+                    break;
+                }
+                push_scanned_entry(&mut rows, &mut seen, &path, max_entries);
+            }
+        }
+    }
 
     for entry in WalkDir::new(&canonical_root)
         .parallelism(jwalk::Parallelism::RayonNewPool(0))
@@ -39,12 +59,24 @@ pub fn scan_root(root: &Path, max_entries: usize) -> Result<Vec<ScannedEntry>, S
         if should_ignore(&path) {
             continue;
         }
-        if let Ok(row) = scanned_entry(&path) {
-            rows.push(row);
-        }
+        push_scanned_entry(&mut rows, &mut seen, &path, max_entries);
     }
 
     Ok(rows)
+}
+
+fn push_scanned_entry(
+    rows: &mut Vec<ScannedEntry>,
+    seen: &mut HashSet<PathBuf>,
+    path: &Path,
+    max_entries: usize,
+) {
+    if rows.len() >= max_entries || !seen.insert(path.to_path_buf()) {
+        return;
+    }
+    if let Ok(row) = scanned_entry(path) {
+        rows.push(row);
+    }
 }
 
 fn should_ignore(path: &Path) -> bool {

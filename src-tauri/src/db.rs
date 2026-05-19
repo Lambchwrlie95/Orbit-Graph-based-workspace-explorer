@@ -158,8 +158,11 @@ pub fn index_rows(
             skipped += 1;
         }
     }
-    rebuild_contains_edges(&tx, root_path)?;
-    rebuild_import_edges(&tx, root_path)?;
+    // Only rebuild edges if files actually changed; this is the main scan bottleneck.
+    if changed > 0 {
+        rebuild_contains_edges(&tx, root_path)?;
+        rebuild_import_edges(&tx, root_path)?;
+    }
     tx.execute(
         "UPDATE scan_sessions SET finished_at = ?1, status = 'success', scanned_count = ?2, skipped_unchanged = ?3 WHERE id = ?4",
         params![chrono::Utc::now().timestamp(), rows.len() as i64, skipped as i64, scan_id],
@@ -180,10 +183,17 @@ fn upsert_row(tx: &Transaction<'_>, row: &ScannedEntry, scan_id: i64) -> Result<
         .map_err(|e| e.to_string())?;
 
     let unchanged = existing
+        .as_ref()
         .map(|(_, modified_at, size_bytes)| {
-            modified_at == row.modified_at && size_bytes == row.size_bytes
+            *modified_at == row.modified_at && *size_bytes == row.size_bytes
         })
         .unwrap_or(false);
+
+    if !unchanged {
+        if let Some((file_id, _, _)) = existing {
+            invalidate_analysis_for_file(tx, file_id)?;
+        }
+    }
 
     tx.execute(
         r#"
@@ -220,6 +230,25 @@ fn upsert_row(tx: &Transaction<'_>, row: &ScannedEntry, scan_id: i64) -> Result<
     .map_err(|e| e.to_string())?;
 
     Ok(!unchanged)
+}
+
+fn invalidate_analysis_for_file(tx: &Transaction<'_>, file_id: i64) -> Result<(), String> {
+    tx.execute(
+        "DELETE FROM code_analysis WHERE file_id = ?1",
+        params![file_id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM import_relationships WHERE source_file_id = ?1",
+        params![file_id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM edges WHERE source_id = ?1 AND edge_type IN ('import', 'markdown_link')",
+        params![file_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn rebuild_contains_edges(tx: &Transaction<'_>, root_path: &str) -> Result<(), String> {
@@ -438,22 +467,6 @@ pub fn get_code_analysis(db_path: &Path, file_id: i64) -> Result<Option<(String,
         .optional()
         .map_err(|e| e.to_string())?;
     Ok(result)
-}
-
-pub fn clear_code_analysis_for_root(db_path: &Path, root_path: &str) -> Result<(), String> {
-    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.execute(
-        r#"
-        DELETE FROM code_analysis
-        WHERE file_id IN (
-            SELECT id FROM files
-            WHERE path = ?1 OR path LIKE ?2 ESCAPE '\'
-        )
-        "#,
-        params![root_path, super::db::child_prefix(root_path)],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 /// Store resolved local import relationships for a file.
@@ -716,7 +729,11 @@ pub struct ThumbnailRecord {
     pub height: Option<i32>,
 }
 
-pub fn get_thumbnail(db_path: &Path, file_id: i64, size: i32) -> Result<Option<ThumbnailRecord>, String> {
+pub fn get_thumbnail(
+    db_path: &Path,
+    file_id: i64,
+    size: i32,
+) -> Result<Option<ThumbnailRecord>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.query_row(
         r#"
@@ -770,7 +787,10 @@ pub fn upsert_thumbnail(
     Ok(())
 }
 
-pub fn get_thumbnails_for_file(db_path: &Path, file_id: i64) -> Result<Vec<ThumbnailRecord>, String> {
+pub fn get_thumbnails_for_file(
+    db_path: &Path,
+    file_id: i64,
+) -> Result<Vec<ThumbnailRecord>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(

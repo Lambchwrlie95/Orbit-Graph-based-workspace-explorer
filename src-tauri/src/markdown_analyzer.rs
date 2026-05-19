@@ -99,7 +99,11 @@ fn extract_links(content: &str) -> Vec<MarkdownLink> {
             continue;
         }
         let kind = classify_target(&target);
-        links.push(MarkdownLink { label, target, kind });
+        links.push(MarkdownLink {
+            label,
+            target,
+            kind,
+        });
     }
 
     // [[wikilink]] or [[wikilink|label]]
@@ -140,7 +144,10 @@ pub fn resolve_link_target(source_file: &str, target: &str, kind: &LinkKind) -> 
     if matches!(kind, LinkKind::External) {
         return None;
     }
-    let source_dir = Path::new(source_file).parent()?.to_string_lossy().to_string();
+    let source_dir = Path::new(source_file)
+        .parent()?
+        .to_string_lossy()
+        .to_string();
 
     // Strip anchor and query suffixes
     let clean_target = target.split(['#', '?']).next().unwrap_or(target);
@@ -152,10 +159,7 @@ pub fn resolve_link_target(source_file: &str, target: &str, kind: &LinkKind) -> 
         return Some(clean_target.to_string());
     }
 
-    let mut parts: Vec<&str> = source_dir
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let mut parts: Vec<&str> = source_dir.split('/').filter(|s| !s.is_empty()).collect();
     for part in clean_target.split('/') {
         match part {
             "" | "." => {}

@@ -116,4 +116,6 @@ pub struct GraphRequest {
     pub scope_path: Option<String>,
     pub mode: Option<String>,
     pub expanded_folders: Option<Vec<String>>,
+    pub node_limit: Option<i64>,
+    pub max_cross_edges_per_node: Option<i64>,
 }

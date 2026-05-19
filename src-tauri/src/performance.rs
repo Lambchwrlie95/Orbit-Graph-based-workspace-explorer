@@ -41,7 +41,8 @@ pub fn check_cache_status(db_path: &Path, root_path: &str) -> Result<CacheStatus
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let file_count = get_file_count(db_path, root_path)?;
-    let last_scan_time = get_last_scan_session(db_path, root_path)?.map(|(_, finished_at, _)| finished_at);
+    let last_scan_time =
+        get_last_scan_session(db_path, root_path)?.map(|(_, finished_at, _)| finished_at);
 
     // Check if cache is potentially stale by sampling files
     let (sample_checked, sample_changed) = if file_count > 0 {
@@ -52,18 +53,23 @@ pub fn check_cache_status(db_path: &Path, root_path: &str) -> Result<CacheStatus
 
     let is_stale = sample_changed > 0;
     let stale_reason = if is_stale {
-        Some(format!("{} of {} sampled files changed since last scan", sample_changed, sample_checked))
+        Some(format!(
+            "{} of {} sampled files changed since last scan",
+            sample_changed, sample_checked
+        ))
     } else {
         None
     };
 
     // Cache is fresh if we have data, it's not stale, and scan completed recently (within 24 hours)
-    let is_fresh = file_count > 0 
-        && !is_stale 
-        && last_scan_time.map(|t| {
-            let age_hours = (chrono::Utc::now().timestamp() - t) / 3600;
-            age_hours < 24
-        }).unwrap_or(false);
+    let is_fresh = file_count > 0
+        && !is_stale
+        && last_scan_time
+            .map(|t| {
+                let age_hours = (chrono::Utc::now().timestamp() - t) / 3600;
+                age_hours < 24
+            })
+            .unwrap_or(false);
 
     Ok(CacheStatus {
         root_path: root_path.to_string(),
@@ -84,7 +90,7 @@ fn check_sample_for_changes(
     sample_size: i64,
 ) -> Result<(i32, i32), String> {
     let prefix = db::child_prefix(root_path);
-    
+
     // Get a sample of files with their stored metadata
     let mut stmt = conn
         .prepare(
@@ -137,7 +143,10 @@ fn check_sample_for_changes(
 }
 
 /// Get the last successful scan session for a root path
-pub fn get_last_scan_session(db_path: &Path, root_path: &str) -> Result<Option<(i64, i64, i64)>, String> {
+pub fn get_last_scan_session(
+    db_path: &Path,
+    root_path: &str,
+) -> Result<Option<(i64, i64, i64)>, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.query_row(
@@ -154,7 +163,7 @@ pub fn get_last_scan_session(db_path: &Path, root_path: &str) -> Result<Option<(
 /// Get total file count for a root path
 pub fn get_file_count(db_path: &Path, root_path: &str) -> Result<i64, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
+
     conn.query_row(
         "SELECT COUNT(*) FROM files WHERE path = ?1 OR path LIKE ?2 ESCAPE '\\'",
         params![root_path, db::child_prefix(root_path)],
@@ -166,7 +175,7 @@ pub fn get_file_count(db_path: &Path, root_path: &str) -> Result<i64, String> {
 /// Performance metrics storage (in-memory for session)
 use std::sync::Mutex;
 
-static METRICS: std::sync::LazyLock<Mutex<PerformanceMetrics>> = 
+static METRICS: std::sync::LazyLock<Mutex<PerformanceMetrics>> =
     std::sync::LazyLock::new(|| Mutex::new(PerformanceMetrics::default()));
 
 /// Record an operation timing
@@ -174,7 +183,7 @@ pub fn record_operation(name: &str, duration_ms: i64) {
     if let Ok(mut metrics) = METRICS.lock() {
         metrics.operation_count += 1;
         metrics.total_duration_ms += duration_ms;
-        
+
         // Track slow operations (>100ms)
         if duration_ms > 100 {
             metrics.slow_operations.push(SlowOperation {
@@ -182,7 +191,7 @@ pub fn record_operation(name: &str, duration_ms: i64) {
                 duration_ms,
                 timestamp: chrono::Utc::now().timestamp(),
             });
-            
+
             // Keep only last 50 slow operations
             if metrics.slow_operations.len() > 50 {
                 metrics.slow_operations.remove(0);
@@ -193,10 +202,7 @@ pub fn record_operation(name: &str, duration_ms: i64) {
 
 /// Get current performance metrics
 pub fn get_performance_metrics() -> PerformanceMetrics {
-    METRICS
-        .lock()
-        .map(|m| m.clone())
-        .unwrap_or_default()
+    METRICS.lock().map(|m| m.clone()).unwrap_or_default()
 }
 
 /// Reset performance metrics
@@ -211,14 +217,14 @@ pub fn reset_performance_metrics() {
 pub fn get_operation_stats() -> HashMap<String, (i64, i64, i64)> {
     // Returns: operation_name -> (count, total_ms, avg_ms)
     let mut stats: HashMap<String, (i64, i64, i64)> = HashMap::new();
-    
+
     if let Ok(metrics) = METRICS.lock() {
         for op in &metrics.slow_operations {
             let entry = stats.entry(op.name.clone()).or_insert((0, 0, 0));
             entry.0 += 1;
             entry.1 += op.duration_ms;
         }
-        
+
         // Calculate averages
         for (_, (count, total, avg)) in stats.iter_mut() {
             if *count > 0 {
@@ -226,6 +232,6 @@ pub fn get_operation_stats() -> HashMap<String, (i64, i64, i64)> {
             }
         }
     }
-    
+
     stats
 }

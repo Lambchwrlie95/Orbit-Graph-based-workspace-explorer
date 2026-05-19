@@ -2,7 +2,6 @@ import React from "react";
 import { Settings, X } from "lucide-react";
 
 export type PerformanceMode = "eco" | "balanced" | "full";
-export type EditorMode = "light" | "full";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -11,12 +10,10 @@ interface SettingsPanelProps {
   onPerformanceModeChange: (mode: PerformanceMode) => void;
   thumbnailMemoryCap: number;
   onThumbnailMemoryCapChange: (cap: number) => void;
-  editorMode: EditorMode;
-  onEditorModeChange: (mode: EditorMode) => void;
-  monacoMinimap: boolean;
-  onMonacoMinimapChange: (enabled: boolean) => void;
   deepScan: boolean;
   onDeepScanChange: (enabled: boolean) => void;
+  graphNodeLimit: number;
+  onGraphNodeLimitChange: (limit: number) => void;
   visibleFolderRescan: boolean;
   onVisibleFolderRescanChange: (enabled: boolean) => void;
   onOpenThemesFolder: () => void;
@@ -31,12 +28,10 @@ export function SettingsPanel({
   onPerformanceModeChange,
   thumbnailMemoryCap,
   onThumbnailMemoryCapChange,
-  editorMode,
-  onEditorModeChange,
-  monacoMinimap,
-  onMonacoMinimapChange,
   deepScan,
   onDeepScanChange,
+  graphNodeLimit,
+  onGraphNodeLimitChange,
   visibleFolderRescan,
   onVisibleFolderRescanChange,
   onOpenThemesFolder,
@@ -90,28 +85,13 @@ export function SettingsPanel({
             <ToggleRow label="Deep scan flag" checked={deepScan} onChange={onDeepScanChange} />
           </SettingsSection>
 
-          <SettingsSection title="Editor">
-            <div className="segmented-control two">
-              {(["light", "full"] as EditorMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={editorMode === mode ? "active" : ""}
-                  onClick={() => onEditorModeChange(mode)}
-                >
-                  {mode === "light" ? "Light" : "Full"}
-                </button>
-              ))}
-            </div>
-            <ToggleRow label="Monaco minimap" checked={monacoMinimap} onChange={onMonacoMinimapChange} />
-          </SettingsSection>
-
           <SettingsSection title="Graph">
+            <NumberRow label="Graph node cap" value={graphNodeLimit} min={100} max={5000} step={100} onChange={onGraphNodeLimitChange} />
             <button type="button" className="settings-action" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-labels"))}>
               Toggle labels
             </button>
             <button type="button" className="settings-action" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-icons"))}>
-              Toggle icons mode
+              Toggle particle/icon mode
             </button>
           </SettingsSection>
 

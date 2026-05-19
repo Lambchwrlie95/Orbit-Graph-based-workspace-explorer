@@ -1,0 +1,769 @@
+name = "Omarchy"
+author = "Orbit"
+version = "1.0"
+
+# ─── Omarchy-optimized Nerd Font icon theme ────────────────────────────────
+#
+# Designed for Omarchy / Hyprland on Linux.
+# Requires JetBrainsMono Nerd Font (ships with Omarchy by default).
+# Colors are drawn from Gruvbox/Omarchy dark palette conventions;
+# the accent (red series) echoes the default Omarchy accent.
+#
+# Glyphs use private-use-area codepoints from nvim-web-devicons / nerd-fonts v3.
+
+[icon.default_file]
+text = ""
+fg = "#a9b1d6"
+
+[icon.default_dir]
+text = ""
+fg = "#7aa2f7"
+
+[icon.default_cluster]
+text = ""
+fg = "#e0af68"
+
+# ─── XDG / Linux directory names ──────────────────────────────────────────
+[[icon.dirs]]
+name = "home"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "Desktop"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "Documents"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "Downloads"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "Music"
+text = ""
+fg = "#bb9af7"
+
+[[icon.dirs]]
+name = "Pictures"
+text = ""
+fg = "#7dcfff"
+
+[[icon.dirs]]
+name = "Videos"
+text = ""
+fg = "#f7768e"
+
+[[icon.dirs]]
+name = "Public"
+text = ""
+fg = "#9ece6a"
+
+[[icon.dirs]]
+name = "Templates"
+text = ""
+fg = "#e0af68"
+
+[[icon.dirs]]
+name = ".local"
+text = ""
+fg = "#565f89"
+
+[[icon.dirs]]
+name = ".config"
+text = ""
+fg = "#9ece6a"
+
+[[icon.dirs]]
+name = ".cache"
+text = ""
+fg = "#565f89"
+
+[[icon.dirs]]
+name = ".ssh"
+text = "󰌆"
+fg = "#f7768e"
+
+[[icon.dirs]]
+name = ".gnupg"
+text = "󰌆"
+fg = "#f7768e"
+
+[[icon.dirs]]
+name = "bin"
+text = ""
+fg = "#9ece6a"
+
+[[icon.dirs]]
+name = ".git"
+text = ""
+fg = "#f7768e"
+
+[[icon.dirs]]
+name = ".github"
+text = ""
+fg = "#a9b1d6"
+
+[[icon.dirs]]
+name = "node_modules"
+text = ""
+fg = "#cbcb41"
+
+[[icon.dirs]]
+name = "src"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "lib"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "target"
+text = ""
+fg = "#e0af68"
+
+[[icon.dirs]]
+name = "dist"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "build"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.dirs]]
+name = "test"
+text = ""
+fg = "#9ece6a"
+
+[[icon.dirs]]
+name = "tests"
+text = ""
+fg = "#9ece6a"
+
+[[icon.dirs]]
+name = "scripts"
+text = ""
+fg = "#9ece6a"
+
+[[icon.dirs]]
+name = "themes"
+text = ""
+fg = "#bb9af7"
+
+[[icon.dirs]]
+name = "fonts"
+text = ""
+fg = "#7dcfff"
+
+[[icon.dirs]]
+name = "icons"
+text = ""
+fg = "#7dcfff"
+
+[[icon.dirs]]
+name = "wallpapers"
+text = ""
+fg = "#7dcfff"
+
+[[icon.dirs]]
+name = "Wallpapers"
+text = ""
+fg = "#7dcfff"
+
+# ─── Special filenames ────────────────────────────────────────────────────
+[[icon.files]]
+name = "Cargo.toml"
+text = ""
+fg = "#f7768e"
+
+[[icon.files]]
+name = "Cargo.lock"
+text = "󰌆"
+fg = "#f7768e"
+
+[[icon.files]]
+name = "package.json"
+text = ""
+fg = "#9ece6a"
+
+[[icon.files]]
+name = "package-lock.json"
+text = "󰌆"
+fg = "#9ece6a"
+
+[[icon.files]]
+name = "tsconfig.json"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.files]]
+name = "Makefile"
+text = ""
+fg = "#9ece6a"
+
+[[icon.files]]
+name = "Dockerfile"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.files]]
+name = ".dockerignore"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.files]]
+name = "docker-compose.yml"
+text = ""
+fg = "#7aa2f7"
+
+[[icon.files]]
+name = "README.md"
+text = ""
+fg = "#bb9af7"
+
+[[icon.files]]
+name = "LICENSE"
+text = ""
+fg = "#e0af68"
+
+[[icon.files]]
+name = ".gitignore"
+text = ""
+fg = "#f7768e"
+
+[[icon.files]]
+name = ".gitconfig"
+text = ""
+fg = "#f7768e"
+
+[[icon.files]]
+name = ".gitmodules"
+text = ""
+fg = "#f7768e"
+
+[[icon.files]]
+name = ".env"
+text = ""
+fg = "#9ece6a"
+
+[[icon.files]]
+name = ".bashrc"
+text = ""
+fg = "#9ece6a"
+
+[[icon.files]]
+name = ".zshrc"
+text = ""
+fg = "#9ece6a"
+
+[[icon.files]]
+name = ".zsh_history"
+text = ""
+fg = "#565f89"
+
+[[icon.files]]
+name = ".bash_history"
+text = ""
+fg = "#565f89"
+
+[[icon.files]]
+name = ".profile"
+text = ""
+fg = "#9ece6a"
+
+[[icon.files]]
+name = "hyprland.conf"
+text = ""
+fg = "#7dcfff"
+
+[[icon.files]]
+name = "waybar"
+text = ""
+fg = "#7dcfff"
+
+# ─── Extensions ──────────────────────────────────────────────────────────
+
+# TypeScript
+[[icon.exts]]
+name = "ts"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "tsx"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "d.ts"
+text = ""
+fg = "#565f89"
+
+# JavaScript
+[[icon.exts]]
+name = "js"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "jsx"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "mjs"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "cjs"
+text = ""
+fg = "#e0af68"
+
+# Rust
+[[icon.exts]]
+name = "rs"
+text = ""
+fg = "#f7768e"
+
+# Python
+[[icon.exts]]
+name = "py"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "pyi"
+text = ""
+fg = "#e0af68"
+
+# Go
+[[icon.exts]]
+name = "go"
+text = ""
+fg = "#7dcfff"
+
+# JVM
+[[icon.exts]]
+name = "java"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "kt"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "scala"
+text = ""
+fg = "#f7768e"
+
+# C / C++
+[[icon.exts]]
+name = "c"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "cpp"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "cc"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "h"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "hpp"
+text = ""
+fg = "#7aa2f7"
+
+# Other languages
+[[icon.exts]]
+name = "rb"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "php"
+text = ""
+fg = "#a9b1d6"
+[[icon.exts]]
+name = "swift"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "cs"
+text = "󰌛"
+fg = "#bb9af7"
+[[icon.exts]]
+name = "lua"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "zig"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "nim"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "ex"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "exs"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "dart"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "r"
+text = ""
+fg = "#7aa2f7"
+
+# Shell / scripts — important on Linux
+[[icon.exts]]
+name = "sh"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "bash"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "zsh"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "fish"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "nu"
+text = ""
+fg = "#9ece6a"
+
+# Markup / docs
+[[icon.exts]]
+name = "md"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "mdx"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "rst"
+text = ""
+fg = "#a9b1d6"
+[[icon.exts]]
+name = "txt"
+text = ""
+fg = "#a9b1d6"
+[[icon.exts]]
+name = "tex"
+text = ""
+fg = "#9ece6a"
+
+# Web
+[[icon.exts]]
+name = "html"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "htm"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "vue"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "svelte"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "astro"
+text = ""
+fg = "#f7768e"
+
+# CSS
+[[icon.exts]]
+name = "css"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "scss"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "sass"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "less"
+text = ""
+fg = "#7aa2f7"
+
+# Data / config
+[[icon.exts]]
+name = "json"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "json5"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "jsonc"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "toml"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "yaml"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "yml"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "xml"
+text = "󰗀"
+fg = "#f7768e"
+[[icon.exts]]
+name = "ini"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "conf"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "env"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "properties"
+text = ""
+fg = "#9ece6a"
+
+# Database
+[[icon.exts]]
+name = "sql"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "sqlite"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "graphql"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "gql"
+text = ""
+fg = "#f7768e"
+
+# Images
+[[icon.exts]]
+name = "png"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "jpg"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "jpeg"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "gif"
+text = "󰵸"
+fg = "#bb9af7"
+[[icon.exts]]
+name = "webp"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "bmp"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "ico"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "svg"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "tiff"
+text = ""
+fg = "#7dcfff"
+[[icon.exts]]
+name = "xcf"
+text = ""
+fg = "#7aa2f7"
+
+# Documents
+[[icon.exts]]
+name = "pdf"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "doc"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "docx"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "xls"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "xlsx"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "csv"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "ppt"
+text = "󰈧"
+fg = "#f7768e"
+[[icon.exts]]
+name = "pptx"
+text = "󰈧"
+fg = "#f7768e"
+
+# Archives
+[[icon.exts]]
+name = "zip"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "tar"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "gz"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "bz2"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "xz"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "7z"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "zst"
+text = ""
+fg = "#e0af68"
+
+# Media — audio
+[[icon.exts]]
+name = "mp3"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "flac"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "wav"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "ogg"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "m4a"
+text = ""
+fg = "#bb9af7"
+[[icon.exts]]
+name = "opus"
+text = ""
+fg = "#bb9af7"
+
+# Media — video
+[[icon.exts]]
+name = "mp4"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "mkv"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "mov"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "avi"
+text = ""
+fg = "#f7768e"
+[[icon.exts]]
+name = "webm"
+text = ""
+fg = "#f7768e"
+
+# Misc
+[[icon.exts]]
+name = "lock"
+text = "󰌆"
+fg = "#565f89"
+[[icon.exts]]
+name = "log"
+text = ""
+fg = "#565f89"
+[[icon.exts]]
+name = "diff"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "patch"
+text = ""
+fg = "#e0af68"
+[[icon.exts]]
+name = "desktop"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "service"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "socket"
+text = ""
+fg = "#9ece6a"
+[[icon.exts]]
+name = "nix"
+text = ""
+fg = "#7aa2f7"
+[[icon.exts]]
+name = "pkgbuild"
+text = ""
+fg = "#7aa2f7"

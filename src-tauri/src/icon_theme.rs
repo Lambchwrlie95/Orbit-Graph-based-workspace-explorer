@@ -25,6 +25,7 @@ const NERD_FONT_TOML: &str = include_str!("../themes/nerd-font.toml");
 const MATERIAL_TOML: &str = include_str!("../themes/material.toml");
 const MINIMAL_MONO_TOML: &str = include_str!("../themes/minimal-mono.toml");
 const VIVID_TOML: &str = include_str!("../themes/vivid.toml");
+const OMARCHY_TOML: &str = include_str!("../themes/omarchy.toml");
 
 /// All themes that ship with the binary. The id (first field) doubles as the
 /// filename stem written into `~/.config/orbit/icon-themes/`. Adding a new
@@ -33,6 +34,7 @@ const VIVID_TOML: &str = include_str!("../themes/vivid.toml");
 const BUILTIN_THEMES: &[(&str, &str)] = &[
     ("orbit-default", ORBIT_DEFAULT_TOML),
     ("nerd-font", NERD_FONT_TOML),
+    ("omarchy", OMARCHY_TOML),
     ("material", MATERIAL_TOML),
     ("minimal-mono", MINIMAL_MONO_TOML),
     ("vivid", VIVID_TOML),
@@ -127,7 +129,7 @@ pub struct IconThemeMeta {
 
 #[derive(Clone)]
 #[allow(dead_code)] // `resolve()` and `globs` are exercised in tests and kept for parity
-                     // with the frontend resolver; the frontend does the live lookups.
+                    // with the frontend resolver; the frontend does the live lookups.
 pub struct IconTheme {
     pub meta: IconThemeMeta,
     by_ext: HashMap<String, IconRule>,
@@ -141,8 +143,8 @@ pub struct IconTheme {
 
 impl IconTheme {
     fn from_file(path: &Path, builtin: bool) -> Result<Self, String> {
-        let raw = std::fs::read_to_string(path)
-            .map_err(|e| format!("read {}: {e}", path.display()))?;
+        let raw =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         let id = path
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
@@ -151,9 +153,8 @@ impl IconTheme {
     }
 
     fn from_toml(raw: &str, id: &str, path: &Path, builtin: bool) -> Result<Self, String> {
-        let parsed: ThemeFile = toml::from_str(raw).map_err(|e| {
-            format!("parse {}: {e}", path.display())
-        })?;
+        let parsed: ThemeFile =
+            toml::from_str(raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
         let meta = IconThemeMeta {
             id: id.to_string(),
             name: parsed.name.clone().unwrap_or_else(|| id.to_string()),
@@ -423,11 +424,10 @@ pub fn cmd_get_active_theme() -> Result<ThemePayload, String> {
     // Re-parse to recover original glob patterns (matchers are opaque).
     let dir = themes_dir()?;
     let path = dir.join(format!("{id}.toml"));
-    let raw = std::fs::read_to_string(&path).map_err(|e| {
-        format!("Active theme '{}' not found: {e}", id)
-    })?;
-    let parsed: ThemeFile = toml::from_str(&raw)
-        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Active theme '{}' not found: {e}", id))?;
+    let parsed: ThemeFile =
+        toml::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
     let theme = IconTheme::from_file(&path, is_builtin(id.as_str()))?;
     let original_globs: Vec<(String, IconRule)> = parsed
         .icon
@@ -465,7 +465,9 @@ pub fn save_user_theme(id: &str, toml_content: &str) -> Result<(), String> {
         return Err("theme id contains invalid characters".into());
     }
     if is_builtin(id) {
-        return Err(format!("'{id}' is a builtin theme and cannot be overwritten"));
+        return Err(format!(
+            "'{id}' is a builtin theme and cannot be overwritten"
+        ));
     }
     // Parse-validate before touching disk so a bad TOML doesn't half-corrupt
     // the user's settings.
@@ -536,14 +538,11 @@ mod tests {
             exts = [{ name = "zip", text = "Z" }]
             globs = [{ url = "**/Downloads/*.zip", text = "G" }]
         "#;
-        let theme = IconTheme::from_toml(
-            toml,
-            "test",
-            &PathBuf::from("test.toml"),
-            false,
-        )
-        .unwrap();
-        assert_eq!(theme.resolve("/home/u/Downloads/x.zip", false, false).text, "G");
+        let theme = IconTheme::from_toml(toml, "test", &PathBuf::from("test.toml"), false).unwrap();
+        assert_eq!(
+            theme.resolve("/home/u/Downloads/x.zip", false, false).text,
+            "G"
+        );
         assert_eq!(theme.resolve("/home/u/x.zip", false, false).text, "Z");
     }
 
@@ -555,13 +554,7 @@ mod tests {
             exts = [{ name = "toml", text = "T" }]
             files = [{ name = "Cargo.toml", text = "C" }]
         "#;
-        let theme = IconTheme::from_toml(
-            toml,
-            "test",
-            &PathBuf::from("test.toml"),
-            false,
-        )
-        .unwrap();
+        let theme = IconTheme::from_toml(toml, "test", &PathBuf::from("test.toml"), false).unwrap();
         assert_eq!(theme.resolve("/p/Cargo.toml", false, false).text, "C");
         assert_eq!(theme.resolve("/p/foo.toml", false, false).text, "T");
     }
@@ -576,13 +569,7 @@ mod tests {
                 { name = "blade.php", text = "B" },
             ]
         "#;
-        let theme = IconTheme::from_toml(
-            toml,
-            "test",
-            &PathBuf::from("test.toml"),
-            false,
-        )
-        .unwrap();
+        let theme = IconTheme::from_toml(toml, "test", &PathBuf::from("test.toml"), false).unwrap();
         assert_eq!(theme.resolve("/p/index.blade.php", false, false).text, "B");
         assert_eq!(theme.resolve("/p/index.php", false, false).text, "P");
     }
@@ -594,13 +581,7 @@ mod tests {
             [icon]
             dirs = [{ name = "node_modules", text = "N" }]
         "#;
-        let theme = IconTheme::from_toml(
-            toml,
-            "test",
-            &PathBuf::from("test.toml"),
-            false,
-        )
-        .unwrap();
+        let theme = IconTheme::from_toml(toml, "test", &PathBuf::from("test.toml"), false).unwrap();
         assert_eq!(theme.resolve("/p/node_modules", true, false).text, "N");
         assert_eq!(theme.resolve("/p/src", true, false).text, "▢"); // default_dir
     }

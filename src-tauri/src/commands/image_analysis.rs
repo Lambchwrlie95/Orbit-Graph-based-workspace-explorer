@@ -1,10 +1,10 @@
-use tauri::State;
+use crate::color_extractor::{extract_dominant_colors, Color};
+use crate::image_analyzer::{analyze_image, ImageAnalysis};
+use crate::image_hash::{compute_dhash, hamming_distance};
+use crate::AppState;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::AppState;
-use crate::image_analyzer::{analyze_image, ImageAnalysis};
-use crate::color_extractor::{extract_dominant_colors, Color};
-use crate::image_hash::{compute_dhash, hamming_distance};
+use tauri::State;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ColorExtractionResult {
@@ -31,7 +31,8 @@ pub fn analyze_image_file(
         if let Some(ref metadata_json) = file.metadata {
             if let Ok(metadata) = serde_json::from_str::<serde_json::Value>(metadata_json) {
                 if let Some(analysis) = metadata.get("image_analysis") {
-                    if let Ok(analysis) = serde_json::from_value::<ImageAnalysis>(analysis.clone()) {
+                    if let Ok(analysis) = serde_json::from_value::<ImageAnalysis>(analysis.clone())
+                    {
                         return Ok(ImageMetadataResult {
                             file_id,
                             analysis,
@@ -42,15 +43,16 @@ pub fn analyze_image_file(
             }
         }
     }
-    
+
     // Analyze image
     let path = Path::new(&file_path);
     let analysis = analyze_image(path)?;
-    
+
     // Cache result
     let analysis_json = serde_json::to_string(&analysis).unwrap_or_default();
-    let _ = crate::db::update_file_metadata(&state.db_path, file_id, "image_analysis", &analysis_json);
-    
+    let _ =
+        crate::db::update_file_metadata(&state.db_path, file_id, "image_analysis", &analysis_json);
+
     Ok(ImageMetadataResult {
         file_id,
         analysis,
@@ -66,7 +68,7 @@ pub fn extract_colors(
     state: State<'_, AppState>,
 ) -> Result<ColorExtractionResult, String> {
     let color_count = color_count.clamp(1, 10);
-    
+
     // Check cache first
     if let Ok(Some(file)) = crate::db::get_file(&state.db_path, &file_path) {
         if let Some(ref metadata_json) = file.metadata {
@@ -83,15 +85,16 @@ pub fn extract_colors(
             }
         }
     }
-    
+
     // Extract colors
     let path = Path::new(&file_path);
     let colors = extract_dominant_colors(path, color_count)?;
-    
+
     // Cache result
     let colors_json = serde_json::to_string(&colors).unwrap_or_default();
-    let _ = crate::db::update_file_metadata(&state.db_path, file_id, "extracted_colors", &colors_json);
-    
+    let _ =
+        crate::db::update_file_metadata(&state.db_path, file_id, "extracted_colors", &colors_json);
+
     Ok(ColorExtractionResult {
         file_id,
         colors,
@@ -149,7 +152,11 @@ pub async fn find_similar_images(
         .filter_map(|(id, path, hash)| {
             let distance = hamming_distance(&target_hash, &hash);
             if distance <= max {
-                Some(SimilarImage { file_id: id, path, distance })
+                Some(SimilarImage {
+                    file_id: id,
+                    path,
+                    distance,
+                })
             } else {
                 None
             }

@@ -1,5 +1,5 @@
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageAnalysis {
@@ -35,10 +35,8 @@ impl From<&str> for ImageFormat {
 }
 
 pub fn analyze_image(path: &Path) -> Result<ImageAnalysis, String> {
-    let ext = path.extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
-    
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
     // For SVG, we need special handling
     if ext.eq_ignore_ascii_case("svg") {
         // Try to extract viewBox or width/height attributes
@@ -50,10 +48,10 @@ pub fn analyze_image(path: &Path) -> Result<ImageAnalysis, String> {
             aspect_ratio: 1.0,
         });
     }
-    
+
     let img = image::open(path).map_err(|e| e.to_string())?;
     let (width, height) = (img.width(), img.height());
-    
+
     Ok(ImageAnalysis {
         width,
         height,

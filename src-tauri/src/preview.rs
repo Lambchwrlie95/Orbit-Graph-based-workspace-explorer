@@ -57,6 +57,21 @@ pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
         });
     }
 
+    if let Some(mime) = audio_mime(target) {
+        meta.push(PreviewMetaItem {
+            key: "MIME".into(),
+            value: mime.into(),
+        });
+        return Ok(PreviewPayload {
+            kind: "audio".into(),
+            title,
+            path: path.into(),
+            summary: "Audio preview".into(),
+            content: None,
+            metadata: meta,
+        });
+    }
+
     if let Some(mime) = image_mime(target) {
         meta.push(PreviewMetaItem {
             key: "MIME".into(),
@@ -116,6 +131,25 @@ pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
             content: None,
             metadata: meta,
         }),
+    }
+}
+
+fn audio_mime(path: &Path) -> Option<&'static str> {
+    match path
+        .extension()?
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "mp3" => Some("audio/mpeg"),
+        "wav" => Some("audio/wav"),
+        "ogg" => Some("audio/ogg"),
+        "opus" => Some("audio/opus"),
+        "flac" => Some("audio/flac"),
+        "aac" => Some("audio/aac"),
+        "m4a" => Some("audio/mp4"),
+        "weba" | "webm" => Some("audio/webm"),
+        _ => None,
     }
 }
 

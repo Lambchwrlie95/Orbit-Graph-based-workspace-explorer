@@ -65,7 +65,7 @@ export function relativeDate(timestamp?: number | null): string {
   return formatDate(timestamp);
 }
 
-// Anything Monaco can syntax-highlight, plus common plain-text formats.
+// Common source/config/text formats that are safe to preview as text.
 // Used by the Inspector to decide whether to render a text preview at all.
 const TEXT_EXTENSIONS = new Set([
   // Programming languages
@@ -145,6 +145,13 @@ export function isImageFile(extension?: string | null): boolean {
   if (!extension) return false;
   return [
     "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"
+  ].includes(extension.toLowerCase());
+}
+
+export function isAudioFile(extension?: string | null): boolean {
+  if (!extension) return false;
+  return [
+    "mp3", "wav", "ogg", "opus", "flac", "aac", "m4a", "weba", "webm"
   ].includes(extension.toLowerCase());
 }
 

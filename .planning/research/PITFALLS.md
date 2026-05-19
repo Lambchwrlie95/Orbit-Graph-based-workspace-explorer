@@ -24,14 +24,6 @@
 
 **Prevention:** Ship explorer, search, inspector, and external-open flows alongside graph basics.
 
-## Premature IDE Scope
-
-**Risk:** Monaco and code features can expand into a full IDE clone before Orbit's core value is proven.
-
-**Warning signs:** Language server, debugging, and workspace extension work starts before scanning, graph, and inspector are reliable.
-
-**Prevention:** Treat Code Mode as lightweight edit/preview later. Keep v1 focused on file intelligence.
-
 ## Search Complexity Too Early
 
 **Risk:** Introducing Tantivy early increases implementation surface without clear benefit.

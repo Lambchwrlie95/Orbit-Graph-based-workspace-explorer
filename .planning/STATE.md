@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: Orbit Desktop Experience
-status: stabilizing
-stopped_at: Command palette, settings panel, and performance presets wired
-last_updated: "2026-05-09T18:45:00Z"
-last_activity: 2026-05-09
+milestone_name: Orbit Graph/Wiki Workspace
+status: stabilizing pivot baseline
+stopped_at: graph/wiki pivot cleanup and verification
+last_updated: "2026-05-19T08:00:00Z"
+last_activity: 2026-05-19
 progress:
   total_phases: 8
   completed_phases: 7
@@ -17,257 +17,87 @@ progress:
 
 # Project State
 
-## Milestone Status
+## Current Direction
 
-**Milestone**: v2.0 — Orbit Desktop Experience
-**Status**: 🔧 **STABILIZING**
-**Previous**: ✅ v1.0 Orbit Foundation — COMPLETE (2026-04-29)
-**Next**: Add deeper smoke coverage, finish Phase 8 markdown/backlink work, and validate graph-first workbench flows with real scanned projects
+Orbit is now a **graph-native local workspace explorer**: a fast file map, inspector, and wiki/relationship layer for understanding local projects and notes.
 
----
+Orbit is **not** pursuing an in-app IDE/code editor. Monaco, Code Mode, editor tabs, edit/save commands, and editor state stores have been removed. Files are previewed read-only in Orbit and opened externally through `$EDITOR` / `xdg-open`.
 
-## v1.0 Summary (COMPLETE)
+## Current Baseline
 
-All 4 phases of v1.0 Orbit Foundation have been successfully completed:
+- Repo: `/home/lamb/Projects/Orbit-Graph-based-workspace-explorer`
+- Branch: `start`
+- v1.0 foundation: complete
+- v2.0 desktop features: partially implemented and stabilizing
+- Current phase: Phase 8 redirected from Code Mode to Wiki Inspector
+- Build status: frontend build and Rust `cargo check` pass as of 2026-05-19
 
-| Metric | Value |
-|--------|-------|
-| **Phases** | 4/4 complete (100%) |
-| **Plans** | 11/11 complete (100%) |
-| **Requirements** | 25/25 implemented (100%) |
-| **Completion Date** | 2026-04-29 |
+## Implemented / Retained
 
-### v1.0 Deliverables
+- Tauri 2 desktop shell with Rust backend and React/TypeScript frontend
+- SQLite workspace index and cached metadata
+- Explorer list/grid/columns surfaces
+- Inspector with read-only previews and metadata
+- Graph workspace view using Graphology/Sigma
+- Constellation layout as the preferred graph visualization
+- Large-workspace guardrails with scoped graph loading and node budgets
+- Edge-category legend/filtering for hierarchy, code refs, doc links, symlinks, related, tags, and other edges
+- Wikipedia-style About panel in the Inspector with inferred/manual queries
+- External open/edit flows instead of in-app editing
 
-- ✅ **Phase 1**: Workspace Index Foundation (3/3 plans)
-- ✅ **Phase 2**: Explorer, Search, and Inspector (3/3 plans)
-- ✅ **Phase 3**: Scoped Graph Core (3/3 plans)
-- ✅ **Phase 4**: Performance Guardrails (2/2 plans)
+## Removed in the Pivot
 
----
+- `frontend/src/components/CodeMode.tsx`
+- `frontend/src/components/MonacoEditor.tsx`
+- `frontend/src/components/EditorTabs.tsx`
+- `frontend/src/components/MarkdownPreview.tsx`
+- `frontend/src/hooks/useOpenFiles.ts`
+- `frontend/src/stores/editorStore.ts`
+- `src-tauri/src/commands/file.rs`
+- Tauri commands: `read_file_for_edit`, `save_file`
+- Monaco dependencies
+- Dead Code Mode / editor CSS
 
-## v2.0 Current State (STABILIZING)
+Historical Code Mode phase plans are archived under `.planning/archive/` and should not be treated as current implementation targets.
 
-**Milestone**: v2.0 — Desktop Experience
-**Phase**: Phase 8 partial implementation and stabilization
-**Status**: Build/test baseline restored; graph-first workbench alignment implemented
+## Current Product Priorities
 
-### v2.0 Phases Overview
+1. **Stabilize the pivot baseline**
+   - keep frontend/Rust checks passing
+   - smoke test desktop launch and graph/inspector flows
+   - keep docs aligned with graph/wiki direction
 
-| Phase | Name | Plans | Dependencies | Status |
-|-------|------|-------|--------------|--------|
-| **5** | Packaging & Desktop Integration | 2 | Phase 4 | ✅ Complete (05-01, 05-02) |
-| **6** | Explorer Enhancements | 2 | Phase 5 | ✅ Complete (06-01, 06-02) |
-| **7** | Asset Mode | 3 | Phase 6 | 🔨 Partial Implementation (thumbnails/colors; duplicate grouping pending) |
-| **8** | Code Mode & Enhanced Inspector | 4 | Phase 7 | 🔨 Partial Implementation |
+2. **Finish Wiki Inspector layer**
+   - per-node notes
+   - `[[wikilinks]]`
+   - backlinks
+   - note-derived graph edges
+   - Inspector tabs/sections for About, Preview, Notes, Backlinks, Related
 
-**Total v2.0 Plans**: 11 plans
-**Total Requirements**: 10 new requirements
-**Estimated Completion**: TBD
+3. **Polish graph readability**
+   - preserve parent-local branch-arm constellation style
+   - avoid force-physics hairballs, global polar rings, and muddy background halos
+   - keep normal focused subtrees complete while using overview/LOD for huge roots
 
----
+4. **Complete asset intelligence**
+   - thumbnails and image metadata exist
+   - similar/duplicate grouping and full asset-mode workflow remain pending
 
-## Current Position
+## Verification Snapshot
 
-**Current Phase**: Phase 8 partial implementation and stabilization
-**Current Activity**: The workbench now follows the graph-file-manager reference more closely: a thin top menu, left sidebar for Explorer/Search/Assets/Status, right sidebar for Inspector/Code, and the center surface reserved for the graph only. Bookmarks are localStorage-backed, the inspector now owns text/image/code previews, image dimensions/colors, and code analysis panels, graph/search/folder actions route into side panels rather than replacing the graph center, and frontend Tauri calls now pass through a typed command boundary checked against the Rust registry.
-**Last activity**: 2026-05-09 — Completed the half-wired rename flow: the inspector inline rename input renders, submits on Enter/blur, cancels on Escape, and `main.tsx` refreshes/re-selects the renamed item. Added a Ctrl+K command palette with Open folder, Rescan workspace, Toggle labels, Toggle icons mode, Open selected in `$EDITOR`, Copy selected path, Open icon editor, Open themes folder, Clear thumbnail cache, and Settings. Added a sectioned Settings panel for General, Performance, Editor, Graph, Assets, Icons, and External Apps. Performance presets now persist and drive graph node limits, graph icon overlay caps, thumbnail memory caps, Monaco minimap behavior, and the deep-scan flag. Right-click context menu wiring is present for New File, New Folder, Rename, Copy path, Open, and Open in `$EDITOR`; verified by code inspection and build checks, but not yet with manual native filesystem UAT.
-**Developer handoff**: See `.planning/HANDOFF.md` for the current baseline, dirty worktree notes, graph state, and next priorities.
+Last verified on 2026-05-19:
 
-**v1.0 Progress**: [##########] 100% COMPLETE
-**v2.0 Progress**: [#########░] 86% EXECUTING (Phase 8 partially implemented; UAT/smoke still pending)
+- `npm run --prefix frontend build` — passes
+- `cargo check --manifest-path src-tauri/Cargo.toml` — passes
+- `git diff --check` — pending final cleanup pass
 
----
+## Known Risks
 
-## What v2.0 Will Deliver
+- Worktree is intentionally dirty from the pivot and graph work; do not reset blindly.
+- Some planning docs and archived phase artifacts still describe old Code Mode goals for historical context.
+- Full desktop UAT still needed: open workspace, scan, graph load, select files/folders, Inspector/About, external open actions, settings persistence.
+- Phone/LAN preview is frontend-only; Tauri-native commands may not work from mobile browser.
 
-### Phase 5: Packaging & Desktop Integration
-- Desktop entries (.desktop files for Linux)
-- AppImage packaging via Tauri
-- Icon assets at all required sizes
-- Native Linux application behavior
+## Next Work
 
-### Phase 6: Explorer Enhancements
-- Grid view (icon-based browsing with thumbnails)
-- Columns view (Miller columns / Finder-style)
-- View mode persistence per folder
-- Complete file manager experience
-
-### Phase 7: Asset Mode
-- Thumbnail grid for visual browsing
-- Image dimensions and dominant color extraction
-- Duplicate image detection (perceptual hashing)
-- Asset tagging and collections
-
-### Phase 8: Code Mode & Enhanced Inspector
-- Monaco Editor integration with tabs
-- Code editing and saving
-- Markdown preview split view
-- Code analysis (imports, exports, git status)
-- Image analysis (dimensions, colors, similar images)
-- Markdown analysis (links, backlinks, headings)
-
----
-
-## Requirements Status
-
-### v1.0 Requirements (COMPLETE)
-
-| Category | Count | Status |
-|----------|-------|--------|
-| Workspace (WORK) | 3/3 | ✅ Complete |
-| Indexing (INDX) | 5/5 | ✅ Complete |
-| Explorer (EXPL) | 4/4 | ✅ Complete |
-| Inspector (INSP) | 3/3 | ✅ Complete |
-| Search (SRCH) | 2/2 | ✅ Complete |
-| Graph (GRPH) | 5/5 | ✅ Complete |
-| Performance (PERF) | 3/3 | ✅ Complete |
-| **Total** | **25/25** | **✅ 100%** |
-
-### v2.0 Requirements (IN PROGRESS)
-
-| Category | Count | Status |
-|----------|-------|--------|
-| Packaging (PKG) | 4/4 | ✅ Complete (PKG-01, PKG-02, PKG-03, PKG-04) |
-| Explorer (EXPL) | 2/2 | ✅ Complete (EXPL-05, EXPL-06) |
-| Asset Mode (ASET) | 2/4 | 🔨 ASET-01 and ASET-02 implemented; ASET-03 pending; ASET-04 partial |
-| Code Mode (CODE) | 3/4 | 🔨 CODE-01, CODE-02, CODE-04 implemented; CODE-03 pending |
-| Relationships (RELA) | 0/4 | 📋 Planned / partial code-analysis groundwork |
-| Inspector Enhancements (INSP) | 1/3 | 🔨 INSP-04 implemented; INSP-05 partial; INSP-06 pending |
-| **Total** | **Implementation status** | **🔨 In Progress; smoke/UAT pending** |
-
----
-
-## Project Reference
-
-See: `.planning/PROJECT.md` (core value and architecture)
-See: `.planning/ROADMAP.md` (v1.0 complete, v2.0 partial implementation)
-See: `.planning/REQUIREMENTS.md` (v1.0 complete, v2.0 implementation status and pending gaps)
-See: `.planning/v1.0-COMPLETION.md` (milestone summary)
-
-**Core value:** Orbit makes local files understandable and actionable by showing the relationships that matter without overwhelming the user or their machine.
-
----
-
-## Decisions
-
-### v1.0 Decisions (Retained)
-
-- **Initialization**: Build Orbit as a graph-first file intelligence IDE
-- **Architecture**: Use Tauri 2, Rust, React + TypeScript, SQLite, Graphology, Sigma.js
-- **Search**: Use SQLite FTS5 before considering Tantivy
-- **Scope**: Aggressively scope graph views (200 node cap)
-- **Virtual Scrolling**: Threshold of 50 items for performance/complexity balance
-- **Cache Validation**: Sample 50 files to balance accuracy vs speed
-- **Performance Monitoring**: Active only in graph mode to reduce overhead
-
-### v2.0 Decisions (New)
-
-- **Phase Structure**: 4 sequential phases (not parallel waves) for user-facing completeness
-- **Editor**: Monaco Editor for code editing (not CodeMirror)
-- **Packaging**: AppImage primary, DEB/RPM deferred
-- **Duplicate Detection**: Perceptual hash (pHash) for similar images
-- **Color Extraction**: K-means or color-thief crate for dominant colors
-- **05-01 Icons**: Use ImageMagick for icon generation with fallback detection (convert vs magick)
-- **05-02 AppImage**: Bundle media framework disabled for security (bundleMediaFramework: false)
-- **05-02 Build Scripts**: Colored output with prerequisite checking for robust builds
-
----
-
-## Pending Todos
-
-1. **Phase 5 Execution** — Packaging & Desktop Integration Complete ✅
-   - ✅ Plan 05-01: Desktop entries, icons, and Linux integration — **COMPLETE**
-   - ✅ Plan 05-02: AppImage packaging, build scripts, and distribution — **COMPLETE**
-   - ✅ All PKG requirements complete (PKG-01, PKG-02, PKG-03, PKG-04)
-
- 2. **Phase 6 Execution** — Explorer Enhancements
-    - ✅ Grid view implementation — COMPLETE
-    - ✅ Columns view implementation — COMPLETE
-
-3. **Phase 7 Execution** — Asset Mode ✅
-   - ✅ Thumbnail generation system
-   - ✅ Image analysis (dimensions, colors)
-   - ✅ Duplicate detection
-
-4. **Phase 8 Execution** — Code Mode & Enhanced Inspector
-   - ✅ Monaco editor integration and side-panel routing
-   - ✅ Code analysis surfaced in the right inspector
-   - 🔨 Image dimensions and dominant colors surfaced in the right inspector; similar-image inspector grouping still pending
-   - ⏳ Markdown analysis and backlinks still pending
-
----
-
-## Blockers/Concerns
-
-- Build blockers from Phase 8/analysis work were fixed on 2026-04-30.
-- `npm run commands:check` passes as of 2026-05-01 and confirms the frontend command catalog matches Rust `generate_handler`.
-- `npm run frontend:smoke` passes as of 2026-05-01 and confirms the Vite workbench shell renders in Chromium.
-- `npm run frontend:build` passes as of 2026-05-01 after the graph-only workbench refactor and typed command-boundary pass.
-- `cargo test` passes 12/12 as of 2026-05-01.
-- `cargo clippy --all-targets -- -D warnings` passes as of 2026-05-01.
-- Headless Chromium smoke screenshot at 1440x900 confirms the graph-only center and side panels render.
-- Desktop launcher templates and the live user launcher entry pass `desktop-file-validate` as of 2026-05-08; current live user launcher entry is `~/.local/share/applications/orbit.desktop`.
-- Icon verification as of 2026-05-08: `npm run commands:check` passes with 45 commands, `npm run frontend:build` passes, `cargo test` passes 25/25 including icon-theme parser tests, `npm run frontend:smoke` passes in headless Chromium, and installed `orbit.png` icons exist at 32/128/256/512px with valid non-empty PNG data.
-- Deeper smoke tests are still needed around scan, graph load with real data, thumbnail/image commands, bookmarks persistence, menu actions, and UI side-panel flows before treating the v2.0 claims as fully validated.
-
----
-
-## Deferred Items (Post-v2.0)
-
-| Category | Item | Status | Deferred |
-|----------|------|--------|----------|
-| Advanced Search | SQLite FTS5 content search, Tantivy evaluation | v2.1+ | v2.0 planning |
-| LSP Integration | Language Server Protocol for code intelligence | v2.1+ | v2.0 planning |
-| Git UI | Diff viewer, branch management, commit UI | v2.1+ | v2.0 planning |
-| Cloud Sync | Asset synchronization | v3.0 | v2.0 planning |
-| Plugin System | Extension API | v3.0 | v2.0 planning |
-
----
-
-## Lifecycle
-
-- **Phase 1**: Complete — artifacts in `.planning/phases/01-workspace-index-foundation/`
-- **Phase 2**: Complete — artifacts in `.planning/phases/02-explorer-search-and-inspector/`
-- **Phase 3**: Complete — artifacts in `.planning/phases/03-scoped-graph-core/`
-- **Phase 4**: Complete — artifacts in `.planning/phases/04-performance-guardrails/`
-- **Phase 5**: Complete — 05-01 and 05-02 complete — `.planning/phases/05-packaging-integration/`
-- **Phase 6**: Complete — 06-01 and 06-02 complete — `.planning/phases/06-explorer-enhancements/`
-- **Phase 7**: Partial implementation — thumbnails and image metadata/colors exist; duplicate/similar-image grouping still needs completion — context in `.planning/phases/07-asset-mode/07-CONTEXT.md`
-- **Phase 8**: Partial implementation — Monaco/code analysis/image inspector integration exists; markdown/backlinks still need completion — context in `.planning/phases/08-code-mode-enhanced-inspector/08-CONTEXT.md`
-
----
-
-## Session Continuity
-
-Last session: 2026-05-01
-Stopped at: Graph-first workbench refactor with typed command boundary and build/test/smoke green
-Resume file: `.planning/phases/07-asset-mode/07-asset-mode-SUMMARY.md`
-Handoff file: `.planning/HANDOFF.md`
-
-Next: Add deeper smoke tests/manual UAT for context-menu filesystem actions, finish Phase 8 markdown/backlinks, expose Explorer Grid/Columns in the side Explorer surface, and complete asset duplicate/similar-image flows
-
----
-
-## Phase 5 Readiness
-
-### Prerequisites Met
-- ✅ v1.0 foundation complete and stable
-- ✅ Tauri build working
-- ✅ All v1.0 phases verified
-
-### Required for Phase 5
-- Icon design (can use placeholder initially)
-- Desktop entry specification knowledge
-- AppImage build environment
-
-### Phase 5 Context Available
-- `.planning/phases/05-packaging-integration/05-CONTEXT.md`
-
----
-
-*State last updated: 2026-05-01*
-*Milestone: v2.0 — Desktop Experience — STABILIZING*
-*Phase 7: PARTIAL IMPLEMENTATION, DUPLICATE/SIMILAR-IMAGE FLOWS PENDING*
-*Phase 8: PARTIAL IMPLEMENTATION, MARKDOWN/BACKLINK FLOWS PENDING*
-*Next: Add smoke tests, then finish Phase 8 and asset duplicate flows*
+Immediate next step: complete stabilization smoke test, then checkpoint the pivot. After that, implement Node Notes + Wikilinks + Backlinks as the first graph/wiki feature wave.

@@ -9,11 +9,9 @@ import {
   List,
   Network,
   Search as SearchIcon,
-  SquareCode,
 } from "lucide-react";
 import { AssetMode } from "./components/AssetMode";
 import { BookmarksPanel } from "./components/BookmarksPanel";
-import { CodeMode, isEditableFile } from "./components/CodeMode";
 import { CommandPalette, type PaletteCommand } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ExplorerList } from "./components/ExplorerList";
@@ -22,13 +20,12 @@ import { GraphView } from "./components/GraphView";
 import { HelpMenuDialogs } from "./components/HelpDialogs";
 import { Inspector } from "./components/Inspector";
 import { SearchPanel } from "./components/SearchPanel";
-import { SettingsPanel, type EditorMode, type PerformanceMode } from "./components/SettingsPanel";
+import { SettingsPanel, type PerformanceMode } from "./components/SettingsPanel";
 import { Splitter } from "./components/Splitter";
 import { UnifiedHeader } from "./components/UnifiedHeader";
 import { IconEditor } from "./components/IconEditor";
 import { useIconTheme } from "./hooks/useIconTheme";
 import { useDebounce } from "./hooks/useDebounce";
-import { useOpenFiles } from "./hooks/useOpenFiles";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { useViewPersistence } from "./hooks/useViewPersistence";
 import { tauriInvoke } from "./lib/tauriCommands";
@@ -38,27 +35,53 @@ import "./styles.css";
 
 type ExplorerViewMode = "list" | "tree";
 type LeftPanel = "explorer" | "search" | "assets";
-type RightPanel = "inspector" | "code";
 
 const BOOKMARKS_KEY = "orbit:bookmarks";
 const MAX_BOOKMARKS = 12;
 const SETTINGS_KEYS = {
   performanceMode: "orbit:settings:performanceMode",
   thumbnailMemoryCap: "orbit:settings:thumbnailMemoryCap",
-  editorMode: "orbit:settings:editorMode",
-  monacoMinimap: "orbit:settings:monacoMinimap",
   deepScan: "orbit:settings:deepScan",
+  graphNodeLimit: "orbit:settings:graphNodeLimit",
   visibleFolderRescan: "orbit:settings:visibleFolderRescan",
 };
 
 const PERFORMANCE_PRESETS: Record<
   PerformanceMode,
-  { thumbnailMemoryCap: number; monacoMinimap: boolean; deepScan: boolean }
+  { thumbnailMemoryCap: number; deepScan: boolean; graphNodeLimit: number }
 > = {
-  eco: { thumbnailMemoryCap: 100, monacoMinimap: false, deepScan: false },
-  balanced: { thumbnailMemoryCap: 300, monacoMinimap: false, deepScan: false },
-  full: { thumbnailMemoryCap: 800, monacoMinimap: true, deepScan: true },
+  eco: { thumbnailMemoryCap: 100, deepScan: false, graphNodeLimit: 300 },
+  balanced: { thumbnailMemoryCap: 300, deepScan: false, graphNodeLimit: 900 },
+  full: { thumbnailMemoryCap: 800, deepScan: true, graphNodeLimit: 1800 },
 };
+
+const POST_SCAN_ANALYSIS_LIMITS: Record<PerformanceMode, { code: number; markdown: number }> = {
+  eco: { code: 60, markdown: 40 },
+  balanced: { code: 250, markdown: 150 },
+  full: { code: Number.POSITIVE_INFINITY, markdown: Number.POSITIVE_INFINITY },
+};
+
+const FOCUS_RESCAN_COOLDOWN_MS = 5 * 60_000;
+const LARGE_WORKSPACE_AUTO_RESCAN_LIMIT = 25_000;
+
+function capPaths(paths: string[], limit: number) {
+  return Number.isFinite(limit) ? paths.slice(0, limit) : paths;
+}
+
+function normalizePathForCompare(path: string) {
+  return path.replace(/\/+$/, "");
+}
+
+function isPathInsideRoot(path: string, rootPath: string) {
+  if (!path || !rootPath) return false;
+  const normalizedPath = normalizePathForCompare(path);
+  const normalizedRoot = normalizePathForCompare(rootPath);
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+}
+
+function scopePathInsideRoot(path: string, rootPath: string) {
+  return isPathInsideRoot(path, rootPath) ? path : rootPath;
+}
 
 function persistSetting(key: string, value: unknown) {
   try {
@@ -70,12 +93,12 @@ function persistSetting(key: string, value: unknown) {
 
 function App() {
   const [leftPanel, setLeftPanel] = useState<LeftPanel>("explorer");
-  const [rightPanel, setRightPanel] = useState<RightPanel>("inspector");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [leftWidth, setLeftWidth] = useState(280);
   const [rightWidth, setRightWidth] = useState(340);
   const [rootPath, setRootPath] = useState("");
+  const rootPathRef = useRef("");
   const [currentPath, setCurrentPath] = useState("");
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const bookmarksLoadedRef = useRef(false);
@@ -112,21 +135,39 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [logPath, setLogPath] = useState<string | null>(null);
   const [isCheckingCache, setIsCheckingCache] = useState(false);
+  const graphRequestSeqRef = useRef(0);
+  const graphInFlightKeyRef = useRef<string | null>(null);
+  const lastLoadedGraphKeyRef = useRef<string | null>(null);
+  const lastFocusRescanRef = useRef(0);
 
   const debouncedQuery = useDebounce(query, 300);
   const [performanceMode, setPerformanceMode] = usePersistedState<PerformanceMode>(SETTINGS_KEYS.performanceMode, "balanced");
   const [thumbnailMemoryCap, setThumbnailMemoryCap] = usePersistedState<number>(SETTINGS_KEYS.thumbnailMemoryCap, 300);
-  const [editorMode, setEditorMode] = usePersistedState<EditorMode>(SETTINGS_KEYS.editorMode, "light");
-  const [monacoMinimap, setMonacoMinimap] = usePersistedState<boolean>(SETTINGS_KEYS.monacoMinimap, false);
   const [deepScan, setDeepScan] = usePersistedState<boolean>(SETTINGS_KEYS.deepScan, false);
+  const [graphNodeLimit, setGraphNodeLimit] = usePersistedState<number>(SETTINGS_KEYS.graphNodeLimit, 900);
   const [visibleFolderRescan, setVisibleFolderRescan] = usePersistedState<boolean>(SETTINGS_KEYS.visibleFolderRescan, true);
 
-  const { openFileInEditor } = useOpenFiles({
-    onSwitchToCodeMode: () => {
-      setRightPanel("code");
-      setRightCollapsed(false);
-    },
-  });
+  useEffect(() => {
+    rootPathRef.current = rootPath;
+  }, [rootPath]);
+
+  // Load Omarchy theme colors and apply as CSS custom properties.
+  // This runs once at startup; on Linux/Omarchy the colors.toml is read
+  // and the graph + UI automatically follow the active Omarchy palette.
+  useEffect(() => {
+    tauriInvoke("get_omarchy_colors").then((colors) => {
+      if (!colors.available) return;
+      const root = document.documentElement;
+      root.style.setProperty("--omarchy-bg", colors.background);
+      root.style.setProperty("--omarchy-fg", colors.foreground);
+      root.style.setProperty("--omarchy-accent", colors.accent);
+      root.style.setProperty("--omarchy-cursor", colors.cursor);
+      root.style.setProperty("--omarchy-border", colors.activeBorderColor);
+      root.style.setProperty("--omarchy-sel-bg", colors.selectionBackground);
+      root.style.setProperty("--omarchy-sel-fg", colors.selectionForeground);
+      colors.palette.forEach((c, i) => root.style.setProperty(`--omarchy-color${i}`, c));
+    }).catch(() => {});
+  }, []);
 
   const checkCacheStatus = useCallback(async (path: string) => {
     if (!path) return;
@@ -166,40 +207,73 @@ function App() {
     }
   }, []);
 
-  const loadGraph = useCallback(async (scopePath: string, expanded: string[] = expandedGraphFolders) => {
+  const loadGraph = useCallback(async (
+    scopePath: string,
+    expanded: string[] = expandedGraphFolders,
+    options: { force?: boolean; rootPath?: string } = {},
+  ) => {
     console.log("[Main] loadGraph called for path:", scopePath);
-    if (!rootPath) {
+    const requestRoot = options.rootPath ?? rootPath;
+    if (!requestRoot) {
       console.log("[Main] loadGraph aborted - no rootPath");
       return;
     }
+    const safeScopePath = scopePathInsideRoot(scopePath, requestRoot);
+    if (safeScopePath !== scopePath) {
+      console.warn("[Main] loadGraph scope outside root; using workspace root", { rootPath: requestRoot, scopePath });
+    }
+    const expandedKey = [...expanded].sort().join("|");
+    const requestKey = `${requestRoot}\n${safeScopePath}\n${graphNodeLimit}\n${expandedKey}`;
+    if (!options.force && (graphInFlightKeyRef.current === requestKey || lastLoadedGraphKeyRef.current === requestKey)) {
+      return;
+    }
+    const requestSeq = graphRequestSeqRef.current + 1;
+    graphRequestSeqRef.current = requestSeq;
+    graphInFlightKeyRef.current = requestKey;
     setIsGraphLoading(true);
     const startTime = performance.now();
+    let slowTimer: ReturnType<typeof setTimeout> | null = null;
     try {
-      setStatus("Loading graph...");
+      slowTimer = setTimeout(() => {
+        if (graphRequestSeqRef.current === requestSeq) setStatus("Loading graph...");
+      }, 120);
       const payload = await tauriInvoke("load_graph", {
         request: {
-          rootPath,
-          scopePath,
+          rootPath: requestRoot,
+          scopePath: safeScopePath,
           mode: "workspace",
           expandedFolders: expanded,
+          nodeLimit: graphNodeLimit,
         },
       });
+      if (graphRequestSeqRef.current !== requestSeq) return;
       console.log("[Main] loadGraph received payload:", payload?.nodes?.length, "nodes");
       setGraphPayload(payload);
+      lastLoadedGraphKeyRef.current = requestKey;
       const duration = Math.round(performance.now() - startTime);
-      setStatus(`${payload.nodes.length} graph nodes (${duration}ms)`);
+      setStatus(
+        payload.capped
+          ? `${payload.nodes.length.toLocaleString()} graph nodes / ${payload.totalInScope.toLocaleString()} indexed (${duration}ms)`
+          : `${payload.nodes.length.toLocaleString()} graph nodes (${duration}ms)`,
+      );
     } catch (err) {
+      if (graphRequestSeqRef.current !== requestSeq) return;
       console.error("[Main] loadGraph error:", err);
       setError(String(err));
       setStatus("Error loading graph");
     } finally {
-      setIsGraphLoading(false);
+      if (slowTimer) clearTimeout(slowTimer);
+      if (graphInFlightKeyRef.current === requestKey) {
+        graphInFlightKeyRef.current = null;
+      }
+      if (graphRequestSeqRef.current === requestSeq) {
+        setIsGraphLoading(false);
+      }
     }
-  }, [expandedGraphFolders, rootPath]);
+  }, [expandedGraphFolders, graphNodeLimit, rootPath]);
 
   const selectRecord = useCallback(async (record: FileRecord) => {
     setSelected(record);
-    setRightPanel("inspector");
     setRightCollapsed(false);
     setError(null);
     setPreview(null);
@@ -238,8 +312,63 @@ function App() {
     }
   }, []);
 
+  const runPostScanAnalysis = useCallback((progress: ScanProgress) => {
+    const root = progress.rootPath;
+    void (async () => {
+      try {
+        const buckets = await tauriInvoke("list_analyzable_files", { rootPath: root });
+        if (rootPathRef.current !== root) return;
+
+        const limits = deepScan
+          ? POST_SCAN_ANALYSIS_LIMITS.full
+          : POST_SCAN_ANALYSIS_LIMITS[performanceMode];
+        const codePaths = capPaths(buckets.code, limits.code);
+        const markdownPaths = capPaths(buckets.markdown, limits.markdown);
+        const selectedTotal = codePaths.length + markdownPaths.length;
+        const deferredTotal = buckets.code.length + buckets.markdown.length - selectedTotal;
+
+        if (selectedTotal > 0) {
+          setStatus(
+            deferredTotal > 0
+              ? `Analyzing ${selectedTotal.toLocaleString()} files (${deferredTotal.toLocaleString()} deferred)...`
+              : `Analyzing ${selectedTotal.toLocaleString()} files for relationships...`,
+          );
+          if (codePaths.length > 0) {
+            await tauriInvoke("batch_analyze_code_files", { paths: codePaths });
+          }
+          if (markdownPaths.length > 0) {
+            await tauriInvoke("batch_analyze_markdown_files", { paths: markdownPaths });
+          }
+          if (rootPathRef.current !== root) return;
+          await loadGraph(root, undefined, { force: true, rootPath: root });
+          setStatus(
+            deferredTotal > 0
+              ? `Analysis complete - ${deferredTotal.toLocaleString()} files deferred`
+              : `Analysis complete - ${selectedTotal.toLocaleString()} files`,
+          );
+        }
+      } catch (analysisErr) {
+        console.warn("Post-scan analysis failed:", analysisErr);
+      }
+
+      if (!deepScan || rootPathRef.current !== root) return;
+      try {
+        const hashed = await tauriInvoke("compute_workspace_phashes", { rootPath: root });
+        if (hashed > 0) {
+          console.log(`[Orbit] Indexed ${hashed} new image hash${hashed === 1 ? "" : "es"}`);
+        }
+      } catch (hashErr) {
+        console.warn("Image hash computation failed:", hashErr);
+      }
+    })();
+  }, [deepScan, loadGraph, performanceMode]);
+
   const applyWorkspace = useCallback(async (path: string, statusText = "Workspace selected") => {
     setIsWorkspaceLoading(true);
+    graphRequestSeqRef.current += 1;
+    graphInFlightKeyRef.current = null;
+    lastLoadedGraphKeyRef.current = null;
+    rootPathRef.current = path;
     setRootPath(path);
     setCurrentPath(path);
     setChildren([]);
@@ -262,38 +391,20 @@ function App() {
       if (status.fileCount > 0 && !status.isStale) {
         setStatus(`Cache fresh · ${status.fileCount.toLocaleString()} files`);
         await loadChildren(path);
-        await loadGraph(path);
+        await loadGraph(path, undefined, { rootPath: path });
       } else {
         // Empty or stale cache: auto-scan
         setStatus(status.fileCount === 0 ? "Scanning new workspace…" : "Refreshing stale cache…");
         const progress = await tauriInvoke("scan_workspace", { rootPath: path });
+        rootPathRef.current = progress.rootPath;
+        setRootPath(progress.rootPath);
         setScan(progress);
         setLogPath(progress.logPath ?? null);
         await loadChildren(progress.rootPath);
-        await loadGraph(progress.rootPath);
+        await loadGraph(progress.rootPath, undefined, { force: true, rootPath: progress.rootPath });
         await checkCacheStatus(progress.rootPath);
         setStatus(`Scanned ${progress.scanned.toLocaleString()} entries`);
-
-        // Background analysis (mirrors scanWorkspace flow)
-        void (async () => {
-          try {
-            const buckets = await tauriInvoke("list_analyzable_files", {
-              rootPath: progress.rootPath,
-            });
-            if (buckets.code.length > 0) {
-              await tauriInvoke("batch_analyze_code_files", { paths: buckets.code });
-            }
-            if (buckets.markdown.length > 0) {
-              await tauriInvoke("batch_analyze_markdown_files", { paths: buckets.markdown });
-            }
-            if (buckets.code.length + buckets.markdown.length > 0) {
-              await loadGraph(progress.rootPath);
-            }
-            await tauriInvoke("compute_workspace_phashes", { rootPath: progress.rootPath });
-          } catch (analysisErr) {
-            console.warn("Post-scan analysis failed:", analysisErr);
-          }
-        })();
+        runPostScanAnalysis(progress);
       }
     } catch (err) {
       console.error("applyWorkspace failed:", err);
@@ -302,51 +413,13 @@ function App() {
     } finally {
       setIsWorkspaceLoading(false);
     }
-  }, [checkCacheStatus, loadChildren, loadGraph]);
+  }, [checkCacheStatus, loadChildren, loadGraph, runPostScanAnalysis]);
 
   const chooseFolder = useCallback(async () => {
     const selectedFolder = await tauriInvoke("choose_folder");
     if (!selectedFolder) return;
     await applyWorkspace(selectedFolder);
   }, [applyWorkspace]);
-
-  const handleOpenInEditor = useCallback(async (record: FileRecord) => {
-    if (!isEditableFile(record)) {
-      setError(`Cannot edit file type: ${record.extension || "unknown"}`);
-      return;
-    }
-
-    try {
-      await openFileInEditor(record);
-    } catch (err) {
-      setError(`Failed to open file: ${err}`);
-    }
-  }, [openFileInEditor]);
-
-  // Bridge: markdown preview emits `orbit:open-file` with a resolved path; look it up
-  // in the index and route through the standard edit flow.
-  useEffect(() => {
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent<string>).detail;
-      if (!detail) return;
-      try {
-        const file = await tauriInvoke("get_file", { path: detail });
-        if (file) {
-          if (file.isDir) {
-            setCurrentPath(file.path);
-            setLeftPanel("explorer");
-            setLeftCollapsed(false);
-          } else {
-            await handleOpenInEditor(file);
-          }
-        }
-      } catch (err) {
-        console.warn("Open-from-link failed:", err);
-      }
-    };
-    window.addEventListener("orbit:open-file", handler);
-    return () => window.removeEventListener("orbit:open-file", handler);
-  }, [handleOpenInEditor]);
 
   // Icon Editor wiring — opened from the View → Icon Theme → Edit Icons menu.
   const [iconEditorOpen, setIconEditorOpen] = useState(false);
@@ -365,54 +438,24 @@ function App() {
     const scanStartTime = performance.now();
     try {
       const progress = await tauriInvoke("scan_workspace", { rootPath });
+      rootPathRef.current = progress.rootPath;
+      setRootPath(progress.rootPath);
       setScan(progress);
       setCurrentPath(progress.rootPath);
       setLogPath(progress.logPath ?? logPath);
       await loadChildren(progress.rootPath);
-      await loadGraph(progress.rootPath);
+      await loadGraph(progress.rootPath, undefined, { force: true, rootPath: progress.rootPath });
       await checkCacheStatus(progress.rootPath);
       const totalDuration = Math.round(performance.now() - scanStartTime);
       setStatus(`Scanned ${progress.scanned.toLocaleString()} entries in ${totalDuration}ms`);
-
-      // Background: extract import/markdown link relationships so the graph
-      // gains real edges. Reload the graph once analysis completes.
-      void (async () => {
-        try {
-          const buckets = await tauriInvoke("list_analyzable_files", {
-            rootPath: progress.rootPath,
-          });
-          const total = buckets.code.length + buckets.markdown.length;
-          if (total === 0) return;
-          setStatus(`Analyzing ${total} file${total === 1 ? "" : "s"} for relationships…`);
-          if (buckets.code.length > 0) {
-            await tauriInvoke("batch_analyze_code_files", { paths: buckets.code });
-          }
-          if (buckets.markdown.length > 0) {
-            await tauriInvoke("batch_analyze_markdown_files", { paths: buckets.markdown });
-          }
-          await loadGraph(progress.rootPath);
-          setStatus(`Analysis complete · ${total.toLocaleString()} file${total === 1 ? "" : "s"}`);
-        } catch (analysisErr) {
-          console.warn("Post-scan analysis failed:", analysisErr);
-        }
-        try {
-          const hashed = await tauriInvoke("compute_workspace_phashes", {
-            rootPath: progress.rootPath,
-          });
-          if (hashed > 0) {
-            console.log(`[Orbit] Indexed ${hashed} new image hash${hashed === 1 ? "" : "es"}`);
-          }
-        } catch (hashErr) {
-          console.warn("Image hash computation failed:", hashErr);
-        }
-      })();
+      runPostScanAnalysis(progress);
     } catch (err) {
       setError(String(err));
       setStatus("Scan failed");
     } finally {
       setIsWorkspaceLoading(false);
     }
-  }, [checkCacheStatus, loadChildren, loadGraph, logPath, rootPath]);
+  }, [checkCacheStatus, loadChildren, loadGraph, logPath, rootPath, runPostScanAnalysis]);
 
   const handleSearchQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
@@ -423,9 +466,9 @@ function App() {
   }, []);
 
   const handleExpandCluster = useCallback(async (folderPath: string) => {
-    const newExpanded = [...expandedGraphFolders, folderPath];
+    const newExpanded = Array.from(new Set([...expandedGraphFolders, folderPath]));
     setExpandedGraphFolders(newExpanded);
-    await loadGraph(currentPath || rootPath, newExpanded);
+    await loadGraph(scopePathInsideRoot(currentPath || rootPath, rootPath), newExpanded);
   }, [currentPath, expandedGraphFolders, loadGraph, rootPath]);
 
   const addCurrentBookmark = useCallback(() => {
@@ -447,8 +490,7 @@ function App() {
     setLeftCollapsed(false);
   }, []);
 
-  const showRightPanel = useCallback((panel: RightPanel) => {
-    setRightPanel(panel);
+  const showRightPanel = useCallback(() => {
     setRightCollapsed(false);
   }, []);
 
@@ -499,14 +541,14 @@ function App() {
     const preset = PERFORMANCE_PRESETS[mode];
     setPerformanceMode(mode);
     setThumbnailMemoryCap(preset.thumbnailMemoryCap);
-    setMonacoMinimap(preset.monacoMinimap);
     setDeepScan(preset.deepScan);
+    setGraphNodeLimit(preset.graphNodeLimit);
     persistSetting(SETTINGS_KEYS.thumbnailMemoryCap, preset.thumbnailMemoryCap);
-    persistSetting(SETTINGS_KEYS.monacoMinimap, preset.monacoMinimap);
     persistSetting(SETTINGS_KEYS.deepScan, preset.deepScan);
+    persistSetting(SETTINGS_KEYS.graphNodeLimit, preset.graphNodeLimit);
     document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
     setStatus(`Performance mode: ${mode === "full" ? "Full Visuals" : mode[0].toUpperCase() + mode.slice(1)}`);
-  }, [setDeepScan, setMonacoMinimap, setPerformanceMode, setThumbnailMemoryCap]);
+  }, [setDeepScan, setGraphNodeLimit, setPerformanceMode, setThumbnailMemoryCap]);
 
   useEffect(() => {
     const saved = localStorage.getItem(BOOKMARKS_KEY);
@@ -533,6 +575,7 @@ function App() {
   useEffect(() => {
     tauriInvoke("default_root_path")
       .then((path) => {
+        rootPathRef.current = path;
         setRootPath(path);
         setCurrentPath(path);
         void checkCacheStatus(path);
@@ -544,9 +587,14 @@ function App() {
 
   useEffect(() => {
     if (currentPath) {
-      void loadChildren(currentPath);
+      const target = rootPath ? scopePathInsideRoot(currentPath, rootPath) : currentPath;
+      if (target !== currentPath) {
+        setCurrentPath(target);
+        return;
+      }
+      void loadChildren(target);
     }
-  }, [currentPath, loadChildren]);
+  }, [currentPath, loadChildren, rootPath]);
 
   useEffect(() => {
     if (debouncedQuery.trim() && rootPath) {
@@ -598,20 +646,24 @@ function App() {
   // to click "Scan". Debounced so app-switching doesn't thrash the indexer.
   useEffect(() => {
     if (!rootPath || !visibleFolderRescan) return undefined;
-    let lastRescan = 0;
-    const RESCAN_COOLDOWN_MS = 2_500;
     const refresh = async () => {
       const now = Date.now();
-      const target = currentPath || rootPath;
+      const target = scopePathInsideRoot(currentPath || rootPath, rootPath);
       // Always re-list the visible folder for cheap/instant feedback
       void loadChildren(target);
-      // Don't burn CPU on every alt-tab — rescan at most every few seconds
-      if (now - lastRescan < RESCAN_COOLDOWN_MS) return;
-      lastRescan = now;
+      // Don't burn CPU on every alt-tab; sample cache health first and only
+      // rescan small stale workspaces automatically.
+      if (now - lastFocusRescanRef.current < FOCUS_RESCAN_COOLDOWN_MS) return;
+      lastFocusRescanRef.current = now;
       try {
+        const nextStatus = await tauriInvoke("check_cache_status", { rootPath });
+        setCacheStatus(nextStatus);
+        if (!nextStatus.isStale || nextStatus.fileCount > LARGE_WORKSPACE_AUTO_RESCAN_LIMIT) {
+          return;
+        }
         await tauriInvoke("scan_workspace", { rootPath });
         await loadChildren(target);
-        await loadGraph(target);
+        await loadGraph(target, undefined, { force: true });
         await checkCacheStatus(rootPath);
       } catch (err) {
         console.warn("Background rescan failed:", err);
@@ -706,8 +758,6 @@ function App() {
           setCurrentPath(selected.path);
           showLeftPanel("explorer");
           void loadGraph(selected.path);
-        } else if (isEditableFile(selected)) {
-          void handleOpenInEditor(selected);
         } else {
           void openPath(selected.path);
         }
@@ -716,7 +766,7 @@ function App() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [graphNavHistory, breadcrumbNodes, selected, handleOpenInEditor, openPath, loadGraph, showLeftPanel]);
+  }, [graphNavHistory, breadcrumbNodes, selected, openPath, loadGraph, showLeftPanel]);
 
   const leftPanelLabel = {
     explorer: "Explorer",
@@ -794,24 +844,24 @@ function App() {
         onToggleRight={() => setRightCollapsed((value) => !value)}
         onOpenFolder={chooseFolder}
         onScan={scanWorkspace}
-        onRefreshGraph={() => void loadGraph(currentPath || rootPath)}
+        onRefreshGraph={() => void loadGraph(currentPath || rootPath, undefined, { force: true })}
         onOpenSelected={openSelected}
         onCopySelected={copySelectedPath}
         onAddBookmark={addCurrentBookmark}
         onShowExplorer={() => showLeftPanel("explorer")}
         onShowSearch={() => showLeftPanel("search")}
         onShowAssets={() => showLeftPanel("assets")}
-        onShowInspector={() => showRightPanel("inspector")}
-        onShowCode={() => showRightPanel("code")}
+        onShowInspector={() => showRightPanel()}
         onOpenSettings={() => setSettingsOpen(true)}
         onNavigateToPath={(path) => {
           if (!path) return;
+          const target = scopePathInsideRoot(path, rootPath);
           // Path-bar / breadcrumb navigation: jump explorer + graph and ensure
           // the left panel is visible so the user actually sees the change.
-          setCurrentPath(path);
+          setCurrentPath(target);
           setLeftPanel("explorer");
           setLeftCollapsed(false);
-          void loadGraph(path);
+          void loadGraph(target);
         }}
       />
 
@@ -974,38 +1024,28 @@ function App() {
         />
 
         <aside className="pane right-pane">
-          <div className="right-tabs" aria-label="Right panel">
-            <PanelButton active={rightPanel === "inspector"} label="Inspector" onClick={() => setRightPanel("inspector")} icon={<Info size={15} />} />
-            <PanelButton active={rightPanel === "code"} label="Code" onClick={() => setRightPanel("code")} icon={<SquareCode size={15} />} />
-          </div>
-
-          {rightPanel === "inspector" ? (
-            <Inspector
-              record={selected}
-              preview={preview}
-              isLoadingPreview={isPreviewLoading}
-              rootPath={rootPath}
-              onOpen={openPath}
-              onSelectPath={selectPathInsideOrbit}
-              onNavigate={(path) => {
-                setCurrentPath(path);
-                setLeftPanel("explorer");
-                setLeftCollapsed(false);
-              }}
-              onEdit={handleOpenInEditor}
-              onRenamed={async (_oldPath, newPath) => {
-                void loadChildren(currentPath);
-                try {
-                  const renamed = await tauriInvoke("get_file", { path: newPath });
-                  if (renamed) await selectRecord(renamed);
-                } catch {
-                  /* selection refresh is best-effort */
-                }
-              }}
-            />
-          ) : (
-            <CodeMode selectedFile={selected} />
-          )}
+          <Inspector
+            record={selected}
+            preview={preview}
+            isLoadingPreview={isPreviewLoading}
+            rootPath={rootPath}
+            onOpen={openPath}
+            onSelectPath={selectPathInsideOrbit}
+            onNavigate={(path) => {
+              setCurrentPath(path);
+              setLeftPanel("explorer");
+              setLeftCollapsed(false);
+            }}
+            onRenamed={async (_oldPath, newPath) => {
+              void loadChildren(currentPath);
+              try {
+                const renamed = await tauriInvoke("get_file", { path: newPath });
+                if (renamed) await selectRecord(renamed);
+              } catch {
+                /* selection refresh is best-effort */
+              }
+            }}
+          />
         </aside>
       </section>
 
@@ -1051,22 +1091,15 @@ function App() {
           persistSetting(SETTINGS_KEYS.thumbnailMemoryCap, value);
           document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
         }}
-        editorMode={editorMode}
-        onEditorModeChange={(value) => {
-          setEditorMode(value);
-          setMonacoMinimap(value === "full");
-          persistSetting(SETTINGS_KEYS.editorMode, value);
-          persistSetting(SETTINGS_KEYS.monacoMinimap, value === "full");
-          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
-        }}
-        monacoMinimap={monacoMinimap}
-        onMonacoMinimapChange={(value) => {
-          setMonacoMinimap(value);
-          persistSetting(SETTINGS_KEYS.monacoMinimap, value);
-          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
-        }}
         deepScan={deepScan}
         onDeepScanChange={setDeepScan}
+        graphNodeLimit={graphNodeLimit}
+        onGraphNodeLimitChange={(value) => {
+          setGraphNodeLimit(value);
+          persistSetting(SETTINGS_KEYS.graphNodeLimit, value);
+          lastLoadedGraphKeyRef.current = null;
+          document.dispatchEvent(new CustomEvent("orbit:settings-changed"));
+        }}
         visibleFolderRescan={visibleFolderRescan}
         onVisibleFolderRescanChange={setVisibleFolderRescan}
         onOpenThemesFolder={() => void openThemesFolder()}

@@ -42,7 +42,6 @@ interface UnifiedHeaderProps {
   onShowSearch: () => void;
   onShowAssets: () => void;
   onShowInspector: () => void;
-  onShowCode: () => void;
   onOpenSettings: () => void;
   onNavigateToPath?: (path: string) => void;
 }
@@ -65,7 +64,6 @@ export function UnifiedHeader({
   onShowSearch,
   onShowAssets,
   onShowInspector,
-  onShowCode,
   onOpenSettings,
   onNavigateToPath,
 }: UnifiedHeaderProps) {
@@ -391,7 +389,6 @@ export function UnifiedHeader({
           {openMenu === "panels" && (
             <>
               <MenuItem label="Inspector" onClick={() => runMenuAction(onShowInspector)} />
-              <MenuItem label="Code" onClick={() => runMenuAction(onShowCode)} />
               <MenuSeparator />
               <MenuItem label="Bookmark Current Workspace" onClick={() => runMenuAction(onAddBookmark)} disabled={!workspacePath} />
             </>

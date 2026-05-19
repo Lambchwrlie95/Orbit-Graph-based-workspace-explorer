@@ -1,5 +1,5 @@
 /** Unicode glyph + semantic color per file extension. */
-/** Shared by EditorTabs, the Icons view of the graph, and the Inspector. */
+/** Shared by the graph, file views, and Inspector. */
 
 import type { IconRule, IconThemePayload } from "../types";
 

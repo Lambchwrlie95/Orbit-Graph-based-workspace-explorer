@@ -1,6 +1,6 @@
 use git2::{Repository, Status, StatusOptions};
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Git status information for a file
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,16 +14,16 @@ pub struct FileGitStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GitStatus {
-    Current,           // No changes
-    Modified,          // Modified but not staged
-    Staged,            // Staged for commit
-    StagedModified,    // Staged with further modifications
-    New,               // Untracked file
-    Deleted,           // Deleted
-    Renamed,           // Renamed
-    Ignored,           // In .gitignore
-    Conflicted,        // Merge conflict
-    Unknown,           // Error or not in git repo
+    Current,        // No changes
+    Modified,       // Modified but not staged
+    Staged,         // Staged for commit
+    StagedModified, // Staged with further modifications
+    New,            // Untracked file
+    Deleted,        // Deleted
+    Renamed,        // Renamed
+    Ignored,        // In .gitignore
+    Conflicted,     // Merge conflict
+    Unknown,        // Error or not in git repo
 }
 
 impl From<Status> for GitStatus {
@@ -90,13 +90,13 @@ impl GitStatus {
 pub fn get_file_status(repo_path: &Path, file_path: &Path) -> Option<FileGitStatus> {
     let repo = Repository::open(repo_path).ok()?;
     let relative_path = file_path.strip_prefix(repo_path).ok()?;
-    
+
     // Use status_file for efficient single-file status check
     let status = repo.status_file(relative_path).ok()?;
-    
+
     Some(FileGitStatus {
         status: status.into(),
-        additions: None,  // Line counts would require diff computation
+        additions: None, // Line counts would require diff computation
         deletions: None,
     })
 }
@@ -109,19 +109,19 @@ pub fn find_repo_root(file_path: &Path) -> Option<std::path::PathBuf> {
     } else {
         file_path
     };
-    
+
     loop {
         // Check for .git directory or file (submodules use a file)
         let git_path = current.join(".git");
         if git_path.exists() {
             return Some(current.to_path_buf());
         }
-        
+
         // Try to open as git repo (handles edge cases)
         if Repository::open(current).is_ok() {
             return Some(current.to_path_buf());
         }
-        
+
         // Move up to parent
         current = current.parent()?;
     }
@@ -129,16 +129,18 @@ pub fn find_repo_root(file_path: &Path) -> Option<std::path::PathBuf> {
 
 /// Get status for all files in a repository (for batch operations)
 #[allow(dead_code)]
-pub fn get_repo_status(repo_path: &Path) -> Result<Vec<(std::path::PathBuf, GitStatus)>, git2::Error> {
+pub fn get_repo_status(
+    repo_path: &Path,
+) -> Result<Vec<(std::path::PathBuf, GitStatus)>, git2::Error> {
     let repo = Repository::open(repo_path)?;
-    
+
     let mut opts = StatusOptions::new();
     opts.include_untracked(true)
         .include_ignored(false)
         .recurse_untracked_dirs(false);
-    
+
     let statuses = repo.statuses(Some(&mut opts))?;
-    
+
     let mut results = Vec::new();
     for entry in statuses.iter() {
         if let Some(path) = entry.path() {
@@ -147,7 +149,7 @@ pub fn get_repo_status(repo_path: &Path) -> Result<Vec<(std::path::PathBuf, GitS
             results.push((full_path, status));
         }
     }
-    
+
     Ok(results)
 }
 
@@ -156,28 +158,30 @@ pub fn get_repo_status(repo_path: &Path) -> Result<Vec<(std::path::PathBuf, GitS
 pub fn is_tracked(file_path: &Path) -> Option<bool> {
     let repo_root = find_repo_root(file_path)?;
     let status = get_file_status(&repo_root, file_path)?;
-    
-    Some(!matches!(status.status, GitStatus::New | GitStatus::Ignored | GitStatus::Unknown))
+
+    Some(!matches!(
+        status.status,
+        GitStatus::New | GitStatus::Ignored | GitStatus::Unknown
+    ))
 }
 
 /// Get detailed diff stats for a file (additions/deletions)
 pub fn get_diff_stats(repo_path: &Path, file_path: &Path) -> Option<(u32, u32)> {
     let repo = Repository::open(repo_path).ok()?;
     let relative_path = file_path.strip_prefix(repo_path).ok()?;
-    
+
     // Get the diff between HEAD and working tree
     let head = repo.head().ok()?.peel_to_tree().ok()?;
     let mut diff_opts = git2::DiffOptions::new();
     diff_opts.pathspec(relative_path);
-    
-    let diff = repo.diff_tree_to_workdir_with_index(
-        Some(&head),
-        Some(&mut diff_opts)
-    ).ok()?;
-    
+
+    let diff = repo
+        .diff_tree_to_workdir_with_index(Some(&head), Some(&mut diff_opts))
+        .ok()?;
+
     let mut additions = 0u32;
     let mut deletions = 0u32;
-    
+
     diff.foreach(
         &mut |_delta, _progress| true,
         None,
@@ -190,8 +194,9 @@ pub fn get_diff_stats(repo_path: &Path, file_path: &Path) -> Option<(u32, u32)> 
             }
             true
         }),
-    ).ok()?;
-    
+    )
+    .ok()?;
+
     Some((additions, deletions))
 }
 
@@ -205,11 +210,11 @@ mod tests {
         let status = Status::WT_MODIFIED;
         let git_status: GitStatus = status.into();
         assert!(matches!(git_status, GitStatus::Modified));
-        
+
         let status = Status::INDEX_NEW;
         let git_status: GitStatus = status.into();
         assert!(matches!(git_status, GitStatus::New));
-        
+
         let status = Status::IGNORED;
         let git_status: GitStatus = status.into();
         assert!(matches!(git_status, GitStatus::Ignored));

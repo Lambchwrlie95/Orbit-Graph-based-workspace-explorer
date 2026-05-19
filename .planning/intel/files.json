@@ -1,7 +1,8 @@
 {
   "_meta": {
-    "updated_at": "2026-05-01T08:25:37Z",
-    "version": 1
+    "updated_at": "2026-05-18T10:39:00Z",
+    "version": 1,
+    "notes": "Stripped entries for removed files (CodeMode, EditorTabs, MarkdownPreview, editorStore, useOpenFiles, commands/file.rs) on 2026-05-18 pivot. Pre-pivot snapshot lives in .planning/archive/."
   },
   "entries": {
     "src-tauri/src/main.rs": {
@@ -32,11 +33,6 @@
     "src-tauri/src/commands/mod.rs": {
       "exports": ["file", "analysis", "image_analysis", "thumbnail"],
       "imports": [],
-      "type": "module"
-    },
-    "src-tauri/src/commands/file.rs": {
-      "exports": ["read_file_for_edit", "save_file"],
-      "imports": ["std::fs", "std::path"],
       "type": "module"
     },
     "src-tauri/src/commands/analysis.rs": {
@@ -109,11 +105,6 @@
       "imports": [],
       "type": "type-def"
     },
-    "frontend/src/stores/editorStore.ts": {
-      "exports": ["useEditorStore"],
-      "imports": ["zustand", "../types"],
-      "type": "module"
-    },
     "frontend/src/components/GraphView.tsx": {
       "exports": ["GraphView"],
       "imports": ["react", "graphology", "sigma", "../types", "../utils"],
@@ -139,11 +130,6 @@
       "imports": ["react", "../types", "./Column"],
       "type": "module"
     },
-    "frontend/src/components/CodeMode.tsx": {
-      "exports": ["CodeMode", "isEditableFile"],
-      "imports": ["react", "../stores/editorStore", "./MonacoEditor", "./EditorTabs"],
-      "type": "module"
-    },
     "frontend/src/components/AssetMode.tsx": {
       "exports": ["AssetMode"],
       "imports": ["react", "../types", "../hooks/useThumbnails"],
@@ -167,11 +153,6 @@
     "frontend/src/components/ModeSwitcher.tsx": {
       "exports": ["ModeSwitcher"],
       "imports": ["react"],
-      "type": "module"
-    },
-    "frontend/src/hooks/useOpenFiles.ts": {
-      "exports": ["useOpenFiles"],
-      "imports": ["react", "../stores/editorStore", "../types"],
       "type": "module"
     },
     "frontend/src/hooks/useDebounce.ts": {

@@ -4,3 +4,5 @@ frontend/dist/
 src-tauri/target/
 .codex/
 .opencode/
+.hermes/
+graphify-out/

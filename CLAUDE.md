@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Orbit is a graph-first file intelligence IDE built with Tauri 2, Rust, React/TypeScript, SQLite, Graphology, and Sigma.js. The central idea is that the graph is the primary thinking surface — not a feature bolted onto a file manager. The app shape is a frameless window with a 28px unified header bar, a thin left sidebar (Explorer/Search), a large central graph surface, and a right inspector (Inspector/Code).
+Orbit is a **graph-native wiki for the filesystem**, built with Tauri 2, Rust, React/TypeScript, SQLite, Graphology, and Sigma.js. The central idea is that the graph is the primary thinking surface — not a feature bolted onto a file manager — and that every selection is enriched with quick context (Wikipedia summaries today, user notes / wikilinks / backlinks next). The app shape is a frameless window with a 28px unified header bar, a thin left sidebar (Explorer / Search / Assets), a large central graph surface, and a right Inspector that hosts file metadata, an About card, code/markdown analysis, and read-only previews.
+
+**Code editing is out of scope.** Orbit shows code (read-only previews + static analysis) but does not edit it. External editing flows through `$EDITOR` / `xdg-open`. Monaco was removed on 2026-05-18 along with Code Mode, the `useOpenFiles` hook, the `editorStore`, the `read_file_for_edit` and `save_file` Tauri commands, and the `Editor` settings section.
 
 ## Commands
 
@@ -74,7 +76,9 @@ When graph scope appears wrong, trace: frontend `loadGraph` call → `tauriInvok
 
 ### Frontend state
 
-All application state lives in `frontend/src/main.tsx` (the `App` component). There is no global Zustand store for the main shell — Zustand (`frontend/src/components/editorStore.ts`) is used only for Monaco editor tab state. `useViewPersistence` persists explorer view mode and sort order per folder path.
+All application state lives in `frontend/src/main.tsx` (the `App` component). There is no global state store — Zustand was removed along with Monaco. `useViewPersistence` persists explorer view mode and sort order per folder path; `usePersistedState` persists settings like performance mode and graph node cap.
+
+The Wikipedia "About" panel (`frontend/src/components/inspector/AboutPanel.tsx`) calls `lookupWiki(query)` in `frontend/src/lib/wiki.ts` (REST summary with a 7-day localStorage cache and a 1-day negative cache for misses). Query inference for common file types lives in `frontend/src/lib/wikiQuery.ts`. Wikipedia is fetched directly from the WebView; `tauri.conf.json` has CSP disabled, so no Rust HTTP code is needed.
 
 ### Backend modules
 
@@ -110,4 +114,4 @@ The `.planning/` directory contains the project roadmap and phase state. Key fil
 - `.planning/HANDOFF.md` — session handoff notes with current baseline
 - `.planning/ROADMAP.md` — phase-by-phase delivery plan
 
-Current status (as of 2026-05-01): v1.0 complete, v2.0 at ~86% — Phase 8 (Code Mode / Enhanced Inspector) partially implemented; markdown/backlinks and similar-image flows still pending.
+Current status (as of 2026-05-18): v1.0 complete, v2.0 at ~86% — Phase 8 pivoted from "Code Mode" to "Wiki Inspector". Wikipedia About panel landed; user notes + wikilinks + backlinks, richer markdown rendering, and similar-image grouping still pending.

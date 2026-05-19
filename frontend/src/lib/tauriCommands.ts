@@ -11,6 +11,7 @@ import type {
   IconThemeMeta,
   IconThemePayload,
   MarkdownAnalysis,
+  OmarchyColors,
   OperationStats,
   PerformanceMetrics,
   PreviewPayload,
@@ -38,8 +39,6 @@ export const TAURI_COMMANDS = [
   "get_performance_metrics",
   "get_operation_stats",
   "reset_performance_metrics",
-  "read_file_for_edit",
-  "save_file",
   "analyze_code_file",
   "analyze_markdown_file",
   "batch_analyze_code_files",
@@ -73,6 +72,7 @@ export const TAURI_COMMANDS = [
   "create_file",
   "create_folder",
   "rename",
+  "get_omarchy_colors",
 ] as const;
 
 export type TauriCommand = typeof TAURI_COMMANDS[number];
@@ -94,8 +94,6 @@ type CommandArgsMap = {
   get_performance_metrics: undefined;
   get_operation_stats: undefined;
   reset_performance_metrics: undefined;
-  read_file_for_edit: { path: string };
-  save_file: { path: string; content: string };
   analyze_code_file: { path: string };
   analyze_markdown_file: { path: string };
   batch_analyze_code_files: { paths: string[] };
@@ -134,6 +132,7 @@ type CommandArgsMap = {
   create_file: { parentDir: string; name: string };
   create_folder: { parentDir: string; name: string };
   rename: { path: string; newName: string };
+  get_omarchy_colors: undefined;
 };
 
 type CommandResultMap = {
@@ -153,8 +152,6 @@ type CommandResultMap = {
   get_performance_metrics: PerformanceMetrics;
   get_operation_stats: OperationStats;
   reset_performance_metrics: void;
-  read_file_for_edit: string;
-  save_file: void;
   analyze_code_file: CodeAnalysis | null;
   analyze_markdown_file: MarkdownAnalysis | null;
   batch_analyze_code_files: Array<[string, CodeAnalysis | null]>;
@@ -188,6 +185,7 @@ type CommandResultMap = {
   create_file: string;
   create_folder: string;
   rename: string;
+  get_omarchy_colors: OmarchyColors;
 };
 
 type CommandArgs<C extends TauriCommand> = CommandArgsMap[C];

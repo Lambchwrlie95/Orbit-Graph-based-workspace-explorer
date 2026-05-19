@@ -1,8 +1,9 @@
 import React, { memo, useState } from "react";
-import { Copy, ExternalLink, FileCode, FolderOpen, Image as ImageIcon, RefreshCcw, Pencil } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { Copy, ExternalLink, FolderOpen, Image as ImageIcon, Music, RefreshCcw, Pencil } from "lucide-react";
 import { FileRecord, PreviewPayload } from "../types";
-import { formatBytes, formatDate, isImageFile, isTextFile, shortPath } from "../utils";
-import { isEditableFile } from "./CodeMode";
+import { formatBytes, formatDate, isAudioFile, isImageFile, isTextFile, shortPath } from "../utils";
+import { AboutPanel } from "./inspector/AboutPanel";
 import { CodeAnalysisPanel } from "./inspector/CodeAnalysisPanel";
 import { ImageAnalysisPanel } from "./inspector/ImageAnalysisPanel";
 import { MarkdownAnalysisPanel } from "./inspector/MarkdownAnalysisPanel";
@@ -17,11 +18,10 @@ interface InspectorProps {
   onOpen: (path: string) => void;
   onSelectPath?: (path: string) => void;
   onNavigate?: (path: string) => void;
-  onEdit?: (record: FileRecord) => void;
   onRenamed?: (oldPath: string, newPath: string) => void;
 }
 
-type PreviewKind = "text" | "image" | "directory" | "binary" | "error";
+type PreviewKind = "text" | "image" | "audio" | "directory" | "binary" | "error";
 
 function InspectorComponent({
   record,
@@ -31,7 +31,6 @@ function InspectorComponent({
   onOpen,
   onSelectPath,
   onNavigate,
-  onEdit,
   onRenamed,
 }: InspectorProps) {
   const { resolve: resolveIcon } = useIconTheme();
@@ -77,7 +76,7 @@ function InspectorComponent({
   // when the backend successfully reads them as text.
   const canPreview =
     !record.isDir &&
-    (isTextFile(record.extension) || isImageFile(record.extension) || preview !== null);
+    (isTextFile(record.extension) || isImageFile(record.extension) || isAudioFile(record.extension) || preview !== null);
   const previewKind = (preview?.kind ?? (record.isDir ? "directory" : "binary")) as PreviewKind;
   const previewTitle = preview?.title || record.name;
   const previewSummary = preview?.summary || (record.isDir ? "Folder" : "No preview available");
@@ -122,16 +121,6 @@ function InspectorComponent({
             >
               <Pencil size={13} strokeWidth={2} />
             </button>
-            {!record.isDir && onEdit && isEditableFile(record) && (
-              <button
-                type="button"
-                className="panel-action-primary"
-                onClick={() => onEdit(record)}
-                title="Open in code editor"
-              >
-                <FileCode size={13} strokeWidth={2} />
-              </button>
-            )}
           </div>
         </div>
 
@@ -228,6 +217,8 @@ function InspectorComponent({
 {/* Quick-action text buttons removed — the icon row at the top of the panel
             already exposes Open / Show in folder / Copy path / Edit. */}
 
+        <AboutPanel record={record} />
+
         {canPreview && (
           <PreviewSection
             record={record}
@@ -238,7 +229,6 @@ function InspectorComponent({
             previewSummary={previewSummary}
             onOpen={onOpen}
             onNavigate={onNavigate}
-            onEdit={onEdit}
           />
         )}
 
@@ -277,7 +267,6 @@ interface PreviewSectionProps {
   previewSummary: string;
   onOpen: (path: string) => void;
   onNavigate?: (path: string) => void;
-  onEdit?: (record: FileRecord) => void;
 }
 
 function PreviewSection({
@@ -289,17 +278,16 @@ function PreviewSection({
   previewSummary,
   onOpen,
   onNavigate,
-  onEdit,
 }: PreviewSectionProps) {
   const isImage = previewKind === "image";
   const isText = previewKind === "text";
-  const isEditable = !record.isDir && isEditableFile(record);
+  const isAudio = previewKind === "audio" || isAudioFile(record.extension);
 
   return (
     <section className="preview-section">
       <div className="panel-header">
         <h4>
-          {isImage ? <ImageIcon size={12} strokeWidth={2} /> : <RefreshCcw size={12} strokeWidth={2} />}
+          {isImage ? <ImageIcon size={12} strokeWidth={2} /> : isAudio ? <Music size={12} strokeWidth={2} /> : <RefreshCcw size={12} strokeWidth={2} />}
           Preview
         </h4>
         <div className="panel-actions panel-actions--compact">
@@ -313,16 +301,6 @@ function PreviewSection({
               title="Show parent folder"
             >
               <FolderOpen size={12} strokeWidth={2} />
-            </button>
-          )}
-          {isEditable && onEdit && (
-            <button
-              type="button"
-              className="panel-action-primary"
-              onClick={() => onEdit(record)}
-              title="Open in code editor"
-            >
-              <FileCode size={12} strokeWidth={2} />
             </button>
           )}
         </div>
@@ -347,6 +325,19 @@ function PreviewSection({
       {isLoadingPreview ? (
         <div className="empty-state small">
           <span className="scanning-indicator">⟳ Loading preview…</span>
+        </div>
+      ) : isAudio ? (
+        <div className="preview-content preview-content-audio">
+          <div className="audio-preview">
+            <audio
+              controls
+              src={convertFileSrc(record.path)}
+              className="audio-player"
+              preload="metadata"
+            >
+              Your browser does not support audio playback.
+            </audio>
+          </div>
         </div>
       ) : preview ? (
         <div className={`preview-content preview-content-${preview.kind}`}>

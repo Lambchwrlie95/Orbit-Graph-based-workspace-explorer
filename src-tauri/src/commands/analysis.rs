@@ -1,4 +1,4 @@
-use crate::code_analyzer::{analyze_file, CodeAnalysis, Export, Import, ImportType, is_code_file};
+use crate::code_analyzer::{analyze_file, is_code_file, CodeAnalysis, Export, Import, ImportType};
 use crate::git_status::{find_repo_root, get_diff_stats, get_file_status, FileGitStatus};
 use crate::markdown_analyzer::{
     analyze as analyze_markdown, is_markdown_file, resolve_link_target, MarkdownAnalysis,
@@ -14,10 +14,7 @@ fn resolve_local_import(source_file: &str, import_path: &str) -> String {
         .parent()
         .and_then(|p| p.to_str())
         .unwrap_or("");
-    let mut parts: Vec<&str> = source_dir
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let mut parts: Vec<&str> = source_dir.split('/').filter(|s| !s.is_empty()).collect();
     for part in import_path.split('/') {
         match part {
             "" | "." => {}
@@ -32,9 +29,12 @@ fn resolve_local_import(source_file: &str, import_path: &str) -> String {
 
 /// Analyze a code file and return imports and exports
 #[tauri::command]
-pub async fn analyze_code_file(path: String, state: State<'_, AppState>) -> Result<Option<CodeAnalysis>, String> {
+pub async fn analyze_code_file(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Option<CodeAnalysis>, String> {
     let file_path = Path::new(&path);
-    
+
     // Check if it's a code file first
     if !is_code_file(file_path) {
         return Ok(None);
@@ -42,7 +42,9 @@ pub async fn analyze_code_file(path: String, state: State<'_, AppState>) -> Resu
 
     let indexed_file = crate::db::get_file(&state.db_path, &path)?;
     if let Some(file) = &indexed_file {
-        if let Some((imports_json, exports_json)) = crate::db::get_code_analysis(&state.db_path, file.id)? {
+        if let Some((imports_json, exports_json)) =
+            crate::db::get_code_analysis(&state.db_path, file.id)?
+        {
             if let (Ok(imports), Ok(exports)) = (
                 serde_json::from_str::<Vec<Import>>(&imports_json),
                 serde_json::from_str::<Vec<Export>>(&exports_json),
@@ -51,11 +53,11 @@ pub async fn analyze_code_file(path: String, state: State<'_, AppState>) -> Resu
             }
         }
     }
-    
+
     // Read file content
-    let content = std::fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    
+    let content =
+        std::fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+
     // Analyze the file
     let analysis = analyze_file(file_path, &content);
 
@@ -89,8 +91,8 @@ pub async fn analyze_markdown_file(
         return Ok(None);
     }
 
-    let content = std::fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        std::fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
     let analysis = analyze_markdown(&content);
 
     if let Some(file) = crate::db::get_file(&state.db_path, &path)? {
@@ -115,7 +117,7 @@ pub async fn is_analyzable_markdown_file(path: String) -> Result<bool, String> {
 #[tauri::command]
 pub async fn get_file_git_status(path: String) -> Result<FileGitStatus, String> {
     let file_path = Path::new(&path);
-    
+
     // Try to find repo root and get status
     match find_repo_root(file_path).and_then(|repo_root| {
         let mut status = get_file_status(&repo_root, file_path)?;
@@ -139,7 +141,10 @@ pub async fn get_file_git_status(path: String) -> Result<FileGitStatus, String> 
 
 /// Get files related to the current file: files it imports (forward) and files that import it (reverse).
 #[tauri::command]
-pub async fn get_related_files(path: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
+pub async fn get_related_files(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
     let mut related = std::collections::HashSet::new();
 
     // Reverse deps: files that import this file
@@ -161,7 +166,10 @@ pub async fn get_related_files(path: String, state: State<'_, AppState>) -> Resu
 /// Batch analyze multiple code files
 /// Used during workspace scanning
 #[tauri::command]
-pub async fn batch_analyze_code_files(paths: Vec<String>, state: State<'_, AppState>) -> Result<Vec<(String, Option<CodeAnalysis>)>, String> {
+pub async fn batch_analyze_code_files(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, Option<CodeAnalysis>)>, String> {
     let mut results = Vec::new();
 
     for path in paths {
@@ -270,14 +278,16 @@ pub async fn get_supported_code_extensions() -> Result<Vec<String>, String> {
 
 /// Get git status for multiple files at once
 #[tauri::command]
-pub async fn get_files_git_status(paths: Vec<String>) -> Result<Vec<(String, FileGitStatus)>, String> {
+pub async fn get_files_git_status(
+    paths: Vec<String>,
+) -> Result<Vec<(String, FileGitStatus)>, String> {
     let mut results = Vec::new();
-    
+
     for path in paths {
         let status = get_file_git_status(path.clone()).await?;
         results.push((path, status));
     }
-    
+
     Ok(results)
 }
 
@@ -285,7 +295,7 @@ pub async fn get_files_git_status(paths: Vec<String>) -> Result<Vec<(String, Fil
 #[tauri::command]
 pub async fn find_git_repo_root(path: String) -> Result<Option<String>, String> {
     let file_path = Path::new(&path);
-    
+
     Ok(find_repo_root(file_path).map(|p| p.to_string_lossy().to_string()))
 }
 

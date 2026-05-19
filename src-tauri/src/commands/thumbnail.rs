@@ -1,7 +1,7 @@
-use tauri::State;
-use serde::{Deserialize, Serialize};
+use crate::thumbnail_generator::{get_supported_sizes, ThumbnailGenerator};
 use crate::AppState;
-use crate::thumbnail_generator::{ThumbnailGenerator, get_supported_sizes};
+use serde::{Deserialize, Serialize};
+use tauri::State;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ThumbnailInfo {
@@ -66,16 +66,19 @@ pub fn get_thumbnail_info(
     state: State<'_, AppState>,
 ) -> Result<Vec<ThumbnailInfo>, String> {
     let thumbs = crate::db::get_thumbnails_for_file(&state.db_path, file_id)?;
-    
-    Ok(thumbs.into_iter().map(|t| ThumbnailInfo {
-        id: t.id,
-        file_id: t.file_id,
-        size: t.size as u32,
-        path: t.path,
-        generated_at: t.generated_at,
-        width: t.width.unwrap_or(0),
-        height: t.height.unwrap_or(0),
-    }).collect())
+
+    Ok(thumbs
+        .into_iter()
+        .map(|t| ThumbnailInfo {
+            id: t.id,
+            file_id: t.file_id,
+            size: t.size as u32,
+            path: t.path,
+            generated_at: t.generated_at,
+            width: t.width.unwrap_or(0),
+            height: t.height.unwrap_or(0),
+        })
+        .collect())
 }
 
 #[tauri::command]

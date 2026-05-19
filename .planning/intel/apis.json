@@ -116,20 +116,6 @@
       "file": "src-tauri/src/main.rs",
       "description": "Reset performance metrics"
     },
-    "read_file_for_edit": {
-      "method": "TAURI_COMMAND",
-      "path": "read_file_for_edit",
-      "params": ["path"],
-      "file": "src-tauri/src/commands/file.rs",
-      "description": "Read file content for Monaco editor"
-    },
-    "save_file": {
-      "method": "TAURI_COMMAND",
-      "path": "save_file",
-      "params": ["path", "content"],
-      "file": "src-tauri/src/commands/file.rs",
-      "description": "Save file content from Monaco editor"
-    },
     "analyze_code_file": {
       "method": "TAURI_COMMAND",
       "path": "analyze_code_file",
