@@ -5,6 +5,7 @@ import { FileRecord, NodeNote, PreviewPayload } from "../types";
 import { formatBytes, formatDate, isArchiveFile, isAudioFile, isFontFile, isImageFile, isPdfFile, isTextFile, isVideoFile, shortPath } from "../utils";
 import { AboutPanel } from "./inspector/AboutPanel";
 import { BacklinksPanel } from "./inspector/BacklinksPanel";
+import { OutgoingLinksPanel } from "./inspector/OutgoingLinksPanel";
 import { CodeAnalysisPanel } from "./inspector/CodeAnalysisPanel";
 import { ImageAnalysisPanel } from "./inspector/ImageAnalysisPanel";
 import { MarkdownAnalysisPanel } from "./inspector/MarkdownAnalysisPanel";
@@ -301,6 +302,12 @@ function InspectorComponent({
             rootPath={rootPath}
             onResolveWikilink={onSelectPath ?? onNavigate}
             onNoteChanged={setCurrentNote}
+          />
+          <OutgoingLinksPanel
+            links={currentNote?.links ?? []}
+            rootPath={rootPath}
+            hasLoaded={currentNote !== null}
+            onOpen={onSelectPath ?? onNavigate}
           />
           <BacklinksPanel
             backlinks={currentNote?.backlinks ?? []}

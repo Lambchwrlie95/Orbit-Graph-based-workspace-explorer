@@ -11,7 +11,7 @@ import {
   type NodeLabelDrawingFunction,
 } from "sigma/rendering";
 import EdgeCurveProgram from "@sigma/edge-curve";
-import { ArrowLeft, Copy, ExternalLink, FolderOpen, Maximize, PenLine, SquareTerminal, Target } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, FolderOpen, Maximize, Pause, PenLine, Pin, PinOff, Play, SquareTerminal, Target } from "lucide-react";
 import { GraphEdge, GraphNode, GraphPayload } from "../types";
 import { formatBytes } from "../utils";
 import { usePersistedState } from "../hooks/usePersistedState";
@@ -172,6 +172,7 @@ type Graph3DNode = NodeObject & {
   fz?: number;
   isDir: boolean;
   isCluster: boolean;
+  nodeType: NodeType;
   extension?: string | null;
   parentPath?: string | null;
   clusterSummary?: VisualGraphNode["clusterSummary"];
@@ -255,6 +256,7 @@ function GraphViewComponent({
   const iconThemeRef = useRef<IconThemePayload | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
   const selectedNodeRef = useRef<string | null>(null);
+  const graph3dKeyHandlerRef = useRef<((event: KeyboardEvent) => void) | null>(null);
   const navHistoryRef = useRef<string[]>(navHistory);
   const breadcrumbNodesRef = useRef<GraphNode[]>(breadcrumbNodes);
   const [layoutMode, setLayoutMode] = usePersistedState<LayoutMode>(PREF.layout, "constellation", {
@@ -273,6 +275,8 @@ function GraphViewComponent({
   );
   const [nodeView, setNodeView] = usePersistedState<NodeView>(PREF.nodeView, "spheres");
   const [showMinimap, setShowMinimap] = usePersistedState<boolean>(PREF.minimap, false);
+  const [graph3dRunning, setGraph3dRunning] = useState(true);
+  const [graph3dPinDrag, setGraph3dPinDrag] = usePersistedState<boolean>("orbit:graph:3dPinDrag", true);
   const [visibleEdgeCategories, setVisibleEdgeCategories] = usePersistedState<Set<EdgeCategory>>(
     PREF.edges,
     new Set(ALL_EDGE_CATEGORIES),
@@ -537,7 +541,11 @@ function GraphViewComponent({
         new(element: HTMLElement, configOptions?: { controlType?: "trackball" | "orbit" | "fly"; rendererConfig?: { antialias?: boolean; alpha?: boolean } }): ForceGraph3DInstance<Graph3DNode, Graph3DLink>;
       };
       const graphApi = new ForceGraph3DTyped(container, {
-        controlType: "orbit",
+        // Trackball, not orbit: OrbitControls pins the camera's up-axis to Y
+        // and refuses to tumble past the poles, which feels like a rotation
+        // lock. TrackballControls gives free roll/pitch/yaw — the natural
+        // expectation for a 3D galaxy view.
+        controlType: "trackball",
         rendererConfig: { antialias: true, alpha: false },
       })
         .backgroundColor(graphThemeColor("--orbit-graph-canvas", "#101010"))
@@ -545,29 +553,40 @@ function GraphViewComponent({
         .width(container.clientWidth || 800)
         .height(container.clientHeight || 600)
         .nodeLabel((node) => showLabels ? graph3dNodeLabel(node) : "")
-        .nodeRelSize(nodeView === "icons" ? 7.5 : 9.2)
+        .nodeRelSize(nodeView === "icons" ? 2.1 : 2.4)
         .nodeVal((node) => node.val)
         .nodeColor((node) => graph3dNodeColor(node, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, graph3dData.links))
         .nodeThreeObject((node: Graph3DNode) => graph3dNodeObject(node, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, graph3dData.links, showLabels))
         .nodeOpacity(1)
-        .nodeResolution(nodeView === "icons" ? 18 : 22)
+        .nodeResolution(nodeView === "icons" ? 12 : 16)
         .linkColor((link) => graph3dLinkColor(link, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated))
-        .linkOpacity(0.74)
+        .linkOpacity(0.72)
         .linkWidth((link) => graph3dLinkWidth(link, hoveredNodeRef.current, selectedNodeRef.current))
         .linkCurvature((link) => link.curvature)
         .linkDirectionalParticles((link) => graph3dLinkParticles(link, hoveredNodeRef.current, selectedNodeRef.current))
-        .linkDirectionalParticleWidth(1.4)
+        .linkDirectionalParticleColor((link) => graph3dLinkColor(link, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated))
+        .linkDirectionalParticleWidth((link) => graph3dLinkParticleWidth(link, hoveredNodeRef.current, selectedNodeRef.current))
+        .linkDirectionalParticleSpeed((link) => graph3dLinkParticleSpeed(link))
         .enableNodeDrag(true)
         .enableNavigationControls(true)
+        .d3AlphaDecay(0.035)
+        .d3VelocityDecay(0.72)
         .cooldownTicks(120)
-        .onEngineStop(() => graphApi.zoomToFit(480, 64))
+        .onEngineStop(() => {
+          // Just flag the simulation as stopped. Do NOT reframe the camera
+          // here — the engine cools down after every drag, hover, or particle
+          // settle, and re-snapping the camera each time prevents the user
+          // from zooming/panning to a node. Initial framing is handled at
+          // mount; manual reframe is on the Fit button.
+          setGraph3dRunning(false);
+        })
         .onNodeHover((node) => {
           const id = node?.id ?? null;
+          if (hoveredNodeRef.current === id) return;
           hoveredNodeRef.current = id;
           setHoveredNode((prev) => prev === id ? prev : id);
-          setGraph3DAutoRotate(graphApi, !id);
+          setGraph3DAutoRotate(graphApi, false);
           graphApi.nodeColor(graphApi.nodeColor());
-          graphApi.nodeThreeObject(graphApi.nodeThreeObject());
           graphApi.linkColor(graphApi.linkColor());
           graphApi.linkWidth(graphApi.linkWidth());
           graphApi.linkDirectionalParticles(graphApi.linkDirectionalParticles());
@@ -575,16 +594,19 @@ function GraphViewComponent({
         .onBackgroundClick(() => {
           hoveredNodeRef.current = null;
           setHoveredNode(null);
-          setGraph3DAutoRotate(graphApi, true);
+          selectedNodeRef.current = null;
+          setSelectedNode((prev) => (prev === null ? prev : null));
+          setGraph3DAutoRotate(graphApi, false);
+          graphApi.nodeColor(graphApi.nodeColor());
+          graphApi.linkColor(graphApi.linkColor());
+          graphApi.linkWidth(graphApi.linkWidth());
         })
         .onNodeClick((node, event) => {
           selectedNodeRef.current = node.id;
           setSelectedNode((prev) => prev === node.id ? prev : node.id);
           if (node.path) onSelectPath(node.path);
           setGraph3DAutoRotate(graphApi, false);
-          focusGraph3DNode(graphApi, node, 900);
           graphApi.nodeColor(graphApi.nodeColor());
-          graphApi.nodeThreeObject(graphApi.nodeThreeObject());
           graphApi.linkColor(graphApi.linkColor());
           graphApi.linkWidth(graphApi.linkWidth());
           if (event.detail > 1) {
@@ -610,24 +632,93 @@ function GraphViewComponent({
           });
         })
         .onNodeDragEnd((node) => {
-          node.fx = node.x;
-          node.fy = node.y;
-          node.fz = node.z;
+          if (graph3dPinDrag) {
+            node.fx = node.x;
+            node.fy = node.y;
+            node.fz = node.z;
+          } else {
+            node.fx = undefined;
+            node.fy = undefined;
+            node.fz = undefined;
+          }
         })
         .graphData(graph3dData);
 
       const api = graphApi as unknown as { d3Force?: (name: string, force?: unknown) => any; d3ReheatSimulation?: () => void };
       const nodesById = new Map(graph3dData.nodes.map((node) => [node.id, node]));
       api.d3Force?.("link")?.distance?.((link: Graph3DLink) => graph3dLinkDistance(link, nodesById));
-      api.d3Force?.("charge")?.strength?.((node: Graph3DNode) => node.isDir ? -82 : -34);
+      api.d3Force?.("charge")?.strength?.((node: Graph3DNode) => node.isDir ? -46 : -18);
       const collide = api.d3Force?.("collide");
-      collide?.radius?.((node: Graph3DNode) => Math.max(node.isDir ? 20 : 13, Math.sqrt(Math.max(1, node.val)) * 4.2));
+      collide?.radius?.((node: Graph3DNode) => Math.max(node.isDir ? 10 : 7, Math.sqrt(Math.max(1, node.val)) * 2.4));
+      api.d3Force?.("orbitCollide", createGraph3DCollisionForce());
       api.d3ReheatSimulation?.();
+      setGraph3dRunning(true);
 
       graph3dRef.current = graphApi;
       graph3dNodeRef.current = new Map(graph3dData.nodes.map((node) => [node.id, node]));
+      
+      const onGraph3DKeyDown = (event: KeyboardEvent) => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+        const activeId = selectedNodeRef.current;
+        const nodes = graph3dNodeRef.current;
+        if (!nodes.size) return;
+        const focusByPath = (path: string | undefined | null) => {
+          if (!path) return false;
+          for (const candidate of nodes.values()) {
+            if (candidate.path === path) {
+              selectedNodeRef.current = candidate.id;
+              setSelectedNode((prev) => (prev === candidate.id ? prev : candidate.id));
+              if (candidate.path) onSelectPath(candidate.path);
+              setGraph3DAutoRotate(graphApi, false);
+              focusGraph3DNode(graphApi, candidate, 600);
+              graphApi.nodeColor(graphApi.nodeColor());
+              graphApi.linkColor(graphApi.linkColor());
+              graphApi.linkWidth(graphApi.linkWidth());
+              return true;
+            }
+          }
+          return false;
+        };
+        if (event.key === "Escape") {
+          selectedNodeRef.current = null;
+          setSelectedNode((prev) => (prev === null ? prev : null));
+          hoveredNodeRef.current = null;
+          setHoveredNode(null);
+          setGraph3DAutoRotate(graphApi, false);
+          graphApi.nodeColor(graphApi.nodeColor());
+          graphApi.linkColor(graphApi.linkColor());
+          graphApi.linkWidth(graphApi.linkWidth());
+          event.preventDefault();
+          return;
+        }
+        if (!activeId) return;
+        const current = nodes.get(activeId);
+        if (!current) return;
+        if (event.key === "ArrowUp") {
+          if (focusByPath(current.parentPath)) event.preventDefault();
+          return;
+        }
+        if (event.key === "ArrowDown") {
+          const child = [...nodes.values()].find((n) => n.parentPath === current.path);
+          if (child && focusByPath(child.path)) event.preventDefault();
+          return;
+        }
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          const siblings = [...nodes.values()].filter((n) => n.parentPath === current.parentPath);
+          siblings.sort((a, b) => a.label.localeCompare(b.label));
+          if (siblings.length < 2) return;
+          const idx = siblings.findIndex((n) => n.id === current.id);
+          const next = siblings[(idx + (event.key === "ArrowRight" ? 1 : siblings.length - 1)) % siblings.length];
+          if (focusByPath(next.path)) event.preventDefault();
+        }
+      };
+      window.addEventListener("keydown", onGraph3DKeyDown);
+      graph3dKeyHandlerRef.current = onGraph3DKeyDown;
+      
       configureGraph3DControls(graphApi);
       setZoomLevel(1);
+      frameGraph3DScene(graphApi, graph3dNodeRef.current, 0);
+      installGraph3DAtmosphere(graphApi, graphThemeColor("--orbit-graph-canvas", "#101010"));
 
       const resizeObserver = new ResizeObserver(([entry]) => {
         const width = Math.max(1, Math.round(entry.contentRect.width));
@@ -636,9 +727,16 @@ function GraphViewComponent({
       });
       resizeObserver.observe(container);
 
-      requestAnimationFrame(() => graphApi.zoomToFit(620, 72));
+      // Single initial frame. Earlier passes stacked three reframes (rAF,
+      // +260ms, +760ms) which fought TrackballControls if the user started
+      // panning right away.
+      requestAnimationFrame(() => frameGraph3DScene(graphApi, graph3dNodeRef.current, 0));
 
       return () => {
+        if (graph3dKeyHandlerRef.current) {
+          window.removeEventListener("keydown", graph3dKeyHandlerRef.current);
+          graph3dKeyHandlerRef.current = null;
+        }
         resizeObserver.disconnect();
         graphApi._destructor();
         graph3dRef.current = null;
@@ -693,7 +791,7 @@ function GraphViewComponent({
         // of the sphere size. In icons mode the sphere is set to 1 graph unit
         // (a tiny invisible hit-target); glyphBaseSize carries the true visual scale.
         glyphBaseSize: baseSize,
-        forceLabel: nodeView === "icons" && !node.isCluster,
+        forceLabel: (node.isDir && !node.isCluster) || (nodeView === "icons" && !node.isCluster && nodeVisualState(node) !== "proxy"),
         baseZIndex: Math.round(((node.z3d ?? 0) + 2000) * 10),
       });
     }
@@ -857,27 +955,30 @@ function GraphViewComponent({
 
     rendererRef.current = renderer;
 
-    // Hide edges during camera pan for significantly smoother large-graph navigation
+    // Hide edges during camera pan for smoother large-graph navigation.
+    // Iterate all edges ONLY at pan-start and pan-end — never inside the
+    // camera "updated" tick, which fires many times per gesture and on large
+    // graphs compounded into a UI freeze that read as a crash.
     let isPanning = false;
-    let panEdgeRestoreTimer: ReturnType<typeof setTimeout> | null = null;
+    let edgesHidden = false;
     const container = containerRef.current;
-    const startPan = () => { isPanning = true; };
+    const startPan = () => {
+      if (isPanning) return;
+      isPanning = true;
+    };
     const endPan = () => {
       if (!isPanning) return;
       isPanning = false;
-      if (panEdgeRestoreTimer) clearTimeout(panEdgeRestoreTimer);
-      graph.forEachEdge(e => graph.removeEdgeAttribute(e, 'hidden'));
-      renderer.scheduleRefresh();
-    };
-    renderer.getCamera().on("updated", () => {
-      if (!isPanning) return;
-      if (panEdgeRestoreTimer) clearTimeout(panEdgeRestoreTimer);
-      graph.forEachEdge(e => graph.setEdgeAttribute(e, 'hidden', true));
-      panEdgeRestoreTimer = setTimeout(() => {
-        panEdgeRestoreTimer = null;
+      if (edgesHidden) {
+        edgesHidden = false;
         graph.forEachEdge(e => graph.removeEdgeAttribute(e, 'hidden'));
         renderer.scheduleRefresh();
-      }, 180);
+      }
+    };
+    renderer.getCamera().on("updated", () => {
+      if (!isPanning || edgesHidden) return;
+      edgesHidden = true;
+      graph.forEachEdge(e => graph.setEdgeAttribute(e, 'hidden', true));
     });
     container?.addEventListener("mousedown", startPan);
     document.addEventListener("mouseup", endPan);
@@ -896,7 +997,6 @@ function GraphViewComponent({
     return () => {
       container?.removeEventListener("mousedown", startPan);
       document.removeEventListener("mouseup", endPan);
-      if (panEdgeRestoreTimer) clearTimeout(panEdgeRestoreTimer);
       if (cameraZoomTimeoutRef.current) {
         clearTimeout(cameraZoomTimeoutRef.current);
         cameraZoomTimeoutRef.current = null;
@@ -905,7 +1005,7 @@ function GraphViewComponent({
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster, openNodeInEditor]);
+  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, graph3dPinDrag, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster, openNodeInEditor]);
 
   const focusSelected = () => {
     const selected = selectedNodeRef.current;
@@ -932,7 +1032,8 @@ function GraphViewComponent({
 
   const fitGraph = () => {
     if (layoutMode === "graph3d") {
-      graph3dRef.current?.zoomToFit(420, 72);
+      const graph3d = graph3dRef.current;
+      if (graph3d) frameGraph3DScene(graph3d, graph3dNodeRef.current, 320);
       return;
     }
     const renderer = rendererRef.current;
@@ -951,6 +1052,39 @@ function GraphViewComponent({
       renderer.scheduleRefresh();
       syncZoomFromCamera(renderer);
     });
+  };
+
+  const toggleGraph3DSimulation = () => {
+    const graph = graph3dRef.current;
+    if (!graph) return;
+    const api = graph as unknown as {
+      pauseAnimation?: () => void;
+      resumeAnimation?: () => void;
+      d3ReheatSimulation?: () => void;
+    };
+    if (graph3dRunning) {
+      api.pauseAnimation?.();
+      setGraph3dRunning(false);
+    } else {
+      api.d3ReheatSimulation?.();
+      api.resumeAnimation?.();
+      setGraph3dRunning(true);
+    }
+  };
+
+  const releaseGraph3DPins = () => {
+    let released = false;
+    for (const node of graph3dNodeRef.current.values()) {
+      if (node.fx !== undefined || node.fy !== undefined || node.fz !== undefined) released = true;
+      node.fx = undefined;
+      node.fy = undefined;
+      node.fz = undefined;
+    }
+    if (released) {
+      const api = graph3dRef.current as unknown as { d3ReheatSimulation?: () => void } | null;
+      api?.d3ReheatSimulation?.();
+      setGraph3dRunning(true);
+    }
   };
 
   /** Zoom toward canvas center so view stays stable (same idea as Sigma wheel zoom). */
@@ -986,9 +1120,27 @@ function GraphViewComponent({
     });
   };
 
-  const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
+const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
 
-  return (
+  const breadcrumbSegments = ((): { id: string; label: string; path: string }[] => {
+    if (layoutMode !== "graph3d" || !selectedNode) return [];
+    const nodes = graph3dNodeRef.current;
+    const start = nodes.get(selectedNode);
+    if (!start) return [];
+    const chain: { id: string; label: string; path: string }[] = [];
+    let cursor: Graph3DNode | undefined = start;
+    const guard = new Set<string>();
+    while (cursor && !guard.has(cursor.id)) {
+      guard.add(cursor.id);
+      chain.unshift({ id: cursor.id, label: cursor.label, path: cursor.path });
+      if (!cursor.parentPath) break;
+      cursor = [...nodes.values()].find((n) => n.path === cursor!.parentPath);
+    }
+    if (chain.length <= 6) return chain;
+    return [chain[0], { id: "ellipsis", label: "…", path: "" }, ...chain.slice(-4)];
+  })();
+
+    return (
     <div className={`graph-wrap graph-workbench graph-layout-${layoutMode}`}>
       <div className="graph-commandbar">
         <div className="graph-mode-tabs" aria-label="Graph layout">
@@ -1122,10 +1274,71 @@ function GraphViewComponent({
         <button type="button" className="graph-icon-btn" onClick={focusSelected} disabled={!selectedNode} title="Focus selected">
           <Target size={14} strokeWidth={1.8} />
         </button>
+        {layoutMode === "graph3d" && (
+          <>
+            <button
+              type="button"
+              className={`graph-icon-btn ${graph3dRunning ? "active" : ""}`}
+              onClick={toggleGraph3DSimulation}
+              title={graph3dRunning ? "Pause 3D simulation" : "Resume 3D simulation"}
+            >
+              {graph3dRunning ? <Pause size={14} strokeWidth={1.8} /> : <Play size={14} strokeWidth={1.8} />}
+            </button>
+            <button
+              type="button"
+              className={`graph-icon-btn ${graph3dPinDrag ? "active" : ""}`}
+              onClick={() => setGraph3dPinDrag((value) => !value)}
+              title={graph3dPinDrag ? "Drag pins 3D nodes" : "Drag releases 3D nodes"}
+            >
+              {graph3dPinDrag ? <Pin size={14} strokeWidth={1.8} /> : <PinOff size={14} strokeWidth={1.8} />}
+            </button>
+            <button type="button" className="graph-icon-btn" onClick={releaseGraph3DPins} title="Release all pinned 3D nodes">
+              <PinOff size={14} strokeWidth={1.8} />
+            </button>
+          </>
+        )}
       </div>
 
-      {hoveredInfo && (
-        <div className="graph-tooltip graph-node-card">
+{layoutMode === "graph3d" && breadcrumbSegments.length > 0 && (
+      <div className="graph-breadcrumb">
+        {breadcrumbSegments.map((seg, idx) => (
+          <span key={seg.id} className="graph-breadcrumb-segment">
+            {seg.path ? (
+              <button
+                type="button"
+                className="graph-breadcrumb-link"
+                onClick={() => {
+                  const node = graph3dNodeRef.current.get(seg.id);
+                  if (!node) return;
+                  selectedNodeRef.current = node.id;
+                  setSelectedNode(node.id);
+                  if (node.path) onSelectPath(node.path);
+                  const api = graph3dRef.current;
+                  if (api) {
+                    setGraph3DAutoRotate(api, false);
+                    focusGraph3DNode(api, node, 600);
+                    api.nodeColor(api.nodeColor());
+                    // DO NOT call api.nodeThreeObject(api.nodeThreeObject()) —
+                    // rebuilding every Three.js node on a hot interaction path
+                    // produces a black canvas / GPU-context crash. The
+                    // refreshed color/link calls below are enough to repaint.
+                    api.linkColor(api.linkColor());
+                    api.linkWidth(api.linkWidth());
+                  }
+                }}
+              >
+                {seg.label}
+              </button>
+            ) : (
+              <span className="graph-breadcrumb-ellipsis">{seg.label}</span>
+            )}
+            {idx < breadcrumbSegments.length - 1 && <span className="graph-breadcrumb-sep">›</span>}
+          </span>
+        ))}
+      </div>
+    )}
+    {hoveredInfo && (
+            <div className="graph-tooltip graph-node-card">
           <strong>{hoveredInfo.label}</strong>
           <span>{hoveredInfo.isCluster ? "Cluster" : hoveredInfo.isDir ? "Folder" : hoveredInfo.extension || "File"}</span>
           <span>{shortNodePath(hoveredInfo.path)}</span>
@@ -1301,12 +1514,18 @@ function buildGraph3DData(
     const icon = iconRuleForPath(node.path, node.isDir, node.isCluster, iconTheme);
     const baseColor = graph3dNodeBaseColor(node, groupColors);
     const glyphText = node.isCluster || visualState === "proxy" ? clusterGlyphForNode(node) : icon.text;
-    const depthZ = (node.depth - 1.5) * 14;
+    const native3d = node.projectionScale === 1 && Number.isFinite(node.z3d);
+    const seedScale = native3d ? 1 : scale;
+    const depthZ = native3d ? Number(node.z3d) : (node.depth - 1.5) * 14;
     const index = siblingIndex.get(node.id) ?? node.id;
     const total = Math.max(1, siblingCount.get(node.id) ?? 1);
     const orbitAngle = index * GOLDEN_ANGLE;
-    const orbitRadius = parentByChild.has(node.id) ? Math.min(34, 10 + Math.sqrt(total) * 3.2 + node.depth * 1.4) : 0;
-    const localLift = parentByChild.has(node.id) ? ((index % 5) - 2) * 5.5 : 0;
+    const orbitRadius = native3d ? 0 : parentByChild.has(node.id) ? Math.min(34, 10 + Math.sqrt(total) * 3.2 + node.depth * 1.4) : 0;
+    const localLift = parentByChild.has(node.id) ? ((index % 5) - 2) * (native3d ? 1.8 : 5.5) : 0;
+    const x = Number.isFinite(node.x) ? node.x * seedScale + Math.cos(orbitAngle) * orbitRadius : undefined;
+    const y = Number.isFinite(node.y) ? node.y * seedScale + Math.sin(orbitAngle) * orbitRadius : undefined;
+    const z = Number.isFinite(depthZ) ? depthZ + localLift : undefined;
+    const anchorNode = native3d && x !== undefined && y !== undefined && z !== undefined;
     return {
       id: String(node.id),
       name: node.label,
@@ -1314,12 +1533,16 @@ function buildGraph3DData(
       path: node.path,
       parentPath: node.parentPath,
       color: baseColor,
-      val: Math.max(9, getNodeSize(node) * (node.isDir ? 2.05 : 1.55)),
-      x: Number.isFinite(node.x) ? node.x * scale + Math.cos(orbitAngle) * orbitRadius : undefined,
-      y: Number.isFinite(node.y) ? node.y * scale + Math.sin(orbitAngle) * orbitRadius : undefined,
-      z: Number.isFinite(depthZ) ? depthZ + localLift : undefined,
+      val: Math.max(node.isDir ? 4.2 : node.isCluster ? 3.8 : 2.6, getNodeSize(node) * (node.isDir ? 0.72 : 0.52)),
+      x,
+      y,
+      z,
+      fx: anchorNode ? x : undefined,
+      fy: anchorNode ? y : undefined,
+      fz: anchorNode ? z : undefined,
       isDir: node.isDir,
       isCluster: node.isCluster,
+      nodeType: getNodeType(node),
       extension: node.extension,
       clusterSummary: node.clusterSummary,
       childCount: node.childCount,
@@ -1339,7 +1562,7 @@ function buildGraph3DData(
     if (seen.has(pairKey)) continue;
     seen.add(pairKey);
     const category = edgeCategoryForType(edge.edgeType);
-    const style = edgeStyleForGraphEdge(edge, groupColors);
+    const style = graph3dEdgeStyleForCategory(category);
     links.push({
       id: String(edge.id),
       source,
@@ -1348,7 +1571,7 @@ function buildGraph3DData(
       category,
       color: style.color,
       width: style.size,
-      curvature: category === "hierarchy" ? 0 : style.curvature * 0.35,
+      curvature: style.curvature === 0 ? 0 : style.curvature + Math.sin(Number(edge.id) * 12.9898) * 0.045,
     });
   }
   return { nodes: graphNodes, links };
@@ -1361,9 +1584,9 @@ function graph3dNodeLabel(node: Graph3DNode): string {
 }
 
 function graph3dNodeBaseColor(node: GraphDisplayNode, groupColors: Map<number, string>): string {
-  if (node.isDir && !node.isCluster) return graph3dSolidColor(groupColors.get(node.id) ?? graphThemeColor("--omarchy-color2", "#8bd17c"), "#8bd17c");
+  if (node.isDir && !node.isCluster) return graph3dBrighten(graph3dSolidColor(groupColors.get(node.id) ?? graphThemeColor("--omarchy-color2", "#8bd17c"), "#8bd17c"), 1.45);
   const color = getNodeColor(node);
-  return graph3dSolidColor(color, NODE_TYPE_FALLBACKS[getNodeType(node)] ?? "#d8dee9");
+  return graph3dBrighten(graph3dSolidColor(color, NODE_TYPE_FALLBACKS[getNodeType(node)] ?? "#d8dee9"), 1.25);
 }
 
 function graph3dNodeObject(
@@ -1374,6 +1597,10 @@ function graph3dNodeObject(
   links: Graph3DLink[],
   showText: boolean,
 ): THREE.Object3D {
+  // INVARIANT — do not regress: 3D nodes are ICONS ONLY. No mesh shape behind
+  // the icon, no plate/card background, no halo. The user has flagged
+  // multiple times that "shapes behind icons" and "cards" are not what they
+  // want. Render exactly one transparent sprite carrying the glyph.
   const focus = hoveredId || selectedId;
   const isActive = node.id === hoveredId || node.id === selectedId;
   const isRelated = Boolean(focus) && links.some((link) => {
@@ -1382,25 +1609,17 @@ function graph3dNodeObject(
     return (source === focus && target === node.id) || (target === focus && source === node.id);
   });
   const dimmed = dimUnrelated && Boolean(focus) && !isActive && !isRelated;
-  const radius = Math.max(node.isDir ? 11 : 8.4, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 4.35 : 3.65));
-  const color = graph3dSolidColor(graph3dNodeColor(node, hoveredId, selectedId, dimUnrelated, links), node.color);
+  const radius = Math.max(node.isDir ? 3.6 : node.isCluster ? 3.2 : 2.35, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 1.55 : node.isCluster ? 1.42 : 1.12));
+  const tint = graph3dSolidColor(graph3dNodeColor(node, hoveredId, selectedId, dimUnrelated, links), node.color);
+
   const group = new THREE.Group();
-  const geometry = graph3dNodeGeometry(node, isActive ? radius * 1.18 : radius);
-  const material = new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity: dimmed ? 0.28 : 1,
-    depthWrite: !dimmed,
-  });
-  const core = new THREE.Mesh(geometry, material);
-  core.rotation.x = node.isDir ? Math.PI / 7 : 0;
-  core.rotation.y = node.isCluster || node.visualState === "proxy" ? Math.PI / 4 : 0;
-  group.add(core);
+  const badge = graph3dBadgeSprite(node, isActive, radius, tint, dimmed);
+  group.add(badge);
 
   const shouldShowBillboard = showText && (node.isDir || node.isCluster || isActive || isRelated);
   if (shouldShowBillboard && !dimmed) {
     const sprite = graph3dBillboard(node, isActive, radius);
-    sprite.position.y = radius * 1.55;
+    sprite.position.y = radius * 1.9;
     group.add(sprite);
   }
 
@@ -1408,10 +1627,74 @@ function graph3dNodeObject(
 }
 
 function graph3dNodeGeometry(node: Graph3DNode, radius: number): THREE.BufferGeometry {
-  if (node.isDir && !node.isCluster) return new THREE.BoxGeometry(radius * 1.55, radius * 1.12, radius * 1.18, 1, 1, 1);
-  if (node.isCluster || node.visualState === "proxy") return new THREE.OctahedronGeometry(radius * 1.08, 0);
-  if (node.extension === "md" || node.extension === "txt") return new THREE.CylinderGeometry(radius * 0.78, radius * 0.78, radius * 0.44, 6);
-  return new THREE.SphereGeometry(radius, 16, 10);
+  if (node.isDir && !node.isCluster) return new THREE.BoxGeometry(radius * 1.72, radius * 1.2, radius * 0.92, 2, 2, 1);
+  if (node.isCluster || node.visualState === "proxy") return new THREE.DodecahedronGeometry(radius * 0.98, 0);
+  return new THREE.IcosahedronGeometry(radius * 0.86, 1);
+}
+
+// Draw the node's actual icon (the same Nerd-Font / Unicode glyph the 2D mode
+// uses) on a translucent plate. The earlier version of this rendered IBM Plex
+// Sans TEXT badges like "TSX" / "MD" / "FILE" / "DIR" — that is NOT an icon
+// and is the regression the user keeps flagging. Always draw `node.glyphText`
+// in the Nerd Font stack here.
+function graph3dBadgeSprite(node: Graph3DNode, active: boolean, radius: number, accent: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  const size = 192;
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    const center = size / 2;
+    const plateRadius = active ? size * 0.42 : size * 0.38;
+    const bg = graph3dBlend(graph3dSolidColor(accent, "#e5e7eb"), "#05070b", active ? 0.22 : 0.42);
+
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.72)";
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    if (node.isDir && !node.isCluster) {
+      const w = plateRadius * 2.05;
+      const h = plateRadius * 1.55;
+      ctx.roundRect(center - w / 2, center - h / 2, w, h, 18);
+    } else if (node.isCluster || node.visualState === "proxy") {
+      for (let i = 0; i < 6; i += 1) {
+        const angle = -Math.PI / 2 + (i * Math.PI * 2) / 6;
+        const px = center + Math.cos(angle) * plateRadius;
+        const py = center + Math.sin(angle) * plateRadius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+    } else {
+      ctx.arc(center, center, plateRadius, 0, Math.PI * 2);
+    }
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.lineWidth = active ? 8 : 5;
+    ctx.strokeStyle = active ? "#f5c542" : graph3dBrighten(accent, 1.32);
+    ctx.stroke();
+    ctx.restore();
+
+    const glyph = node.glyphText && node.glyphText.length > 0
+      ? node.glyphText
+      : (node.isDir ? "" : "");
+    const glyphPx = Math.round(size * (active ? 0.58 : 0.5));
+    // Nerd Font stack mirrors getGlyphBitmap (the 2D atlas) so 3D icons match.
+    ctx.font = `normal ${glyphPx}px "JetBrainsMono Nerd Font", "JetBrains Mono NF", "Symbols Nerd Font", "SymbolsNerdFont", "Hack Nerd Font", "FiraCode Nerd Font", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = active ? "#fff4a8" : "#f8fafc";
+    ctx.fillText(glyph, center, center + size * 0.02);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: false }));
+  const badgeScale = radius * (active ? 3.4 : 2.85);
+  sprite.scale.set(badgeScale, badgeScale, 1);
+  return sprite;
 }
 
 function graph3dBillboard(node: Graph3DNode, active: boolean, radius: number): THREE.Sprite {
@@ -1437,7 +1720,7 @@ function graph3dBillboard(node: Graph3DNode, active: boolean, radius: number): T
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  const scale = active ? radius * 3.15 : radius * 2.45;
+  const scale = active ? radius * 2.2 : radius * 1.7;
   sprite.scale.set(scale * (width / height), scale, 1);
   return sprite;
 }
@@ -1461,6 +1744,19 @@ function graph3dBrighten(value: string, factor: number): string {
   const g = Math.min(255, Math.round(((parsed >> 8) & 255) * factor));
   const b = Math.min(255, Math.round((parsed & 255) * factor));
   return graph3dRgbToHex(r, g, b);
+}
+
+function graph3dBlend(foreground: string, background: string, amount: number): string {
+  const fg = graph3dSolidColor(foreground).slice(1);
+  const bg = graph3dSolidColor(background, "#101010").slice(1);
+  const f = Number.parseInt(fg, 16);
+  const b = Number.parseInt(bg, 16);
+  const mix = (a: number, z: number) => Math.round(a * (1 - amount) + z * amount);
+  return graph3dRgbToHex(
+    mix((f >> 16) & 255, (b >> 16) & 255),
+    mix((f >> 8) & 255, (b >> 8) & 255),
+    mix(f & 255, b & 255),
+  );
 }
 
 function graph3dRgbToHex(r: number, g: number, b: number): string {
@@ -1490,24 +1786,29 @@ function graph3dLinkColor(link: Graph3DLink, hoveredId: string | null, selectedI
   const source = graph3dEndpointId(link.source);
   const target = graph3dEndpointId(link.target);
   const focus = hoveredId || selectedId;
-  if (focus && (source === focus || target === focus)) return withAlpha(link.color, 0.95);
-  return dimUnrelated && focus ? withAlpha(link.color, 0.18) : withAlpha(link.color, link.category === "hierarchy" ? 0.82 : 0.9);
+  const base = graph3dSolidColor(link.color, edgeCategoryColor(link.category));
+  if (focus && (source === focus || target === focus)) return graph3dBrighten(base, 1.28);
+  if (dimUnrelated && focus) return graph3dBlend(base, graphThemeColor("--orbit-graph-canvas", "#101010"), 0.72);
+  if (link.category !== "hierarchy") return graph3dBrighten(base, 1.12);
+  return base;
 }
 
 function graph3dLinkWidth(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
   const source = graph3dEndpointId(link.source);
   const target = graph3dEndpointId(link.target);
   const focus = hoveredId || selectedId;
-  return focus && (source === focus || target === focus) ? Math.max(4.2, link.width * 4.6) : Math.max(1.35, link.width * 1.8);
+  if (focus && (source === focus || target === focus)) return Math.max(2.4, link.width * 1.85);
+  if (link.category === "hierarchy") return Math.max(0.85, link.width);
+  return Math.max(1.05, link.width);
 }
 
 function graph3dLinkDistance(link: Graph3DLink, nodesById: Map<string, Graph3DNode>): number {
   const source = nodesById.get(graph3dEndpointId(link.source));
   const target = nodesById.get(graph3dEndpointId(link.target));
-  if (link.category !== "hierarchy") return 46;
-  if (source?.isDir && target?.isDir) return 42;
-  if (source?.isDir || target?.isDir) return 24;
-  return 18;
+  if (link.category !== "hierarchy") return 88;
+  if (source?.isDir && target?.isDir) return 118;
+  if (source?.isDir || target?.isDir) return 54;
+  return 34;
 }
 
 function graph3dLinkParticles(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
@@ -1515,34 +1816,187 @@ function graph3dLinkParticles(link: Graph3DLink, hoveredId: string | null, selec
   const source = graph3dEndpointId(link.source);
   const target = graph3dEndpointId(link.target);
   const focus = hoveredId || selectedId;
-  return focus && (source === focus || target === focus) ? 2 : 0;
+  if (focus && (source === focus || target === focus)) return link.category === "code" || link.category === "symlink" ? 3 : 2;
+  return link.category === "code" || link.category === "docs" || link.category === "symlink" ? 1 : 0;
+}
+
+function graph3dLinkParticleWidth(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
+  const source = graph3dEndpointId(link.source);
+  const target = graph3dEndpointId(link.target);
+  const focus = hoveredId || selectedId;
+  const active = Boolean(focus && (source === focus || target === focus));
+  return active ? Math.max(1.7, link.width * 0.9) : Math.max(1.05, link.width * 0.62);
+}
+
+function graph3dLinkParticleSpeed(link: Graph3DLink): number {
+  if (link.category === "code") return 0.006;
+  if (link.category === "docs") return 0.0048;
+  if (link.category === "symlink") return 0.0072;
+  if (link.category === "semantic" || link.category === "tags") return 0.0036;
+  return 0.004;
 }
 
 function graph3dEndpointId(endpoint: string | number | Graph3DNode): string {
   return typeof endpoint === "object" ? String(endpoint.id) : String(endpoint);
 }
 
+function graph3dCollisionRadius(node: Graph3DNode): number {
+  if (node.isDir && !node.isCluster) return Math.max(13, Math.sqrt(Math.max(1, node.val)) * 3.1);
+  if (node.isCluster || node.visualState === "proxy") return Math.max(11, Math.sqrt(Math.max(1, node.val)) * 2.8);
+  return Math.max(8, Math.sqrt(Math.max(1, node.val)) * 2.25);
+}
+
+function createGraph3DCollisionForce() {
+  let nodes: Graph3DNode[] = [];
+  const force = ((alpha: number) => {
+    const strength = Math.min(0.24, Math.max(0.04, alpha * 0.32));
+    const limit = Math.min(nodes.length, 350);
+    for (let i = 0; i < limit; i += 1) {
+      const a = nodes[i];
+      const ax = a.x ?? 0;
+      const ay = a.y ?? 0;
+      const az = a.z ?? 0;
+      const ar = graph3dCollisionRadius(a);
+      for (let j = i + 1; j < limit; j += 1) {
+        const b = nodes[j];
+        let dx = (b.x ?? 0) - ax;
+        let dy = (b.y ?? 0) - ay;
+        let dz = (b.z ?? 0) - az;
+        let distance = Math.hypot(dx, dy, dz);
+        if (!Number.isFinite(distance) || distance < 0.001) {
+          const angle = seededAngle(Number(a.id) + Number(b.id));
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          dz = Math.sin(angle * 0.7);
+          distance = Math.hypot(dx, dy, dz);
+        }
+        const minDistance = ar + graph3dCollisionRadius(b);
+        if (distance >= minDistance) continue;
+        const overlap = minDistance - distance;
+        const nx = dx / distance;
+        const ny = dy / distance;
+        const nz = dz / distance;
+        const pinnedA = a.fx !== undefined || a.fy !== undefined || a.fz !== undefined;
+        const pinnedB = b.fx !== undefined || b.fy !== undefined || b.fz !== undefined;
+        if (!pinnedA) {
+          a.vx = (a.vx ?? 0) - nx * overlap * strength * (pinnedB ? 1 : 0.5);
+          a.vy = (a.vy ?? 0) - ny * overlap * strength * (pinnedB ? 1 : 0.5);
+          a.vz = (a.vz ?? 0) - nz * overlap * strength * (pinnedB ? 1 : 0.5);
+        }
+        if (!pinnedB) {
+          b.vx = (b.vx ?? 0) + nx * overlap * strength * (pinnedA ? 1 : 0.5);
+          b.vy = (b.vy ?? 0) + ny * overlap * strength * (pinnedA ? 1 : 0.5);
+          b.vz = (b.vz ?? 0) + nz * overlap * strength * (pinnedA ? 1 : 0.5);
+        }
+      }
+    }
+  }) as ((alpha: number) => void) & { initialize?: (nextNodes: Graph3DNode[]) => void };
+  force.initialize = (nextNodes: Graph3DNode[]) => {
+    nodes = nextNodes;
+  };
+  return force;
+}
+
 function focusGraph3DNode(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>, node: Graph3DNode, duration = 700) {
   const x = node.x ?? 0;
   const y = node.y ?? 0;
   const z = node.z ?? 0;
-  const distance = 42;
+  const distance = Math.max(72, Math.sqrt(Math.max(1, node.val)) * 16);
   const length = Math.hypot(x, y, z);
   const ratio = length > 0 ? 1 + distance / length : 1;
   graph.cameraPosition(
-    length > 0 ? { x: x * ratio, y: y * ratio, z: z * ratio } : { x: 0, y: 0, z: distance },
+    length > 0 ? { x: x * ratio, y: y * ratio, z: z * ratio + distance * 0.28 } : { x: 0, y: -distance, z: distance },
     { x, y, z },
     duration,
   );
 }
 
+function frameGraph3DScene(
+  graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>,
+  nodes: Map<string, Graph3DNode>,
+  duration = 360,
+) {
+  const list = [...nodes.values()].filter((node) => Number.isFinite(node.x) && Number.isFinite(node.y) && Number.isFinite(node.z));
+  if (!list.length) {
+    graph.cameraPosition({ x: 0, y: -520, z: 360 }, { x: 0, y: 0, z: 0 }, duration);
+    return;
+  }
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const node of list) {
+    const x = node.x ?? 0;
+    const y = node.y ?? 0;
+    const z = node.z ?? 0;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+    minZ = Math.min(minZ, z);
+    maxZ = Math.max(maxZ, z);
+  }
+  const center = {
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+    z: (minZ + maxZ) / 2,
+  };
+  const radius = Math.max(120, Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) / 2);
+  const distance = Math.min(2400, Math.max(620, radius * 1.24));
+  graph.cameraPosition(
+    { x: center.x, y: center.y - distance * 0.78, z: center.z + distance * 0.46 },
+    center,
+    duration,
+  );
+}
+
+type OrbitGraph3DControls = {
+  autoRotate?: boolean;
+  autoRotateSpeed?: number;
+  enableDamping?: boolean;
+  dampingFactor?: number;
+  enableZoom?: boolean;
+  enablePan?: boolean;
+  zoomSpeed?: number;
+  rotateSpeed?: number;
+  panSpeed?: number;
+  minDistance?: number;
+  maxDistance?: number;
+  screenSpacePanning?: boolean;
+  mouseButtons?: Record<string, unknown>;
+  // TrackballControls-specific knobs (free rotation, no up-axis lock):
+  staticMoving?: boolean;
+  dynamicDampingFactor?: number;
+  noRotate?: boolean;
+  noZoom?: boolean;
+  noPan?: boolean;
+};
+
 function configureGraph3DControls(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>) {
   const controls = graph3dControls(graph);
   if (!controls) return;
+  // TrackballControls knobs (active path):
+  controls.staticMoving = false;
+  controls.dynamicDampingFactor = 0.18;
+  controls.rotateSpeed = 2.4;
+  controls.zoomSpeed = 1.1;
+  controls.panSpeed = 0.65;
+  controls.noRotate = false;
+  controls.noZoom = false;
+  controls.noPan = false;
+  controls.minDistance = 36;
+  controls.maxDistance = 4200;
+  // OrbitControls knobs (harmless on Trackball — kept for safety if the
+  // controlType ever flips back during debugging):
   controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.28;
+  controls.dampingFactor = 0.16;
+  controls.enableZoom = true;
+  controls.enablePan = true;
+  controls.screenSpacePanning = true;
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.12;
 }
 
 function setGraph3DAutoRotate(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>, enabled: boolean) {
@@ -1550,8 +2004,84 @@ function setGraph3DAutoRotate(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLi
   if (controls) controls.autoRotate = enabled;
 }
 
+function installGraph3DAtmosphere(
+  graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>,
+  backgroundColor: string,
+) {
+  const sceneApi = graph as unknown as { scene?: () => THREE.Scene };
+  const scene = sceneApi.scene?.();
+  if (!scene) return;
+  const bgHex = graph3dSolidColor(backgroundColor, "#0b0d12");
+  const fogColor = new THREE.Color(bgHex);
+  scene.fog = new THREE.Fog(fogColor, 380, 2600);
+  scene.traverse((obj) => {
+    if ((obj as { userData?: { orbitStarfield?: boolean; orbitAtmosphereLight?: boolean } }).userData?.orbitStarfield
+      || (obj as { userData?: { orbitAtmosphereLight?: boolean } }).userData?.orbitAtmosphereLight) {
+      scene.remove(obj);
+    }
+  });
+  const ambient = new THREE.AmbientLight(0xffffff, 1.15);
+  ambient.userData.orbitAtmosphereLight = true;
+  scene.add(ambient);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.55);
+  keyLight.position.set(-420, -620, 780);
+  keyLight.userData.orbitAtmosphereLight = true;
+  scene.add(keyLight);
+  const rimLight = new THREE.DirectionalLight(new THREE.Color(bgHex).lerp(new THREE.Color("#8bd17c"), 0.72), 0.82);
+  rimLight.position.set(560, 420, -360);
+  rimLight.userData.orbitAtmosphereLight = true;
+  scene.add(rimLight);
+  const positions = new Float32Array(STARFIELD_COUNT * 3);
+  for (let i = 0; i < STARFIELD_COUNT; i += 1) {
+    const r = STARFIELD_RADIUS_MIN + Math.random() * (STARFIELD_RADIUS_MAX - STARFIELD_RADIUS_MIN);
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    positions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i * 3 + 2] = r * Math.cos(phi);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color: new THREE.Color(bgHex).lerp(new THREE.Color("#ffffff"), 0.42),
+    size: 1.4,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.userData.orbitStarfield = true;
+  points.frustumCulled = false;
+  scene.add(points);
+}
+
+const STARFIELD_COUNT = 720;
+const STARFIELD_RADIUS_MIN = 1800;
+const STARFIELD_RADIUS_MAX = 3400;
+
 function graph3dControls(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>) {
-  return (graph as unknown as { controls?: () => { autoRotate?: boolean; autoRotateSpeed?: number; enableDamping?: boolean; dampingFactor?: number } }).controls?.();
+  return (graph as unknown as { controls?: () => OrbitGraph3DControls }).controls?.();
+}
+
+function graph3dEdgeStyleForCategory(category: EdgeCategory): { color: string; size: number; curvature: number } {
+  const color = graph3dSolidColor(edgeCategoryColor(category), EDGE_CATEGORY_CONFIG[category].fallback);
+  switch (category) {
+    case "hierarchy":
+      return { color, size: 0.95, curvature: 0 };
+    case "code":
+      return { color, size: 1.85, curvature: 0.18 };
+    case "docs":
+      return { color, size: 1.55, curvature: 0.14 };
+    case "symlink":
+      return { color, size: 2.05, curvature: 0.22 };
+    case "semantic":
+      return { color, size: 1.25, curvature: 0.28 };
+    case "tags":
+      return { color, size: 1.25, curvature: 0.32 };
+    default:
+      return { color, size: 1.0, curvature: 0.12 };
+  }
 }
 
 function edgeStyleForGraphEdge(edge: GraphEdge, groupColors: Map<number, string>) {
@@ -1588,6 +2118,7 @@ function layoutModeTitle(mode: LayoutMode): string {
 function layoutNodes(nodes: VisualGraphNode[], edges: GraphEdge[], mode: LayoutMode): GraphDisplayNode[] {
   if (nodes.length === 0) return [];
   if (mode === "tree") return treeLayout(nodes, edges);
+  if (mode === "graph3d") return graph3dLayout(nodes, edges);
   return constellationLayout(nodes, edges);
 }
 
@@ -1852,6 +2383,90 @@ function syntheticEdgeId(parentId: number, index = 0) {
   return -60_000_000 - Math.abs(parentId) * 10 - index;
 }
 
+// Orbit-native 3D seed layout: compact parent-local shells instead of the 2D
+// Atlas map flattened into Three.js. The force simulation can still breathe,
+// but folders begin as large local anchors and files/clusters as close
+// satellites, which avoids the distant "ants on strings" look.
+function graph3dLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
+  if (nodes.length === 0) return [];
+  const tree = hierarchy(nodes, edges);
+  const roots = tree.roots.length ? tree.roots : [nodes[0].id];
+  const radial = vegaRadialTidyLayout(nodes, roots, tree);
+  const siblingInfo = graph3dSiblingInfo(edges);
+  const maxRadius = Math.max(1, ...radial.map((node) => Math.hypot(node.x, node.y)));
+  // Keep the 2D Atlas organization, but fold it into a shallower 3D world.
+  // The previous native 3D shell independently fanned every parent, so the
+  // same hierarchy that looked tidy in 2D became a tangled curtain in 3D.
+  // This preserves radial order/depth and only uses Z for readable separation.
+  const worldScale = Math.min(0.38, Math.max(0.035, 760 / maxRadius));
+
+  return radial.map((node) => {
+    const sibling = siblingInfo.get(node.id);
+    const siblingIndex = sibling?.index ?? 0;
+    const siblingCount = Math.max(1, sibling?.count ?? 1);
+    const normalizedSibling = siblingCount <= 1 ? 0 : (siblingIndex / (siblingCount - 1)) * 2 - 1;
+    const nodeAngle = ((node.angle ?? 0) * Math.PI) / 180;
+    const familyWave = Math.sin(nodeAngle * 2.1 + node.depth * 0.8) * 34;
+    const localShelf = normalizedSibling * (node.isDir ? 42 : 26);
+    const depthShelf = (node.depth - 1) * 30;
+    const aggregateLift = node.isCluster || node.visualState === "proxy" ? -28 : 0;
+    return {
+      ...node,
+      x: node.x * worldScale,
+      y: node.y * worldScale,
+      z3d: familyWave + localShelf + depthShelf + aggregateLift,
+      projectionScale: 1,
+    };
+  });
+}
+
+function graph3dSiblingInfo(edges: GraphEdge[]) {
+  const childrenByParent = new Map<number, number[]>();
+  for (const edge of edges) {
+    if (edge.edgeType !== "contains") continue;
+    const children = childrenByParent.get(edge.sourceId) ?? [];
+    children.push(edge.targetId);
+    childrenByParent.set(edge.sourceId, children);
+  }
+  const info = new Map<number, { index: number; count: number }>();
+  for (const children of childrenByParent.values()) {
+    children.sort((a, b) => a - b);
+    children.forEach((child, index) => info.set(child, { index, count: children.length }));
+  }
+  return info;
+}
+
+function graph3dChildPosition(
+  parent: GraphDisplayNode,
+  heading: number,
+  yaw: number,
+  index: number,
+  siblingCount: number,
+  radius: number,
+  depth: number,
+  kind: "branch" | "preview",
+) {
+  const forward = new THREE.Vector3(Math.cos(heading), Math.sin(heading), 0).normalize();
+  const right = new THREE.Vector3(-Math.sin(heading), Math.cos(heading), 0).normalize();
+  const up = new THREE.Vector3(0, 0, 1);
+  const golden = (index * 0.61803398875) % 1;
+  const normalized = siblingCount <= 1 ? 0.5 : index / Math.max(1, siblingCount - 1);
+  const pitchSpan = kind === "branch" ? 0.74 : 0.48;
+  const pitch = (normalized - 0.5) * pitchSpan + (golden - 0.5) * (kind === "branch" ? 0.24 : 0.34);
+  const fan = forward.clone().multiplyScalar(Math.cos(yaw));
+  fan.add(right.clone().multiplyScalar(Math.sin(yaw)));
+  fan.multiplyScalar(Math.cos(pitch));
+  fan.add(up.clone().multiplyScalar(Math.sin(pitch)));
+  fan.normalize();
+  const zCompression = kind === "branch" ? 0.86 : 0.58;
+  const parentZ = parent.z3d ?? 0;
+  return {
+    x: parent.x + fan.x * radius,
+    y: parent.y + fan.y * radius,
+    z: parentZ + fan.z * radius * zCompression + (depth % 2 === 0 ? 18 : -12),
+  };
+}
+
 // Vega radial tidy layout: mirrors the Vega `stratify -> tree -> polar`
 // example the user referenced. The hierarchy decides position first: leaves get
 // stable angular slots, every parent sits at the midpoint of its children, and
@@ -1910,7 +2525,8 @@ function vegaRadialTidyLayout(
     };
   });
 
-  return nodes.map((node, index) => placed.get(node.id) ?? fallbackNode(node, index, 0, 0));
+  const resolved = nodes.map((node, index) => placed.get(node.id) ?? fallbackNode(node, index, 0, 0));
+  return relaxRadialVisualFootprints(resolved);
 }
 
 function placeVegaRadialNode(
@@ -1971,6 +2587,56 @@ function orderedVegaChildren(id: number, tree: ReturnType<typeof hierarchy>) {
     // otherwise preserve name ordering for deterministic inspectability.
     return compareGraphChildren(nodeA, nodeB);
   });
+}
+
+function visualFootprintRadius(node: GraphDisplayNode): number {
+  const base = getNodeSize(node);
+  if (node.visualState === "proxy" || node.isCluster) return base * 5.4 + 24;
+  if (node.isDir) return base * 5.8 + (node.depth <= 2 ? 34 : 18);
+  return base * 4.6 + 12;
+}
+
+function relaxRadialVisualFootprints(nodes: GraphDisplayNode[]): GraphDisplayNode[] {
+  if (nodes.length < 2) return nodes;
+  const placed = nodes.map((node) => ({ ...node }));
+  const maxNodes = Math.min(placed.length, 900);
+  const iterations = placed.length > 500 ? 2 : 4;
+
+  for (let pass = 0; pass < iterations; pass += 1) {
+    for (let i = 0; i < maxNodes; i += 1) {
+      const a = placed[i];
+      const aPinned = a.depth <= 0;
+      for (let j = i + 1; j < maxNodes; j += 1) {
+        const b = placed[j];
+        const bPinned = b.depth <= 0;
+        if (aPinned && bPinned) continue;
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let distance = Math.hypot(dx, dy);
+        if (!Number.isFinite(distance) || distance < 0.001) {
+          const angle = seededAngle(a.id + b.id + pass);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        const minDistance = Math.min(170, visualFootprintRadius(a) + visualFootprintRadius(b));
+        if (distance >= minDistance) continue;
+        const push = (minDistance - distance) * 0.42;
+        const nx = dx / distance;
+        const ny = dy / distance;
+        if (!aPinned) {
+          a.x -= nx * push * (bPinned ? 1 : 0.5);
+          a.y -= ny * push * (bPinned ? 1 : 0.5);
+        }
+        if (!bPinned) {
+          b.x += nx * push * (aPinned ? 1 : 0.5);
+          b.y += ny * push * (aPinned ? 1 : 0.5);
+        }
+      }
+    }
+  }
+
+  return placed;
 }
 
 function vegaLeafSlots(id: number, tree: ReturnType<typeof hierarchy>, seen = new Set<number>()): number {
@@ -2061,41 +2727,56 @@ function subtreeWeight(id: number, children: Map<number, number[]>, seen = new S
 }
 
 function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
-  // Mermaid-ish top-down tree: each leaf gets a fixed slot of horizontal space,
-  // parents sit at the centroid of their children's slots, and rows are spaced
-  // generously so labels don't collide.
-  const LEAF_GAP = 110;
-  const ROW_GAP = 150;
+  // Vega-like Cartesian tidy tree: root on the left, depth grows left → right,
+  // leaves get stable vertical slots, and parents sit centered over children.
+  const LEAF_GAP = 122;
+  const DEPTH_GAP = 240;
+  const ROOT_GAP_LEAVES = 4;
   const tree = hierarchy(nodes, edges);
+  const roots = tree.roots.length ? tree.roots : [nodes[0].id];
+  const orderedRoots = [...roots].sort((a, b) => compareGraphChildren(tree.byId.get(a), tree.byId.get(b)));
   const placed = new Map<number, GraphDisplayNode>();
-  let leafIndex = 0;
+  let leafCursor = 0;
 
   const place = (id: number, depth: number): number => {
     const node = tree.byId.get(id);
-    if (!node || placed.has(id)) return leafIndex;
-    const kids = tree.children.get(id) ?? [];
-    let x: number;
-    if (kids.length === 0) {
-      x = leafIndex * LEAF_GAP;
-      leafIndex += 1;
+    if (!node || placed.has(id)) return leafCursor;
+    const kids = orderedVegaChildren(id, tree);
+    let y: number;
+    if (!kids.length) {
+      y = leafCursor * LEAF_GAP;
+      leafCursor += Math.max(1, Math.min(4, vegaLeafSlots(id, tree) * 0.55));
     } else {
-      const childXs = kids.map((child) => place(child, depth + 1));
-      x = childXs.reduce((sum, childX) => sum + childX, 0) / childXs.length;
+      const firstBefore = leafCursor;
+      const childYs: number[] = [];
+      for (const child of kids) childYs.push(place(child, depth + 1));
+      y = childYs.length
+        ? childYs.reduce((sum, childY) => sum + childY, 0) / childYs.length
+        : firstBefore * LEAF_GAP;
     }
-    placed.set(id, { ...node, x, y: depth * ROW_GAP, depth, childCount: kids.length });
-    return x;
+    placed.set(id, {
+      ...node,
+      x: depth * DEPTH_GAP,
+      y,
+      depth,
+      childCount: kids.length,
+      angle: 0,
+      leftside: false,
+    });
+    return y;
   };
 
-  const roots = tree.roots.length ? tree.roots : [nodes[0].id];
-  for (const root of roots) place(root, 0);
+  orderedRoots.forEach((root, index) => {
+    if (index > 0) leafCursor += ROOT_GAP_LEAVES;
+    place(root, 0);
+  });
 
-  const xs = [...placed.values()].map((node) => node.x);
-  const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const ys = [...placed.values()].map((node) => node.y);
+  const midY = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 0;
   return nodes.map((node, index) => {
     const placedNode = placed.get(node.id);
     if (!placedNode) return fallbackNode(node, index, 0, 0);
-    // Sigma uses Y-up internally; flip so depth grows downward visually.
-    return { ...placedNode, x: placedNode.x - mid, y: -(placedNode.y - ROW_GAP) };
+    return { ...placedNode, y: -(placedNode.y - midY) };
   });
 }
 
@@ -2174,9 +2855,13 @@ function reduceNode(
 
   const isClusterNode = Boolean(data.isCluster) || visualState === "proxy";
 
-  // Determine target values. In icons mode normal files/folders are rendered by
-  // the glyph overlay, but proxy/cluster nodes remain as spheres so they don't
-  // become noisy yellow placeholder icons.
+  // INVARIANT — do not regress: in icons mode, BOTH files/folders AND
+  // proxy/cluster nodes render as icons only. The sphere is always invisible
+  // (the HTML/glyph overlay carries cluster appearance via clusterGlyphForNode).
+  // Past LLM passes have repeatedly re-introduced a colored sphere for clusters
+  // under the wrong belief that clusters need a fallback shape — they do not.
+  // Keep this condition as `iconsMode || isClusterNode`. Charlie has flagged
+  // this regression more than once.
   let targetColor = iconsMode || isClusterNode ? "rgba(0,0,0,0)" : (data.baseColor as string);
   let targetSize = effectiveBase;
   let targetZIndex = data.baseZIndex ?? 1;

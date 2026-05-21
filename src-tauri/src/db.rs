@@ -629,6 +629,95 @@ pub fn note_backlinks_for_target(db_path: &Path, path: &str) -> Result<Vec<NoteB
     Ok(backlinks)
 }
 
+pub fn resolve_note_link_targets(
+    db_path: &Path,
+    source_path: &str,
+    links: &[NoteLink],
+) -> Result<Vec<String>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let source_parent = Path::new(source_path)
+        .parent()
+        .and_then(|parent| parent.to_str())
+        .unwrap_or("");
+    let mut resolved = Vec::new();
+    for link in links {
+        let target = link.target.trim();
+        if target.is_empty() {
+            continue;
+        }
+        if let Some(path) = resolve_note_link_target(&conn, source_parent, target)? {
+            if path != source_path && !resolved.iter().any(|existing| existing == &path) {
+                resolved.push(path);
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+fn resolve_note_link_target(
+    conn: &Connection,
+    source_parent: &str,
+    target: &str,
+) -> Result<Option<String>, String> {
+    let target = target
+        .split('|')
+        .next()
+        .unwrap_or(target)
+        .split('#')
+        .next()
+        .unwrap_or(target)
+        .trim();
+    if target.is_empty() {
+        return Ok(None);
+    }
+    let stem = Path::new(target)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or(target);
+    let file_name = Path::new(target)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(target);
+    let markdown_name = if Path::new(file_name).extension().is_some() {
+        file_name.to_string()
+    } else {
+        format!("{file_name}.md")
+    };
+    let same_dir_path = if source_parent.is_empty() {
+        markdown_name.clone()
+    } else {
+        format!("{source_parent}/{markdown_name}")
+    };
+
+    conn.query_row(
+        r#"
+        SELECT path
+        FROM files
+        WHERE is_dir = 0
+          AND (
+            path = ?1
+            OR name = ?2
+            OR name = ?3
+            OR substr(name, 1, length(name) - length(coalesce(extension, '')) - CASE WHEN extension IS NULL OR extension = '' THEN 0 ELSE 1 END) = ?4
+          )
+        ORDER BY
+          CASE
+            WHEN path = ?1 THEN 0
+            WHEN name = ?2 THEN 1
+            WHEN name = ?3 THEN 2
+            ELSE 3
+          END,
+          length(path) ASC,
+          path COLLATE NOCASE ASC
+        LIMIT 1
+        "#,
+        params![same_dir_path, file_name, markdown_name, stem],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
 fn bool_to_int(value: bool) -> i64 {
     if value {
         1

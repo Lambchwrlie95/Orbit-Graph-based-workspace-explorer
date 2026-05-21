@@ -400,8 +400,16 @@ fn open_terminal_at_path(path: String, terminal_command: Option<String>) -> Resu
 
     let template = terminal_command
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| std::env::var("ORBIT_TERMINAL").ok().filter(|s| !s.trim().is_empty()))
-        .or_else(|| std::env::var("TERMINAL").ok().filter(|s| !s.trim().is_empty()));
+        .or_else(|| {
+            std::env::var("ORBIT_TERMINAL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        })
+        .or_else(|| {
+            std::env::var("TERMINAL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        });
 
     if let Some(template) = template {
         let template = if template.contains("{dir}") {
@@ -420,7 +428,15 @@ fn open_terminal_at_path(path: String, terminal_command: Option<String>) -> Resu
             .map_err(|e| format!("spawn xdg-terminal-exec: {e}"));
     }
 
-    for candidate in ["kitty", "alacritty", "foot", "wezterm", "gnome-terminal", "konsole", "xterm"] {
+    for candidate in [
+        "kitty",
+        "alacritty",
+        "foot",
+        "wezterm",
+        "gnome-terminal",
+        "konsole",
+        "xterm",
+    ] {
         if on_path(candidate) {
             return Command::new(candidate)
                 .current_dir(&dir)
@@ -688,6 +704,7 @@ fn main() {
             commands::analysis::is_in_git_repo,
             commands::notes::get_node_note,
             commands::notes::save_node_note,
+            commands::notes::create_note_from_wikilink,
             commands::image_analysis::analyze_image_file,
             commands::image_analysis::extract_colors,
             commands::image_analysis::compute_image_phash,

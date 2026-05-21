@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, NotebookPen, Pencil, X } from "lucide-react";
+import { Check, FilePlus2, NotebookPen, Pencil, X } from "lucide-react";
 import { tauriInvoke } from "../../lib/tauriCommands";
 import { renderMarkdown } from "../../lib/markdown";
 import { highlightSource } from "../../lib/syntax";
-import { resolveWikilink } from "../../lib/wikilinkResolver";
+import { clearWikilinkCache, normalizeWikilinkTarget, resolveWikilink } from "../../lib/wikilinkResolver";
 import type { NodeNote } from "../../types";
 
 interface NotesPanelProps {
@@ -59,6 +59,8 @@ function NotesPanelComponent({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingCreateTarget, setPendingCreateTarget] = useState<string | null>(null);
+  const [isCreatingMissing, setIsCreatingMissing] = useState(false);
 
   // Reload note whenever the selected file path changes. We also reset the
   // mode to "read" so the user starts in the safer view.
@@ -67,6 +69,7 @@ function NotesPanelComponent({
     setIsLoading(true);
     setError(null);
     setMode("read");
+    setPendingCreateTarget(null);
     tauriInvoke("get_node_note", { path })
       .then((value) => {
         if (cancelled) return;
@@ -103,6 +106,7 @@ function NotesPanelComponent({
       setNote(saved);
       setDraft(saved.body ?? "");
       setMode("read");
+      setPendingCreateTarget(null);
       onNoteChanged?.(saved);
     } catch (err) {
       setError(String(err));
@@ -110,6 +114,25 @@ function NotesPanelComponent({
       setIsSaving(false);
     }
   }, [draft, path, onNoteChanged]);
+
+  const createMissingNote = useCallback(async () => {
+    if (!rootPath || !pendingCreateTarget) return;
+    setIsCreatingMissing(true);
+    setError(null);
+    try {
+      const createdPath = await tauriInvoke("create_note_from_wikilink", {
+        rootPath,
+        target: pendingCreateTarget,
+      });
+      clearWikilinkCache();
+      setPendingCreateTarget(null);
+      onResolveWikilink?.(createdPath);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setIsCreatingMissing(false);
+    }
+  }, [rootPath, pendingCreateTarget, onResolveWikilink]);
 
   const hasBody = (note?.body ?? "").trim().length > 0;
   const isDirty = mode === "edit" && draft !== (note?.body ?? "");
@@ -169,6 +192,7 @@ function NotesPanelComponent({
           body={note?.body ?? ""}
           rootPath={rootPath}
           onResolveWikilink={onResolveWikilink}
+          onMissingWikilink={setPendingCreateTarget}
         />
       ) : (
         <button type="button" className="notes-empty" onClick={startEditing}>
@@ -176,6 +200,24 @@ function NotesPanelComponent({
           <span>No note here yet.</span>
           <span className="notes-empty-hint">Click to add one.</span>
         </button>
+      )}
+
+      {pendingCreateTarget && mode === "read" && (
+        <div className="missing-wikilink-card">
+          <div>
+            <strong>[[{normalizeWikilinkTarget(pendingCreateTarget)}]] does not exist yet.</strong>
+            <span>Create it as a Markdown note at the workspace root.</span>
+          </div>
+          <button
+            type="button"
+            className="link-button"
+            disabled={!rootPath || isCreatingMissing}
+            onClick={() => void createMissingNote()}
+          >
+            <FilePlus2 size={12} strokeWidth={2} />
+            {isCreatingMissing ? "Creating…" : "Create note"}
+          </button>
+        </div>
       )}
     </section>
   );
@@ -185,6 +227,7 @@ interface NotesReadViewProps {
   body: string;
   rootPath?: string;
   onResolveWikilink?: (resolvedPath: string) => void;
+  onMissingWikilink?: (target: string) => void;
 }
 
 /**
@@ -195,7 +238,7 @@ interface NotesReadViewProps {
  * Notes need to RESOLVE wikilinks against `rootPath` and forward only
  * resolved hits to the navigator — not pass raw target strings.
  */
-function NotesReadView({ body, rootPath, onResolveWikilink }: NotesReadViewProps) {
+function NotesReadView({ body, rootPath, onResolveWikilink, onMissingWikilink }: NotesReadViewProps) {
   const html = useMemo(() => renderMarkdown(body), [body]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [unresolvedLinks, setUnresolvedLinks] = useState<Set<string>>(new Set());
@@ -237,6 +280,7 @@ function NotesReadView({ body, rootPath, onResolveWikilink }: NotesReadViewProps
         onResolveWikilink?.(resolved);
         return;
       }
+      onMissingWikilink?.(decoded);
       // Cache the miss so we can decorate the link as "broken" without
       // re-querying on every click.
       setUnresolvedLinks((prev) => {
@@ -247,7 +291,7 @@ function NotesReadView({ body, rootPath, onResolveWikilink }: NotesReadViewProps
       });
       anchor.classList.add("md-wikilink-missing");
     },
-    [rootPath, onResolveWikilink],
+    [rootPath, onResolveWikilink, onMissingWikilink],
   );
 
   // After hljs may have asynchronously injected content, re-decorate any

@@ -55,6 +55,7 @@ export const TAURI_COMMANDS = [
   "is_in_git_repo",
   "get_node_note",
   "save_node_note",
+  "create_note_from_wikilink",
   "analyze_image_file",
   "extract_colors",
   "compute_image_phash",
@@ -113,6 +114,7 @@ type CommandArgsMap = {
   is_in_git_repo: { path: string };
   get_node_note: { path: string };
   save_node_note: { path: string; body: string };
+  create_note_from_wikilink: { rootPath: string; target: string };
   analyze_image_file: { fileId: number; filePath: string };
   extract_colors: { fileId: number; filePath: string; colorCount: number };
   compute_image_phash: { fileId: number; filePath: string };
@@ -174,6 +176,7 @@ type CommandResultMap = {
   is_in_git_repo: boolean;
   get_node_note: NodeNote;
   save_node_note: NodeNote;
+  create_note_from_wikilink: string;
   analyze_image_file: ImageMetadataResult;
   extract_colors: ColorExtractionResult;
   compute_image_phash: number[];
