@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
 import ForceGraph3D, { type ForceGraph3DInstance, type LinkObject, type NodeObject } from "3d-force-graph";
@@ -11,7 +11,7 @@ import {
   type NodeLabelDrawingFunction,
 } from "sigma/rendering";
 import EdgeCurveProgram from "@sigma/edge-curve";
-import { ArrowLeft, Maximize, Target } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, FolderOpen, Maximize, PenLine, SquareTerminal, Target } from "lucide-react";
 import { GraphEdge, GraphNode, GraphPayload } from "../types";
 import { formatBytes } from "../utils";
 import { usePersistedState } from "../hooks/usePersistedState";
@@ -25,6 +25,12 @@ type VisualGraphNode = GraphNode & {
   visualState?: VisualState;
   proxyKind?: string;
 };
+
+type GraphContextMenuState = {
+  x: number;
+  y: number;
+  node: VisualGraphNode;
+} | null;
 
 const ALL_NODE_TYPES: NodeType[] = [
   "folder",
@@ -217,6 +223,7 @@ interface GraphViewProps {
   selectedPath?: string | null;
   onSelectPath: (path: string) => void;
   onOpenPath?: (path: string) => void;
+  editorCommand?: string;
   onFocusFolder?: (path: string) => void;
   onGoBack?: () => void;
   onExpandCluster?: (folderPath: string) => void;
@@ -231,6 +238,7 @@ function GraphViewComponent({
   selectedPath,
   onSelectPath,
   onOpenPath,
+  editorCommand,
   onFocusFolder,
   onGoBack,
   onExpandCluster,
@@ -274,6 +282,7 @@ function GraphViewComponent({
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [expandingCluster, setExpandingCluster] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<GraphContextMenuState>(null);
   const isFirstRenderRef = useRef(true);
   const lastFrameKeyRef = useRef<string | null>(null);
   const cameraZoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -375,6 +384,31 @@ function GraphViewComponent({
       window.removeEventListener("orbit:omarchy-theme-changed", handler);
     };
   }, []);
+
+  const openNodeInEditor = useCallback(async (path: string) => {
+    try {
+      await tauriInvoke("open_in_terminal_editor", { path, editorCommand });
+    } catch (err) {
+      console.error("Failed to open node in editor", err);
+    }
+  }, [editorCommand]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    const id = window.setTimeout(() => {
+      document.addEventListener("click", close);
+      document.addEventListener("keydown", handleKey);
+    }, 0);
+    return () => {
+      window.clearTimeout(id);
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [contextMenu]);
 
   const flushZoomDebounce = () => {
     if (cameraZoomTimeoutRef.current) {
@@ -562,9 +596,18 @@ function GraphViewComponent({
             } else if (node.isDir) {
               onFocusFolder?.(node.path);
             } else {
-              onOpenPath?.(node.path);
+              void openNodeInEditor(node.path);
             }
           }
+        })
+        .onNodeRightClick((node, event) => {
+          event?.preventDefault?.();
+          if (!node?.path) return;
+          setContextMenu({
+            x: event?.clientX ?? window.innerWidth / 2,
+            y: event?.clientY ?? window.innerHeight / 2,
+            node: node as unknown as VisualGraphNode,
+          });
         })
         .onNodeDragEnd((node) => {
           node.fx = node.x;
@@ -766,7 +809,20 @@ function GraphViewComponent({
       const isDir = graph.getNodeAttribute(node, "isDir") as boolean;
       // Double-click on file opens it in editor; folders handled by single-click
       if (!path || isDir) return;
-      onOpenPath?.(path);
+      void openNodeInEditor(path);
+    });
+
+    renderer.on("rightClickNode", (payload: any) => {
+      const node = payload.node as string;
+      const attrs = graph.getNodeAttributes(node) as VisualGraphNode;
+      if (!attrs?.path) return;
+      const event = payload.event?.original as MouseEvent | undefined;
+      event?.preventDefault();
+      setContextMenu({
+        x: event?.clientX ?? window.innerWidth / 2,
+        y: event?.clientY ?? window.innerHeight / 2,
+        node: attrs,
+      });
     });
 
     // Track if mouse is over the container to avoid stale hover states
@@ -849,7 +905,7 @@ function GraphViewComponent({
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
+  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster, openNodeInEditor]);
 
   const focusSelected = () => {
     const selected = selectedNodeRef.current;
@@ -1085,6 +1141,15 @@ function GraphViewComponent({
         </div>
       )}
 
+      <GraphNodeContextMenu
+        menu={contextMenu}
+        onClose={() => setContextMenu(null)}
+        onSelect={(path) => onSelectPath(path)}
+        onFocusFolder={(path) => onFocusFolder?.(path)}
+        onOpenExternal={(path) => onOpenPath?.(path)}
+        onOpenEditor={(path) => void openNodeInEditor(path)}
+      />
+
       <div className="graph-canvas" ref={containerRef}>
         {isLoading && (
           <div className="graph-loading-overlay" role="status" aria-live="polite">
@@ -1144,6 +1209,65 @@ function GraphViewComponent({
   );
 }
 
+interface GraphNodeContextMenuProps {
+  menu: GraphContextMenuState;
+  onClose: () => void;
+  onSelect: (path: string) => void;
+  onFocusFolder: (path: string) => void;
+  onOpenExternal: (path: string) => void;
+  onOpenEditor: (path: string) => void;
+}
+
+function GraphNodeContextMenu({ menu, onClose, onSelect, onFocusFolder, onOpenExternal, onOpenEditor }: GraphNodeContextMenuProps) {
+  if (!menu) return null;
+  const { node } = menu;
+  const title = node.label || node.path.split("/").pop() || node.path;
+  const left = Math.min(menu.x, Math.max(12, window.innerWidth - 260));
+  const top = Math.min(menu.y, Math.max(12, window.innerHeight - 330));
+  const closeAfter = (fn: () => void) => {
+    fn();
+    onClose();
+  };
+  const openNote = () => {
+    onSelect(node.path);
+    window.setTimeout(() => {
+      document.dispatchEvent(new CustomEvent("orbit:inspector:open-notes", { detail: { path: node.path } }));
+    }, 40);
+  };
+  const terminalPath = node.isDir ? node.path : node.parentPath || node.path.replace(/\/[^/]+$/, "");
+
+  return (
+    <div className="graph-context-menu file-context-menu" style={{ left, top }} onContextMenu={(event) => event.preventDefault()}>
+      <div className="ctx-title" title={node.path}>{title}</div>
+      <button className="ctx-item" onClick={() => closeAfter(() => node.isDir ? onFocusFolder(node.path) : onSelect(node.path))}>
+        <Target size={13} /> {node.isDir ? "Focus folder" : "Select in inspector"}
+      </button>
+      <button className="ctx-item" onClick={() => closeAfter(() => onOpenExternal(node.path))}>
+        <ExternalLink size={13} /> Open externally
+      </button>
+      {!node.isDir && (
+        <button className="ctx-item" onClick={() => closeAfter(() => onOpenEditor(node.path))}>
+          <PenLine size={13} /> Open in editor
+        </button>
+      )}
+      <button className="ctx-item" onClick={() => closeAfter(() => void tauriInvoke("open_terminal_at_path", { path: terminalPath }))}>
+        <SquareTerminal size={13} /> Terminal here
+      </button>
+      {node.isDir && (
+        <button className="ctx-item" onClick={() => closeAfter(() => onSelect(node.path))}>
+          <FolderOpen size={13} /> Inspect folder
+        </button>
+      )}
+      <button className="ctx-item" onClick={() => closeAfter(() => void navigator.clipboard?.writeText(node.path))}>
+        <Copy size={13} /> Copy path
+      </button>
+      <div className="ctx-sep" />
+      <button className="ctx-item" onClick={() => closeAfter(openNote)}>
+        <PenLine size={13} /> Add / edit note
+      </button>
+    </div>
+  );
+}
 
 function buildGraph3DData(
   nodes: GraphDisplayNode[],

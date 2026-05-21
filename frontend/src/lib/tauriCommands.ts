@@ -72,6 +72,7 @@ export const TAURI_COMMANDS = [
   "save_user_icon_theme",
   "delete_user_icon_theme",
   "open_in_terminal_editor",
+  "open_terminal_at_path",
   "create_file",
   "create_folder",
   "rename",
@@ -134,6 +135,7 @@ type CommandArgsMap = {
   save_user_icon_theme: { id: string; tomlContent: string };
   delete_user_icon_theme: { id: string };
   open_in_terminal_editor: { path: string; editorCommand?: string };
+  open_terminal_at_path: { path: string; terminalCommand?: string };
   create_file: { parentDir: string; name: string };
   create_folder: { parentDir: string; name: string };
   rename: { path: string; newName: string };
@@ -189,6 +191,7 @@ type CommandResultMap = {
   save_user_icon_theme: void;
   delete_user_icon_theme: void;
   open_in_terminal_editor: void;
+  open_terminal_at_path: void;
   create_file: string;
   create_folder: string;
   rename: string;

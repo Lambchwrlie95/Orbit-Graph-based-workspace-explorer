@@ -17,6 +17,8 @@ interface SettingsPanelProps {
   onGraphNodeLimitChange: (limit: number) => void;
   visibleFolderRescan: boolean;
   onVisibleFolderRescanChange: (enabled: boolean) => void;
+  editorCommand: string;
+  onEditorCommandChange: (command: string) => void;
   onOpenThemesFolder: () => void;
   onClearSelectedThumbnailCache: () => void;
   canClearSelectedThumbnailCache: boolean;
@@ -35,6 +37,8 @@ export function SettingsPanel({
   onGraphNodeLimitChange,
   visibleFolderRescan,
   onVisibleFolderRescanChange,
+  editorCommand,
+  onEditorCommandChange,
   onOpenThemesFolder,
   onClearSelectedThumbnailCache,
   canClearSelectedThumbnailCache,
@@ -121,7 +125,21 @@ export function SettingsPanel({
           </SettingsSection>
 
           <SettingsSection title="External Apps">
-            <div className="settings-note">$VISUAL, $EDITOR, $TERMINAL, and xdg handlers are used for external actions.</div>
+            <div className="settings-note">Choose how Orbit launches files for editing. Use <code>{"{file}"}</code> as the selected path placeholder.</div>
+            <div className="segmented-control">
+              <button type="button" className={editorCommand === "kitty -e nvim {file}" ? "active" : ""} onClick={() => onEditorCommandChange("kitty -e nvim {file}")}>Neovim</button>
+              <button type="button" className={editorCommand === "code {file}" ? "active" : ""} onClick={() => onEditorCommandChange("code {file}")}>VS Code</button>
+              <button type="button" className={!editorCommand.trim() ? "active" : ""} onClick={() => onEditorCommandChange("")}>$EDITOR</button>
+            </div>
+            <label className="settings-row settings-row--stacked">
+              <span>Editor command</span>
+              <input
+                type="text"
+                value={editorCommand}
+                placeholder="kitty -e nvim {file}"
+                onChange={(event) => onEditorCommandChange(event.target.value)}
+              />
+            </label>
           </SettingsSection>
         </div>
       </section>

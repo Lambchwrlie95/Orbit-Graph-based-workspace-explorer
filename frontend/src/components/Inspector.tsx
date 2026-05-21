@@ -114,6 +114,17 @@ function InspectorComponent({
   const previewTitle = preview?.title || record.name;
   const previewSummary = preview?.summary || (record.isDir ? "Folder" : "No preview available");
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string }>).detail;
+      if (!detail?.path || detail.path === record?.path) {
+        setActiveTab("notes");
+      }
+    };
+    document.addEventListener("orbit:inspector:open-notes", handler);
+    return () => document.removeEventListener("orbit:inspector:open-notes", handler);
+  }, [record?.path]);
+
   const recordType = record.isDir ? "Folder" : record.mimeType || record.extension || "File";
   const noteLinkCount = currentNote?.links.length ?? 0;
   const backlinkCount = currentNote?.backlinks.length ?? 0;

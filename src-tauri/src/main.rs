@@ -268,6 +268,30 @@ fn get_log_path() -> Option<String> {
     logger::log_path().map(|path| path.to_string_lossy().to_string())
 }
 
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
+}
+
+fn on_path(name: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+        .unwrap_or(false)
+}
+
+fn spawn_shell_template(template: &str, placeholder: &str, value: &str) -> Result<(), String> {
+    use std::process::Command;
+    let cmdline = template.replace(placeholder, &shell_quote(value));
+    if cmdline.trim().is_empty() {
+        return Err("command template resolved to empty string".into());
+    }
+    Command::new("sh")
+        .arg("-lc")
+        .arg(&cmdline)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("spawn `{cmdline}`: {e}"))
+}
+
 /// Open a file in the user's preferred terminal + editor combo.
 ///
 /// Resolution order (no hardcoded tools):
@@ -281,15 +305,6 @@ fn get_log_path() -> Option<String> {
 #[tauri::command]
 fn open_in_terminal_editor(path: String, editor_command: Option<String>) -> Result<(), String> {
     use std::process::Command;
-
-    fn on_path(name: &str) -> bool {
-        std::env::var_os("PATH")
-            .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
-            .unwrap_or(false)
-    }
-
-    // Quote the path safely for inclusion into a shell-style template.
-    let quoted = format!("'{}'", path.replace('\'', r"'\''"));
 
     // 1. Explicit template wins.
     let template = editor_command.filter(|s| !s.trim().is_empty()).or_else(|| {
@@ -323,16 +338,7 @@ fn open_in_terminal_editor(path: String, editor_command: Option<String>) -> Resu
     };
 
     if let Some(template) = template {
-        let cmdline = template.replace("{file}", &quoted);
-        let parts: Vec<&str> = cmdline.split_whitespace().collect();
-        if parts.is_empty() {
-            return Err("editor_command resolved to empty string".into());
-        }
-        return Command::new(parts[0])
-            .args(&parts[1..])
-            .spawn()
-            .map(|_| ())
-            .map_err(|e| format!("spawn `{}`: {e}", parts[0]));
+        return spawn_shell_template(&template, "{file}", &path);
     }
 
     // 3. xdg-terminal-exec respects the user's default terminal via XDG.
@@ -377,6 +383,54 @@ fn open_in_terminal_editor(path: String, editor_command: Option<String>) -> Resu
     }
 
     Err("No editor configured. Set $VISUAL or $EDITOR (e.g. `export VISUAL=nvim`) and optionally $TERMINAL (e.g. `export TERMINAL=kitty`).".into())
+}
+
+#[tauri::command]
+fn open_terminal_at_path(path: String, terminal_command: Option<String>) -> Result<(), String> {
+    use std::process::Command;
+    let dir = std::path::Path::new(&path);
+    let dir = if dir.is_dir() {
+        dir.to_path_buf()
+    } else {
+        dir.parent()
+            .ok_or_else(|| format!("cannot resolve parent directory for: {path}"))?
+            .to_path_buf()
+    };
+    let dir_string = dir.to_string_lossy().to_string();
+
+    let template = terminal_command
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| std::env::var("ORBIT_TERMINAL").ok().filter(|s| !s.trim().is_empty()))
+        .or_else(|| std::env::var("TERMINAL").ok().filter(|s| !s.trim().is_empty()));
+
+    if let Some(template) = template {
+        let template = if template.contains("{dir}") {
+            template
+        } else {
+            format!("{template} --working-directory {{dir}}")
+        };
+        return spawn_shell_template(&template, "{dir}", &dir_string);
+    }
+
+    if on_path("xdg-terminal-exec") {
+        return Command::new("xdg-terminal-exec")
+            .current_dir(&dir)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("spawn xdg-terminal-exec: {e}"));
+    }
+
+    for candidate in ["kitty", "alacritty", "foot", "wezterm", "gnome-terminal", "konsole", "xterm"] {
+        if on_path(candidate) {
+            return Command::new(candidate)
+                .current_dir(&dir)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("spawn {candidate}: {e}"));
+        }
+    }
+
+    Err("No terminal configured. Set ORBIT_TERMINAL or TERMINAL, e.g. `kitty --working-directory {dir}`.".into())
 }
 
 // File operations -----------------------------------------------------------
@@ -652,6 +706,7 @@ fn main() {
             delete_user_icon_theme,
             get_omarchy_colors,
             open_in_terminal_editor,
+            open_terminal_at_path,
             create_file,
             create_folder,
             rename,

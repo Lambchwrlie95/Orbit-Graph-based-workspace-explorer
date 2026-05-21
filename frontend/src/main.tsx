@@ -52,6 +52,7 @@ const SETTINGS_KEYS = {
   deepScan: "orbit:settings:deepScan",
   graphNodeLimit: "orbit:settings:graphNodeLimit",
   visibleFolderRescan: "orbit:settings:visibleFolderRescan",
+  editorCommand: "orbit:settings:editorCommand",
 };
 
 const PERFORMANCE_PRESETS: Record<
@@ -154,6 +155,7 @@ function App() {
   const [deepScan, setDeepScan] = usePersistedState<boolean>(SETTINGS_KEYS.deepScan, false);
   const [graphNodeLimit, setGraphNodeLimit] = usePersistedState<number>(SETTINGS_KEYS.graphNodeLimit, 900);
   const [visibleFolderRescan, setVisibleFolderRescan] = usePersistedState<boolean>(SETTINGS_KEYS.visibleFolderRescan, true);
+  const [editorCommand, setEditorCommand] = usePersistedState<string>(SETTINGS_KEYS.editorCommand, "kitty -e nvim {file}");
 
   useEffect(() => {
     rootPathRef.current = rootPath;
@@ -525,13 +527,13 @@ function App() {
   const openSelectedInEditor = useCallback(async () => {
     if (!selected || selected.isDir) return;
     try {
-      await tauriInvoke("open_in_terminal_editor", { path: selected.path });
-      setStatus("Opened selected file in $EDITOR");
+      await tauriInvoke("open_in_terminal_editor", { path: selected.path, editorCommand });
+      setStatus(`Opened selected file with ${editorCommand || "$EDITOR"}`);
     } catch (err) {
       setError(String(err));
       setStatus("External editor failed");
     }
-  }, [selected]);
+  }, [editorCommand, selected]);
 
   const copySelectedPath = useCallback(() => {
     if (!selected) return;
@@ -988,6 +990,7 @@ function App() {
               selectedPath={selected?.path}
               onSelectPath={selectPathInsideOrbit}
               onOpenPath={openPath}
+              editorCommand={editorCommand}
               onFocusFolder={(path) => {
                 // Build breadcrumb trail: keep history of visited folders
                 if (currentPath && currentPath !== path && selected) {
@@ -1128,6 +1131,8 @@ function App() {
         }}
         visibleFolderRescan={visibleFolderRescan}
         onVisibleFolderRescanChange={setVisibleFolderRescan}
+        editorCommand={editorCommand}
+        onEditorCommandChange={setEditorCommand}
         onOpenThemesFolder={() => void openThemesFolder()}
         onClearSelectedThumbnailCache={() => void clearSelectedThumbnailCache()}
         canClearSelectedThumbnailCache={Boolean(selected && !selected.isDir)}
