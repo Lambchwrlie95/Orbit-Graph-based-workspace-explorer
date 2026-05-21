@@ -2,116 +2,100 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What This Is
+## What this is
 
-Orbit is a **graph-native wiki for the filesystem**, built with Tauri 2, Rust, React/TypeScript, SQLite, Graphology, and Sigma.js. The central idea is that the graph is the primary thinking surface — not a feature bolted onto a file manager — and that every selection is enriched with quick context (Wikipedia summaries today, user notes / wikilinks / backlinks next). The app shape is a frameless window with a 28px unified header bar, a thin left sidebar (Explorer / Search / Assets), a large central graph surface, and a right Inspector that hosts file metadata, an About card, code/markdown analysis, and read-only previews.
+Orbit is a Tauri 2 desktop app that renders the filesystem as a navigable knowledge graph. It is **not** a code editor — the project pivoted away from Monaco/Code Mode on 2026-05-18 and is now framed as a "graph-native wiki for the filesystem" with file inspection, markdown notes, wikilinks, and previews. Code editing is out of scope.
 
-**Code editing is out of scope.** Orbit shows code (read-only previews + static analysis) but does not edit it. External editing flows through `$EDITOR` / `xdg-open`. Monaco was removed on 2026-05-18 along with Code Mode, the `useOpenFiles` hook, the `editorStore`, the `read_file_for_edit` and `save_file` Tauri commands, and the `Editor` settings section.
+Stack: **Tauri 2 (Rust) + React 18 + TypeScript + Vite + SQLite (rusqlite, bundled) + Sigma.js v3 (WebGL) + graphology**. No bundler other than Vite. No state library — components manage their own state.
 
-## Commands
+## Common commands
 
-### Dev (Wayland / X11)
+All recipes are in `justfile`; npm scripts in root `package.json` are the underlying implementation.
+
 ```sh
-npm run dev           # Wayland (default)
-npm run dev:x11       # X11 fallback
+just dev              # Tauri dev on Wayland (preferred on Linux)
+just dev-x11          # X11 fallback
+just frontend-dev     # Vite only on http://127.0.0.1:1420 (no Rust shell)
+
+just build            # tsc + vite build (frontend only)
+just build-tauri      # full release build
+just appimage         # bundle AppImage
+
+just check            # the "is it green?" gate: commands-check + build + smoke
+just commands-check   # verify frontend TAURI_COMMANDS matches Rust generate_handler!
+just smoke            # headless Chromium render check (auto-starts Vite on :1420)
+just clippy           # cargo clippy --all-targets -- -D warnings
+just test             # cargo test  (run from src-tauri/, no frontend tests exist)
+just cargo-check      # cargo check (compile only)
+
+just log              # tail ~/.local/share/orbit/app.log
+just open-db          # open SQLite index at ~/.local/share/orbit/orbit.db
 ```
 
-### Frontend only
-```sh
-npm run frontend:dev    # Vite dev server
-npm run frontend:build  # tsc + Vite build
-```
+Run a single Rust test: `cd src-tauri && cargo test <test_name>` (e.g. `load_graph_caps_large_scope_with_cluster_node`). The frontend has **no test suite** — verification is `commands:check` (drift gate) + `frontend:smoke` (headless render) + manual.
 
-### Integrity checks (run before committing)
-```sh
-npm run commands:check   # Verify frontend TAURI_COMMANDS catalog matches Rust generate_handler![...]
-npm run frontend:smoke   # Headless Chromium smoke test — checks the workbench shell renders
-npm run frontend:check   # commands:check + frontend:build combined
-```
+## Critical gates before shipping
 
-### Rust
-```sh
-cd src-tauri && cargo test            # Run all Rust tests
-cd src-tauri && cargo clippy --all-targets -- -D warnings
-cd src-tauri && cargo build
-```
+1. **`npm run commands:check`** — Tauri command catalog drift is a build break. `frontend/src/lib/tauriCommands.ts` exports a `TAURI_COMMANDS` `as const` array; `src-tauri/src/main.rs` has `tauri::generate_handler![…]` at ~line 605. They must match exactly. When you add/remove a Rust command, update both.
+2. **`cd src-tauri && cargo clippy --all-targets -- -D warnings`** — clippy is warnings-as-errors.
+3. **`npm run frontend:smoke`** — catches blank-page regressions; runs Vite then drives Chromium.
 
-### Packaging (Linux AppImage)
-```sh
-npm run build:appimage
-npm run build:appimage:debug
-npm run build:appimage:clean
-```
+`just check` runs 1+build+3 in sequence. Always run it before claiming a task done.
 
-### Install desktop entry (development)
-```sh
-./scripts/install-desktop-entry.sh
-```
+## Architecture in one page
 
-## Architecture
+### Boundary
 
-### Responsibility split
+All Rust↔TS traffic flows through Tauri commands. Frontend calls go through the typed wrapper `tauriInvoke<C>(name, args)` in `frontend/src/lib/tauriCommands.ts` — **never** import `@tauri-apps/api/core` directly in components. Events (e.g. `omarchy-theme-changed`, `orbit:scan:progress`) use Tauri's `emit`/`listen`.
 
-| Layer | Owns |
-|-------|------|
-| **Rust (`src-tauri/src/`)** | File scanning, SQLite writes, metadata extraction, filesystem watching, graph builder queries, file previews, thumbnail generation, image/color analysis, code analysis (imports/exports), git status |
-| **React (`frontend/src/`)** | Layout, graph rendering orchestration (Graphology + Sigma.js), mode switching, panel state, keyboard shortcuts, visual state |
-| **SQLite (`orbit.db` in `~/.local/share/orbit/`)** | Persistent file records, code analysis, import relationships, thumbnail cache, image metadata |
-| **Graphology** | In-memory graph (current visible nodes/edges), graph algorithms, layout data |
-| **Sigma.js** | Draw, zoom, pan, node/edge interaction |
+### Backend (`src-tauri/src/`)
 
-### Tauri command boundary
+- `main.rs` (~700 lines) — Tauri setup, `AppState { db_path, db_write_lock }`, command handler registry, background omarchy-color watcher.
+- `db.rs` (~1100 lines) — SQLite schema + all read/write helpers. `init_database` creates tables; **there is no migration framework** — when adding columns to existing tables, write a `PRAGMA table_info` check + conditional `ALTER TABLE` inline. Tables include `files`, `import_relationships`, `node_notes`, plus thumbnails (`db/thumbnail_schema.sql`).
+- `scanner.rs` — `jwalk`-based filesystem walker. Emits progress events. Today this is greedy/full-tree; the v2 plan moves it behind an `indexer.rs` shallow-first worker.
+- `graph.rs` — `load_graph` assembles nodes/edges for a scope. `visible_relationship_edges` joins `import_relationships`. Has cluster/overflow logic (`DEFAULT_FOLDER_CHILD_LIMIT = 22`).
+- `code_analyzer.rs`, `markdown_analyzer.rs`, `image_analyzer.rs`, `image_hash.rs`, `color_extractor.rs`, `thumbnail_generator.rs` — per-file inspection helpers. Lazy, called by `commands/analysis.rs` / `commands/image_analysis.rs` / `commands/thumbnail.rs`.
+- `preview.rs` — multi-format file preview payloads (text/image/video/pdf/font/archive). MIME helpers + size limits live here.
+- `commands/notes.rs` — `get_node_note`, `save_node_note`. Parses `[[wikilinks]]` (incl. `|alias` and `#heading`).
+- `omarchy.rs` + `icon_theme.rs` — Linux desktop integration (Omarchy colorscheme syncing, icon theme resolution including nvim-web-devicons-derived nerd-font mappings — see `THIRD_PARTY_NOTICES.md`).
+- `performance.rs`, `logger.rs` — instrumentation; log lands at `~/.local/share/orbit/app.log`.
 
-All frontend→backend calls go through `frontend/src/lib/tauriCommands.ts` via the typed `tauriInvoke()` wrapper. The `TAURI_COMMANDS` constant in that file must stay in sync with `tauri::generate_handler![...]` in `src-tauri/src/main.rs`. Run `npm run commands:check` to catch drift.
+### Frontend (`frontend/src/`)
 
-When adding a new Tauri command:
-1. Add the `#[tauri::command]` fn in Rust and register it in `main.rs` `generate_handler!`.
-2. Add the command name to `TAURI_COMMANDS`, and add its args/result types to the maps in `tauriCommands.ts`.
+- `main.tsx` — root mount, workspace lifecycle (`applyWorkspace` / `scanWorkspace` / background rescans on focus & visibility). Clears `wikilinkResolver` cache at every workspace transition.
+- `components/GraphView.tsx` (~2100 lines, the hot file) — Sigma renderer. Houses `layoutNodes` (mode dispatcher), `constellationLayout` (d3-hierarchy radial tidy), `treeLayout` (linear tidy), `relaxWithFA2`, `reduceNode`/`reduceEdge`, edge curvature, legend. **Do not** introduce ForceAtlas2 into constellation mode — it's intentionally skipped.
+- `components/Inspector.tsx` (~700 lines) — right-panel inspector. Branches on `PreviewKind` (text/markdown/image/video/pdf/font/archive/audio). Mounts `inspector/NotesPanel` and `inspector/BacklinksPanel`.
+- `lib/edgeRouting.ts` — pluggable `EdgeRoutingStrategy` (straight / random / lca-biased / hierarchical-bundled / metro). LCA computed via ancestor-chain walk.
+- `lib/syntax.ts` — lazy-loaded highlight.js. Languages imported via Vite dynamic import.
+- `lib/markdown.ts` — `marked`-based renderer with wikilink preprocessing into `<a class="md-wikilink" data-wikilink="…">`.
+- `lib/wikilinkResolver.ts` — 4-tier resolution (exact stem → CI stem → substring → `search_files`). Cache keyed by `(rootPath, target)`; **must be cleared on workspace switch and after scan completion**.
+- `lib/fileGlyphs.ts` (`iconRuleForPath`), `lib/wiki.ts` (`lookupWiki`) — reused everywhere; don't rebuild.
+- `lib/tauriCommands.ts` — typed Tauri invoker. The `TAURI_COMMANDS` array is the single source of truth for the IPC surface.
 
-### Graph scoping rules
+### Persistent state locations
 
-Graph queries always carry both `root_path` (the workspace root) and `scope_path` (the current drill-down folder). The graph builder in `src-tauri/src/graph.rs` enforces that scope stays inside root. The default node cap is 200, clamped to 100–2,000. Large folders are collapsed into cluster nodes (`/__cluster__` suffix) until expanded.
+- SQLite index: `~/.local/share/orbit/orbit.db`
+- Log: `~/.local/share/orbit/app.log`
+- Thumbnails: `~/.local/share/orbit/thumbnails/`
+- User icon themes: under XDG data dir, managed by `icon_theme.rs`.
 
-When graph scope appears wrong, trace: frontend `loadGraph` call → `tauriInvoke("load_graph", { request })` → Rust `load_graph` command → `graph::load_graph()` → `GraphPayload` back to `GraphView`.
+## Working invariants (do not regress)
 
-### Frontend state
+These are explicit project commitments from the v2 graph-overhaul plan; treat any change against them as a bug, not a tradeoff.
 
-All application state lives in `frontend/src/main.tsx` (the `App` component). There is no global state store — Zustand was removed along with Monaco. `useViewPersistence` persists explorer view mode and sort order per folder path; `usePersistedState` persists settings like performance mode and graph node cap.
+1. **Universe View** — the graph behaves as if the whole filesystem is mapped. Unscanned regions appear as first-class proxy nodes, never as emptiness.
+2. **Instant shallow load** — first paint of any scope (including `~` or `/`) must complete in <500ms. No phase may add an eager full-tree scan that blocks first paint.
+3. **No eager full-system scan** — scanning is demand-driven (viewport, hover, zoom, search, explicit "deepen").
+4. **Edge layer toggles** — every relationship type is independently toggleable in the legend. Containment defaults ON.
+5. **Bounded visible-node count** — renderer never exceeds the configured cap (default 800, hard ceiling 5000). Proxy/cluster collapsing absorbs the overflow.
+6. **`tauriInvoke` is the only IPC entry point** from the frontend. No raw `invoke()` calls in components.
+7. **No code editor** — the Monaco/Code-Mode era is over. Don't reintroduce editor surfaces.
 
-The Wikipedia "About" panel (`frontend/src/components/inspector/AboutPanel.tsx`) calls `lookupWiki(query)` in `frontend/src/lib/wiki.ts` (REST summary with a 7-day localStorage cache and a 1-day negative cache for misses). Query inference for common file types lives in `frontend/src/lib/wikiQuery.ts`. Wikipedia is fetched directly from the WebView; `tauri.conf.json` has CSP disabled, so no Rust HTTP code is needed.
+## Conventions specific to this codebase
 
-### Backend modules
-
-| File | Purpose |
-|------|---------|
-| `scanner.rs` | Walk directory tree with jwalk, collect `ScannedEntry` rows |
-| `db.rs` | All SQLite read/write: init, index_rows, children, search (FTS5), graph queries |
-| `graph.rs` | Build `GraphPayload` from SQLite; handles clustering and node limits |
-| `preview.rs` | Build `PreviewPayload` (text preview, metadata) for inspector |
-| `code_analyzer.rs` | Static import/export analysis for JS/TS/Rust/Python files |
-| `image_analyzer.rs` | Image metadata (dimensions, format) |
-| `color_extractor.rs` | Dominant color extraction from images |
-| `thumbnail_generator.rs` | Lazy thumbnail generation and caching |
-| `git_status.rs` | Per-file git status via git2 crate |
-| `performance.rs` | In-memory operation timing metrics |
-| `logger.rs` | File-backed structured app log |
-| `commands/` | Thin Tauri command wrappers: `file`, `analysis`, `image_analysis`, `thumbnail` |
-
-### Performance constraints
-
-- Graph node limit: 200 by default, never exceed 2,000.
-- Scanner hard cap: `MAX_SCAN_ENTRIES = 120_000`.
-- Explorer virtual scrolling kicks in above 50 items (`VirtualList`).
-- Cache staleness check: samples 50 files from SQLite.
-- Thumbnails are lazy — generated on demand and stored in `~/.local/share/orbit/thumbnails/`.
-- SQLite writes are serialized via `AppState.db_write_lock`.
-
-## Planning files
-
-The `.planning/` directory contains the project roadmap and phase state. Key files:
-- `.planning/STATE.md` — current milestone status and phase completion (update after meaningful progress)
-- `.planning/PROJECT.md` — core value, requirements, and architectural decisions
-- `.planning/HANDOFF.md` — session handoff notes with current baseline
-- `.planning/ROADMAP.md` — phase-by-phase delivery plan
-
-Current status (as of 2026-05-18): v1.0 complete, v2.0 at ~86% — Phase 8 pivoted from "Code Mode" to "Wiki Inspector". Wikipedia About panel landed; user notes + wikilinks + backlinks, richer markdown rendering, and similar-image grouping still pending.
+- **Tauri commands** are defined as plain `#[tauri::command] async fn` in `src-tauri/src/` (often inside `commands/*.rs`), re-exported through `main.rs`'s `generate_handler!`, and mirrored in `frontend/src/lib/tauriCommands.ts:TAURI_COMMANDS`. The `commands:check` script enforces parity.
+- **Schema changes** require an inline migration (PRAGMA + ALTER) in `db.rs` because `CREATE TABLE IF NOT EXISTS` does not alter existing tables. Users carry pre-existing DBs.
+- **Wayland-first**: `npm run dev` exports `WINIT_UNIX_BACKEND=wayland GDK_BACKEND=wayland MOZ_ENABLE_WAYLAND=1`. Use `dev:x11` only as a fallback.
+- **Icon themes**: nerd-font mappings derive from `nvim-web-devicons` (see `THIRD_PARTY_NOTICES.md`). Respect that attribution when changing icon code.
+- **Fonts**: UI uses IBM Plex Sans (`@fontsource/ibm-plex-sans`); mono is Lilex (bundled in `frontend/src/assets`) at line-height 1.618. Don't switch.
+- **No comments on the what** — names should carry intent. Comments belong only where a non-obvious invariant or workaround would otherwise be lost.

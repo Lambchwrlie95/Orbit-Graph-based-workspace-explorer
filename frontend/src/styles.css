@@ -1,34 +1,206 @@
-:root {
-  color: #e5edf4;
-  background: #0b0f12;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 14px;
+@font-face {
+  font-family: 'Lilex';
+  src: url('./assets/fonts/Lilex-wght.woff2') format('woff2-supports-variations'),
+       url('./assets/fonts/Lilex-wght.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
-  /* Omarchy theme palette — defaults overridden at runtime when Omarchy is present */
-  --omarchy-bg: #121212;
-  --omarchy-fg: #ded3d3;
-  --omarchy-accent: #940404;
-  --omarchy-cursor: #ded3d3;
-  --omarchy-border: #e96565;
-  --omarchy-sel-bg: #ce5757;
-  --omarchy-sel-fg: #121212;
-  --omarchy-color0: #121212;
-  --omarchy-color1: #450404;
-  --omarchy-color2: #630a0a;
-  --omarchy-color3: #cc7a7a;
-  --omarchy-color4: #ce5757;
-  --omarchy-color5: #c87777;
-  --omarchy-color6: #d48484;
-  --omarchy-color7: #d1c7c7;
-  --omarchy-color8: #b89494;
-  --omarchy-color9: #9c0909;
-  --omarchy-color10: #9f1d1d;
-  --omarchy-color11: #e7baba;
-  --omarchy-color12: #e96565;
-  --omarchy-color13: #e28585;
-  --omarchy-color14: #eb9696;
-  --omarchy-color15: #ded3d3;
+@font-face {
+  font-family: 'Lilex';
+  src: url('./assets/fonts/Lilex-Italic-wght.woff2') format('woff2-supports-variations'),
+       url('./assets/fonts/Lilex-Italic-wght.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  /* Zed parity: UI font is IBM Plex Sans; code/mono is Lilex (Zed ships both,
+     both OFL). Base size and mono line-height match Zed's defaults
+     (`buffer_line_height: "comfortable"` = 1.618). */
+  --orbit-font-sans: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --orbit-font-mono: "Lilex", "JetBrains Mono", ui-monospace, "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+  --orbit-mono-line-height: 1.618;
+  color: var(--omarchy-fg);
+  background: var(--omarchy-bg);
+  font-family: var(--orbit-font-sans);
+  font-size: 15px;
+
+  /* Omarchy theme palette — Orbit defaults overridden at runtime when Omarchy is present */
+  --omarchy-bg: #0b0f12;
+  --omarchy-fg: #e5edf4;
+  --omarchy-accent: #20b8a5;
+  --omarchy-cursor: #e5edf4;
+  --omarchy-border: #1c2831;
+  --omarchy-sel-bg: #1a3a3a;
+  --omarchy-sel-fg: #effffc;
+  --omarchy-color0: #070a0d;
+  --omarchy-color1: #121d24;
+  --omarchy-color2: #73c991;
+  --omarchy-color3: #f5c542;
+  --omarchy-color4: #a78bfa;
+  --omarchy-color5: #f472b6;
+  --omarchy-color6: #38bdf8;
+  --omarchy-color7: #8ca1af;
+  --omarchy-color8: #5a6b75;
+  --omarchy-color9: #ff9c9c;
+  --omarchy-color10: #4ade80;
+  --omarchy-color11: #facc15;
+  --omarchy-color12: #c084fc;
+  --omarchy-color13: #f472b6;
+  --omarchy-color14: #38bdf8;
+  --omarchy-color15: #e5edf4;
+
+  /* Orbit graph palette — referenced from GraphView via graphThemeColor().
+     Defaults map roughly onto the omarchy ANSI palette so themes that only
+     supply colors.toml still influence the graph. A flavor (theme.ts) can
+     override any of these individually. */
+  --orbit-graph-canvas: var(--omarchy-bg);
+  --orbit-graph-node-default: var(--omarchy-color7);
+  --orbit-graph-edge-default: var(--omarchy-border);
+  --orbit-edge-hierarchy: #6f9ad0;   /* folder containment */
+  --orbit-edge-code: #a78bfa;        /* imports / dependencies */
+  --orbit-edge-docs: #5eead4;        /* markdown / wikilinks / web links */
+  --orbit-edge-symlink: #ed9a4a;     /* filesystem aliases */
+  --orbit-edge-semantic: #86efac;    /* semantic similarity */
+  --orbit-edge-tags: #f472b6;        /* tag relationships */
+  --orbit-edge-other: #638fc3;       /* uncategorized */
+  --orbit-family-1: #63b3ed;
+  --orbit-family-2: #9a75f3;
+  --orbit-family-3: #48bb78;
+  --orbit-family-4: #ed8936;
+  --orbit-family-5: #ed64a6;
+  --orbit-family-6: #38bdf8;
+  --orbit-family-7: #fbbf24;
+  --orbit-family-8: #f87171;
+}
+
+/* === Built-in flavors ============================================
+   Selected by setting `data-theme="<name>"` on <html>. Omarchy mode
+   leaves data-theme unset and lets the runtime colors.toml drive the
+   --omarchy-* variables instead.
+   ================================================================ */
+
+html[data-theme="catppuccin-mocha"] {
+  --omarchy-bg: #1e1e2e;
+  --omarchy-fg: #cdd6f4;
+  --omarchy-accent: #89b4fa;
+  --omarchy-cursor: #f5e0dc;
+  --omarchy-border: #313244;
+  --omarchy-sel-bg: #313244;
+  --omarchy-sel-fg: #cdd6f4;
+  --omarchy-color0: #181825; --omarchy-color1: #f38ba8; --omarchy-color2: #a6e3a1;
+  --omarchy-color3: #f9e2af; --omarchy-color4: #89b4fa; --omarchy-color5: #f5c2e7;
+  --omarchy-color6: #94e2d5; --omarchy-color7: #bac2de; --omarchy-color8: #585b70;
+  --omarchy-color9: #f38ba8; --omarchy-color10: #a6e3a1; --omarchy-color11: #f9e2af;
+  --omarchy-color12: #89b4fa; --omarchy-color13: #f5c2e7; --omarchy-color14: #94e2d5;
+  --omarchy-color15: #a6adc8;
+  --orbit-edge-hierarchy: #89b4fa; --orbit-edge-code: #cba6f7;
+  --orbit-edge-docs: #94e2d5;     --orbit-edge-symlink: #fab387;
+  --orbit-edge-semantic: #a6e3a1; --orbit-edge-tags: #f5c2e7;
+  --orbit-edge-other: #6c7086;
+}
+
+html[data-theme="catppuccin-macchiato"] {
+  --omarchy-bg: #24273a;
+  --omarchy-fg: #cad3f5;
+  --omarchy-accent: #8aadf4;
+  --omarchy-cursor: #f4dbd6;
+  --omarchy-border: #363a4f;
+  --omarchy-sel-bg: #363a4f;
+  --omarchy-sel-fg: #cad3f5;
+  --omarchy-color0: #1e2030; --omarchy-color1: #ed8796; --omarchy-color2: #a6da95;
+  --omarchy-color3: #eed49f; --omarchy-color4: #8aadf4; --omarchy-color5: #f5bde6;
+  --omarchy-color6: #8bd5ca; --omarchy-color7: #b8c0e0; --omarchy-color8: #5b6078;
+  --omarchy-color9: #ed8796; --omarchy-color10: #a6da95; --omarchy-color11: #eed49f;
+  --omarchy-color12: #8aadf4; --omarchy-color13: #f5bde6; --omarchy-color14: #8bd5ca;
+  --omarchy-color15: #a5adcb;
+  --orbit-edge-hierarchy: #8aadf4; --orbit-edge-code: #c6a0f6;
+  --orbit-edge-docs: #8bd5ca;     --orbit-edge-symlink: #f5a97f;
+  --orbit-edge-semantic: #a6da95; --orbit-edge-tags: #f5bde6;
+  --orbit-edge-other: #6e738d;
+}
+
+html[data-theme="catppuccin-frappe"] {
+  --omarchy-bg: #303446;
+  --omarchy-fg: #c6d0f5;
+  --omarchy-accent: #8caaee;
+  --omarchy-cursor: #f2d5cf;
+  --omarchy-border: #414559;
+  --omarchy-sel-bg: #414559;
+  --omarchy-sel-fg: #c6d0f5;
+  --omarchy-color0: #292c3c; --omarchy-color1: #e78284; --omarchy-color2: #a6d189;
+  --omarchy-color3: #e5c890; --omarchy-color4: #8caaee; --omarchy-color5: #f4b8e4;
+  --omarchy-color6: #81c8be; --omarchy-color7: #b5bfe2; --omarchy-color8: #626880;
+  --omarchy-color9: #e78284; --omarchy-color10: #a6d189; --omarchy-color11: #e5c890;
+  --omarchy-color12: #8caaee; --omarchy-color13: #f4b8e4; --omarchy-color14: #81c8be;
+  --omarchy-color15: #a5adce;
+  --orbit-edge-hierarchy: #8caaee; --orbit-edge-code: #ca9ee6;
+  --orbit-edge-docs: #81c8be;     --orbit-edge-symlink: #ef9f76;
+  --orbit-edge-semantic: #a6d189; --orbit-edge-tags: #f4b8e4;
+  --orbit-edge-other: #737994;
+}
+
+html[data-theme="catppuccin-latte"] {
+  --omarchy-bg: #eff1f5;
+  --omarchy-fg: #4c4f69;
+  --omarchy-accent: #1e66f5;
+  --omarchy-cursor: #dc8a78;
+  --omarchy-border: #ccd0da;
+  --omarchy-sel-bg: #ccd0da;
+  --omarchy-sel-fg: #4c4f69;
+  --omarchy-color0: #e6e9ef; --omarchy-color1: #d20f39; --omarchy-color2: #40a02b;
+  --omarchy-color3: #df8e1d; --omarchy-color4: #1e66f5; --omarchy-color5: #ea76cb;
+  --omarchy-color6: #179299; --omarchy-color7: #6c6f85; --omarchy-color8: #9ca0b0;
+  --omarchy-color9: #d20f39; --omarchy-color10: #40a02b; --omarchy-color11: #df8e1d;
+  --omarchy-color12: #1e66f5; --omarchy-color13: #ea76cb; --omarchy-color14: #179299;
+  --omarchy-color15: #5c5f77;
+  --orbit-edge-hierarchy: #1e66f5; --orbit-edge-code: #8839ef;
+  --orbit-edge-docs: #179299;     --orbit-edge-symlink: #fe640b;
+  --orbit-edge-semantic: #40a02b; --orbit-edge-tags: #ea76cb;
+  --orbit-edge-other: #7c7f93;
+}
+
+html[data-theme="dracula"] {
+  --omarchy-bg: #282a36;
+  --omarchy-fg: #f8f8f2;
+  --omarchy-accent: #bd93f9;
+  --omarchy-cursor: #f8f8f2;
+  --omarchy-border: #44475a;
+  --omarchy-sel-bg: #44475a;
+  --omarchy-sel-fg: #f8f8f2;
+  --omarchy-color0: #21222c; --omarchy-color1: #ff5555; --omarchy-color2: #50fa7b;
+  --omarchy-color3: #f1fa8c; --omarchy-color4: #bd93f9; --omarchy-color5: #ff79c6;
+  --omarchy-color6: #8be9fd; --omarchy-color7: #f8f8f2; --omarchy-color8: #6272a4;
+  --omarchy-color9: #ff6e6e; --omarchy-color10: #69ff94; --omarchy-color11: #ffffa5;
+  --omarchy-color12: #d6acff; --omarchy-color13: #ff92df; --omarchy-color14: #a4ffff;
+  --omarchy-color15: #ffffff;
+  --orbit-edge-hierarchy: #bd93f9; --orbit-edge-code: #ff79c6;
+  --orbit-edge-docs: #8be9fd;     --orbit-edge-symlink: #ffb86c;
+  --orbit-edge-semantic: #50fa7b; --orbit-edge-tags: #ff79c6;
+  --orbit-edge-other: #6272a4;
+}
+
+html[data-theme="gruvbox-dark"] {
+  --omarchy-bg: #282828;
+  --omarchy-fg: #ebdbb2;
+  --omarchy-accent: #7daea3;
+  --omarchy-cursor: #bdae93;
+  --omarchy-border: #3c3836;
+  --omarchy-sel-bg: #504945;
+  --omarchy-sel-fg: #ebdbb2;
+  --omarchy-color0: #1d2021; --omarchy-color1: #ea6962; --omarchy-color2: #a9b665;
+  --omarchy-color3: #d8a657; --omarchy-color4: #7daea3; --omarchy-color5: #d3869b;
+  --omarchy-color6: #89b482; --omarchy-color7: #d4be98; --omarchy-color8: #665c54;
+  --omarchy-color9: #ea6962; --omarchy-color10: #a9b665; --omarchy-color11: #d8a657;
+  --omarchy-color12: #7daea3; --omarchy-color13: #d3869b; --omarchy-color14: #89b482;
+  --omarchy-color15: #ebdbb2;
+  --orbit-edge-hierarchy: #7daea3; --orbit-edge-code: #d3869b;
+  --orbit-edge-docs: #89b482;     --orbit-edge-symlink: #e78a4e;
+  --orbit-edge-semantic: #a9b665; --orbit-edge-tags: #d3869b;
+  --orbit-edge-other: #928374;
 }
 
 * {
@@ -48,41 +220,39 @@ input {
 }
 
 button {
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: #121a20;
-  color: #dbe7ee;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-fg);
   cursor: pointer;
   height: 34px;
   padding: 0 12px;
 }
 
 button:hover {
-  border-color: #3d596c;
-  background: #17232b;
+  border-color: var(--omarchy-accent);
+  background: var(--omarchy-color1);
 }
 
 button.primary,
 button.active {
-  border-color: #20b8a5;
-  background: #0f3f3b;
-  color: #effffc;
+  border-color: var(--omarchy-accent);
+  background: var(--omarchy-sel-bg);
+  color: var(--omarchy-sel-fg);
 }
 
 .app-shell {
   display: grid;
   grid-template-rows: 36px minmax(0, 1fr);
   height: 100vh;
-  background:
-    linear-gradient(135deg, rgba(32, 184, 165, 0.12), transparent 28%),
-    linear-gradient(180deg, #0b0f12, #0f151a);
+  background: var(--omarchy-bg);
 }
 
 .topbar,
 .modebar {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #1c2831;
+  border-bottom: 1px solid var(--omarchy-border);
   padding: 0 18px;
 }
 
@@ -99,7 +269,7 @@ button.active {
 
 .workspace-path {
   font-size: 14px;
-  color: #8ca1af;
+  color: var(--omarchy-color7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -117,9 +287,9 @@ button.active {
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 1px solid #20b8a5;
+  border: 1px solid var(--omarchy-accent);
   border-radius: 50%;
-  color: #70f7e6;
+  color: var(--omarchy-accent);
   font-weight: 700;
 }
 
@@ -135,7 +305,7 @@ h1 {
 }
 
 h2 {
-  color: #f6fbff;
+  color: var(--omarchy-accent);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -150,7 +320,7 @@ h3 {
 .record-title p,
 .muted {
   overflow: hidden;
-  color: #8ca1af;
+  color: var(--omarchy-color7);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -164,10 +334,10 @@ h3 {
 .search-input {
   width: min(34vw, 440px);
   height: 34px;
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: #070a0d;
-  color: #e5edf4;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-fg);
   outline: none;
   padding: 0 12px;
 }
@@ -186,14 +356,14 @@ h3 {
 .inspector {
   min-width: 0;
   overflow: auto;
-  border-right: 1px solid #1c2831;
-  background: rgba(9, 14, 18, 0.82);
+  border-right: 1px solid var(--omarchy-border);
+  background: var(--omarchy-bg);
   padding: 16px;
 }
 
 .inspector {
   border-right: 0;
-  border-left: 1px solid #1c2831;
+  border-left: 1px solid var(--omarchy-border);
 }
 
 .sidebar h2,
@@ -219,15 +389,15 @@ h3 {
 }
 
 .filter-list span {
-  border-left: 3px solid #20b8a5;
-  color: #c6d6df;
+  border-left: 3px solid var(--omarchy-accent);
+  color: var(--omarchy-fg);
   padding-left: 8px;
 }
 
 .status-block {
   display: grid;
   gap: 8px;
-  color: #a8bbc8;
+  color: var(--omarchy-color7);
 }
 
 .status-block dl,
@@ -239,7 +409,7 @@ h3 {
 }
 
 dt {
-  color: #708695;
+  color: var(--omarchy-color7);
 }
 
 dd {
@@ -249,7 +419,7 @@ dd {
 }
 
 .error {
-  color: #ff9c9c;
+  color: var(--omarchy-color9);
 }
 
 .main-surface {
@@ -270,7 +440,7 @@ dd {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid #1c2831;
+  border-bottom: 1px solid var(--omarchy-border);
   padding: 14px 16px;
 }
 
@@ -292,7 +462,7 @@ dd {
 }
 
 .file-row:hover {
-  background: #121d24;
+  background: var(--omarchy-color1);
 }
 
 .file-icon {
@@ -301,8 +471,8 @@ dd {
   height: 28px;
   place-items: center;
   border-radius: 6px;
-  background: #17232b;
-  color: #a8bbc8;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-color7);
   font-size: 10px;
   font-weight: 800;
   /* Same fallback chain as graph glyphs so Inspector + tree icons stay
@@ -314,11 +484,6 @@ dd {
     "Segoe UI Symbol", "DejaVu Sans", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-.file-icon.folder {
-  background: #103b31;
-  color: #7ee8ba;
-}
-
 .file-name,
 .file-meta {
   overflow: hidden;
@@ -327,8 +492,10 @@ dd {
 }
 
 .file-meta {
-  color: #8195a3;
+  color: var(--omarchy-color7);
   text-align: right;
+  font-family: var(--orbit-font-mono);
+  font-size: 11px;
 }
 
 .graph-wrap {
@@ -350,14 +517,14 @@ dd {
   display: flex;
   gap: 10px;
   align-items: center;
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: rgba(7, 10, 13, 0.86);
+  background: var(--omarchy-bg);
   padding: 8px 10px;
 }
 
 .graph-overlay span {
-  color: #9bb0bd;
+  color: var(--omarchy-color7);
 }
 
 .graph-controls {
@@ -368,9 +535,9 @@ dd {
   display: flex;
   gap: 6px;
   align-items: center;
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: rgba(7, 10, 13, 0.92);
+  background: var(--omarchy-bg);
   padding: 6px;
 }
 
@@ -387,7 +554,7 @@ dd {
 .graph-controls .zoom-level {
   min-width: 50px;
   text-align: center;
-  color: #e5edf4;
+  color: var(--omarchy-fg);
   font-size: 12px;
   font-weight: 600;
 }
@@ -398,16 +565,16 @@ dd {
   top: 14px;
   right: 14px;
   max-width: 280px;
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: rgba(7, 10, 13, 0.95);
+  background: var(--omarchy-bg);
   padding: 10px 12px;
   pointer-events: none;
 }
 
 .graph-tooltip pre {
   margin: 0;
-  color: #e5edf4;
+  color: var(--omarchy-fg);
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -418,7 +585,7 @@ dd {
   display: grid;
   height: 100%;
   place-items: center;
-  color: #748997;
+  color: var(--omarchy-color7);
 }
 
 .empty-state.small {
@@ -435,7 +602,7 @@ dd {
 .empty-state-icon {
   width: 72px;
   height: 72px;
-  color: #4a5f73;
+  color: var(--omarchy-color8);
   opacity: 0.5;
 }
 
@@ -456,7 +623,7 @@ dd {
 .preview {
   display: grid;
   gap: 10px;
-  border-top: 1px solid #1c2831;
+  border-top: 1px solid var(--omarchy-border);
   margin-top: 16px;
   padding-top: 16px;
 }
@@ -465,18 +632,18 @@ dd {
   width: 100%;
   max-height: 220px;
   object-fit: contain;
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: #070a0d;
+  background: var(--omarchy-color0);
 }
 
 .preview pre {
   max-height: 260px;
   overflow: auto;
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: #070a0d;
-  color: #dce8ef;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-fg);
   padding: 10px;
   white-space: pre-wrap;
 }
@@ -499,8 +666,8 @@ dd {
 
 /* File Row Selected State */
 .file-row.selected {
-  background: #1a3a3a;
-  border-color: #20b8a5;
+  background: var(--omarchy-sel-bg);
+  border-color: var(--omarchy-accent);
 }
 
 /* Explorer List */
@@ -514,12 +681,13 @@ dd {
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid #1c2831;
+  border-bottom: 1px solid var(--omarchy-border);
 }
 
 .item-count {
-  color: #8ca1af;
-  font-size: 12px;
+  color: var(--omarchy-color7);
+  font-size: 11px;
+  font-family: var(--orbit-font-mono);
 }
 
 /* Explorer Tree */
@@ -547,12 +715,12 @@ dd {
 }
 
 .tree-row:hover {
-  background: #121d24;
+  background: var(--omarchy-color1);
 }
 
 .tree-row.selected {
-  background: #1a3a3a;
-  border-color: #20b8a5;
+  background: var(--omarchy-sel-bg);
+  border-color: var(--omarchy-accent);
 }
 
 .tree-chevron {
@@ -560,7 +728,7 @@ dd {
   width: 16px;
   height: 16px;
   place-items: center;
-  color: #8ca1af;
+  color: var(--omarchy-color7);
   font-size: 12px;
   transition: transform 0.15s ease;
 }
@@ -590,7 +758,7 @@ dd {
 
 .tree-loading,
 .tree-empty {
-  color: #5a6b75;
+  color: var(--omarchy-color8);
   font-size: 12px;
   font-style: italic;
   padding: 4px 0;
@@ -608,7 +776,7 @@ dd {
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border-bottom: 1px solid #1c2831;
+  border-bottom: 1px solid var(--omarchy-border);
 }
 
 .search-input-container {
@@ -628,17 +796,17 @@ dd {
   place-items: center;
   border: none;
   background: transparent;
-  color: #8ca1af;
+  color: var(--omarchy-color7);
   font-size: 18px;
   line-height: 1;
 }
 
 .clear-search:hover {
-  color: #e5edf4;
+  color: var(--omarchy-fg);
 }
 
 .search-status {
-  color: #8ca1af;
+  color: var(--omarchy-color7);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -654,7 +822,7 @@ dd {
 }
 
 .search-result-info .file-path {
-  color: #5a6b75;
+  color: var(--omarchy-color8);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -678,19 +846,68 @@ dd {
 
 .metadata-section,
 .actions-section,
-.preview-section {
+.preview-section,
+.node-notes-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #1c2831;
+  border-top: 1px solid var(--omarchy-border);
 }
 
 .metadata-section h4,
 .actions-section h4,
-.preview-section h4 {
-  color: #8ca1af;
+.preview-section h4,
+.node-notes-section h4 {
+  color: var(--omarchy-color7);
   font-size: 11px;
   text-transform: uppercase;
   margin-bottom: 10px;
+}
+
+.node-note-editor {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  border: 1px solid var(--omarchy-border);
+  border-radius: 8px;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-fg);
+  padding: 10px;
+  font: 12px/1.5 "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.node-note-editor:focus {
+  outline: none;
+  border-color: var(--omarchy-accent);
+  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.12);
+}
+
+.node-note-links {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.node-note-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node-note-list button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--omarchy-border);
+  background: var(--omarchy-color0);
+  color: var(--omarchy-fg);
+  border-radius: 6px;
+  padding: 5px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meta-grid.small {
@@ -704,15 +921,16 @@ dd {
 }
 
 button.secondary {
-  border-color: #3d596c;
-  background: #17232b;
+  border-color: var(--omarchy-border);
+  background: var(--omarchy-color0);
+  color: var(--omarchy-fg);
 }
 
 /* Image Preview */
 .image-preview {
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: #070a0d;
+  background: var(--omarchy-color0);
   padding: 8px;
   text-align: center;
 }
@@ -725,9 +943,9 @@ button.secondary {
 
 /* Text Preview */
 .text-preview {
-  border: 1px solid #26343f;
+  border: 1px solid var(--omarchy-border);
   border-radius: 6px;
-  background: #070a0d;
+  background: var(--omarchy-color0);
   overflow: auto;
   max-height: 200px;
 }
@@ -735,36 +953,36 @@ button.secondary {
 .text-preview pre {
   margin: 0;
   padding: 10px;
-  color: #dce8ef;
+  color: var(--omarchy-fg);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .preview-summary {
-  color: #8ca1af;
+  color: var(--omarchy-color7);
   font-size: 12px;
   margin-top: 8px;
 }
 
 /* File Icons by Type */
 .file-icon.image {
-  background: #1a3a5c;
-  color: #7dd3fc;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-color6);
 }
 
 .file-icon.code {
-  background: #3a1a5c;
-  color: #c4b5fd;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-color4);
 }
 
 .file-icon.text {
-  background: #3a3a1a;
-  color: #fde047;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-color3);
 }
 
 .file-icon.config {
-  background: #1a3a1a;
-  color: #86efac;
+  background: var(--omarchy-color0);
+  color: var(--omarchy-color10);
 }
 
 /* Virtual Scrolling */
@@ -773,7 +991,7 @@ button.secondary {
 }
 
 .virtual-list-container:focus {
-  box-shadow: inset 0 0 0 1px #20b8a5;
+  box-shadow: inset 0 0 0 1px var(--omarchy-accent);
 }
 
 .virtual-list-content {
@@ -790,11 +1008,11 @@ button.secondary {
 }
 
 .virtual-list-item.selected {
-  background: #1a3a3a;
+  background: var(--omarchy-sel-bg);
 }
 
 .virtual-scroll-indicator {
-  color: #8ca1af;
+  color: var(--omarchy-color7);
   font-size: 11px;
   margin-left: 6px;
   font-style: italic;
@@ -837,7 +1055,7 @@ button.secondary {
 }
 
 .loading-indicator {
-  color: #20b8a5;
+  color: var(--omarchy-accent);
   font-size: 11px;
   margin-left: 8px;
   animation: scanning 1.5s ease-in-out infinite;
@@ -852,7 +1070,7 @@ button.secondary {
 
 .scanning-indicator {
   animation: scanning 1.5s ease-in-out infinite;
-  color: #20b8a5;
+  color: var(--omarchy-accent);
 }
 
 /* ============================================
@@ -874,7 +1092,7 @@ button.secondary {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 16px;
-  border-bottom: 1px solid #1c2831;
+  border-bottom: 1px solid var(--orbit-border);
   flex-shrink: 0;
 }
 
@@ -887,21 +1105,21 @@ button.secondary {
 .grid-toolbar select {
   height: 28px;
   padding: 0 8px;
-  border: 1px solid #26343f;
+  border: 1px solid var(--orbit-border);
   border-radius: 4px;
-  background: #121a20;
-  color: #dbe7ee;
+  background: var(--orbit-field);
+  color: var(--orbit-text);
   font-size: 12px;
   cursor: pointer;
 }
 
 .grid-toolbar select:hover {
-  border-color: #3d596c;
+  border-color: var(--orbit-border-strong);
 }
 
 .grid-toolbar select:focus {
   outline: none;
-  border-color: #20b8a5;
+  border-color: var(--omarchy-accent);
 }
 
 .sort-direction-btn {
@@ -960,7 +1178,7 @@ button.secondary {
 
 .grid-item.selected {
   background: #1a3a3a;
-  border-color: #20b8a5;
+  border-color: var(--omarchy-accent);
 }
 
 /* Grid Icon Wrapper */
@@ -1086,7 +1304,7 @@ button.secondary {
 }
 
 .explorer-grid-container .virtual-list-container:focus {
-  box-shadow: inset 0 0 0 1px #20b8a5;
+  box-shadow: inset 0 0 0 1px var(--omarchy-accent);
 }
 
 /* ============================================
@@ -1103,7 +1321,7 @@ button.secondary {
 }
 
 .explorer-columns-container:focus {
-  box-shadow: inset 0 0 0 1px #20b8a5;
+  box-shadow: inset 0 0 0 1px var(--omarchy-accent);
 }
 
 /* Columns Scroll Container */
@@ -1145,17 +1363,17 @@ button.secondary {
   min-width: 200px;
   max-width: 400px;
   flex-shrink: 0;
-  border-right: 1px solid #1c2831;
-  background: rgba(9, 14, 18, 0.5);
+  border-right: 1px solid var(--orbit-border);
+  background: color-mix(in srgb, var(--orbit-bg) 85%, transparent);
   position: relative;
 }
 
 .column.active {
-  background: rgba(26, 58, 58, 0.2);
+  background: color-mix(in srgb, var(--omarchy-sel-bg) 40%, transparent);
 }
 
 .column.active .column-header {
-  border-right-color: #20b8a5;
+  border-right-color: var(--omarchy-accent);
   border-right-width: 2px;
   margin-right: -1px;
 }
@@ -1174,14 +1392,14 @@ button.secondary {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid #1c2831;
-  background: rgba(18, 26, 32, 0.8);
+  border-bottom: 1px solid var(--orbit-border);
+  background: color-mix(in srgb, var(--orbit-panel) 90%, transparent);
   flex-shrink: 0;
 }
 
 .column-title {
   font-weight: 600;
-  color: #f6fbff;
+  color: var(--orbit-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1228,25 +1446,24 @@ button.secondary {
   cursor: pointer;
   font-size: 13px;
 }
-
 .column-item:hover {
-  background: #121d24;
+  background: var(--orbit-row);
 }
 
 .column-item.selected {
-  background: #1a3a3a;
-  border-color: #20b8a5;
+  background: var(--omarchy-sel-bg);
+  border-color: var(--omarchy-accent);
 }
 
 .column-item.parent-item {
   opacity: 0.8;
-  border-bottom: 1px solid #26343f;
+  border-bottom: 1px solid var(--orbit-border);
   margin-bottom: 4px;
   padding-bottom: 4px;
 }
 
 .column-item.parent-item:hover {
-  background: #121d24;
+  background: var(--orbit-row);
 }
 
 /* Column Icon */
@@ -1311,11 +1528,11 @@ button.secondary {
 }
 
 .column-resize-handle:hover {
-  background: #20b8a5;
+  background: var(--omarchy-accent);
 }
 
 .column.resizing .column-resize-handle {
-  background: #20b8a5;
+  background: var(--omarchy-accent);
 }
 
 /* Loading State */
@@ -1354,8 +1571,8 @@ button.secondary {
 }
 
 .column .virtual-list-item.selected .column-item {
-  background: #1a3a3a;
-  border-color: #20b8a5;
+  background: var(--omarchy-sel-bg);
+  border-color: var(--omarchy-accent);
 }
 
 /* ============================================
@@ -1366,7 +1583,7 @@ button.secondary {
   display: flex;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid #1c2831;
+  border-bottom: 1px solid var(--orbit-border);
   padding: 0 18px;
   background: transparent;
 }
@@ -1380,7 +1597,7 @@ button.secondary {
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #8ca1af;
+  color: var(--orbit-muted);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1388,14 +1605,14 @@ button.secondary {
 }
 
 .mode-button:hover {
-  color: #dbe7ee;
-  background: #121d24;
+  color: var(--orbit-text);
+  background: var(--orbit-row);
 }
 
 .mode-button.active {
-  border-color: #20b8a5;
-  background: #0f3f3b;
-  color: #effffc;
+  border-color: var(--omarchy-accent);
+  background: color-mix(in srgb, var(--omarchy-accent) 15%, transparent);
+  color: var(--orbit-text);
 }
 
 .mode-icon {
@@ -1413,7 +1630,7 @@ button.secondary {
 .code-analysis-panel {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #1c2831;
+  border-top: 1px solid var(--orbit-border);
 }
 
 .code-analysis-panel .panel-header {
@@ -1431,7 +1648,7 @@ button.secondary {
 }
 
 .code-analysis-panel .loading-indicator {
-  color: #20b8a5;
+  color: var(--omarchy-accent);
   font-size: 11px;
   animation: scanning 1.5s ease-in-out infinite;
 }
@@ -1551,7 +1768,7 @@ button.secondary {
   display: flex;
   gap: 12px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--orbit-font-mono);
 }
 
 .git-diff-stats .diff-additions {
@@ -1686,7 +1903,7 @@ button.secondary {
   border-radius: 4px;
   color: #dbe7ee;
   font-size: 12px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--orbit-font-mono);
 }
 
 /* Related Files Styles */
@@ -1721,8 +1938,8 @@ button.secondary {
 }
 
 .related-file-link:hover {
-  background: #121d24;
-  color: #ddd6fe;
+  background: color-mix(in srgb, var(--orbit-accent) 12%, transparent);
+  color: var(--orbit-accent);
 }
 
 /* Empty List */
@@ -1735,21 +1952,40 @@ button.secondary {
 
 /* Compact workbench pass inspired by graph-file-manager */
 :root {
-  --orbit-bg: #1e1e1e;
+  --orbit-bg: var(--omarchy-bg);
   --orbit-bg-sunken: color-mix(in srgb, var(--orbit-bg) 88%, #000 12%);
-  --orbit-panel: #202020;
-  --orbit-panel-2: #252526;
-  --orbit-field: #1b1b1b;
-  --orbit-border: #2f3338;
-  --orbit-border-strong: #3e4650;
-  --orbit-text: #d4d4d4;
-  --orbit-muted: #9ca3af;
-  --orbit-faint: #6f7782;
-  --orbit-accent: #4da3ff;
-  --orbit-accent-2: #73c991;
-  --orbit-warn: #f5c542;
-  --orbit-danger: #f0887d;
-  --orbit-row: #2b3138;
+  --orbit-panel: color-mix(in srgb, var(--omarchy-bg) 95%, var(--omarchy-fg) 5%);
+  --orbit-panel-2: color-mix(in srgb, var(--omarchy-bg) 92%, var(--omarchy-fg) 8%);
+  --orbit-field: color-mix(in srgb, var(--omarchy-bg) 90%, var(--omarchy-fg) 10%);
+  --orbit-border: var(--omarchy-border);
+  --orbit-border-strong: color-mix(in srgb, var(--omarchy-border) 60%, var(--omarchy-fg) 40%);
+  --orbit-text: var(--omarchy-fg);
+  --orbit-muted: color-mix(in srgb, var(--omarchy-fg) 60%, var(--omarchy-bg) 40%);
+  --orbit-faint: color-mix(in srgb, var(--omarchy-fg) 30%, var(--omarchy-bg) 70%);
+  --orbit-accent: var(--omarchy-accent);
+  --orbit-accent-2: color-mix(in srgb, var(--omarchy-accent) 70%, var(--omarchy-fg) 30%);
+  --orbit-warn: var(--omarchy-color3);
+  --orbit-danger: var(--omarchy-color1);
+  --orbit-row: color-mix(in srgb, var(--omarchy-bg) 94%, var(--omarchy-fg) 6%);
+
+  /* Semantic graph colors built dynamically from theme tokens */
+  --graph-folder: var(--omarchy-accent);
+  --graph-code: color-mix(in srgb, var(--omarchy-accent) 85%, var(--omarchy-fg) 15%);
+  --graph-image: color-mix(in srgb, var(--omarchy-accent) 70%, var(--omarchy-fg) 30%);
+  --graph-text: var(--omarchy-fg);
+  --graph-config: var(--omarchy-cursor);
+  --graph-web: color-mix(in srgb, var(--omarchy-accent) 55%, var(--omarchy-fg) 45%);
+  --graph-document: color-mix(in srgb, var(--omarchy-accent) 40%, var(--omarchy-fg) 60%);
+  --graph-other: color-mix(in srgb, var(--omarchy-accent) 25%, var(--omarchy-fg) 75%);
+  --graph-cluster: var(--omarchy-border);
+
+  --graph-edge-hierarchy: var(--omarchy-accent);
+  --graph-edge-code: color-mix(in srgb, var(--omarchy-accent) 80%, var(--omarchy-fg) 20%);
+  --graph-edge-docs: var(--omarchy-fg);
+  --graph-edge-symlink: var(--omarchy-cursor);
+  --graph-edge-semantic: color-mix(in srgb, var(--omarchy-accent) 60%, var(--omarchy-fg) 40%);
+  --graph-edge-tags: color-mix(in srgb, var(--omarchy-accent) 40%, var(--omarchy-fg) 60%);
+  --graph-edge-other: var(--omarchy-border);
 }
 
 body {
@@ -1941,8 +2177,8 @@ button.secondary {
   gap: 8px;
   height: 28px;
   padding: 0 8px;
-  background: linear-gradient(180deg, #131a20 0%, #0f1519 100%);
-  border-bottom: 1px solid #1c2831;
+  background: linear-gradient(180deg, var(--orbit-panel) 0%, var(--orbit-bg) 100%);
+  border-bottom: 1px solid var(--orbit-border);
   -webkit-app-region: drag;
   app-region: drag;
   user-select: none;
@@ -1960,7 +2196,7 @@ button.secondary {
 
 .header-brand {
   font-weight: 600;
-  color: #20b8a5;
+  color: var(--omarchy-accent);
   font-size: 12px;
   padding: 0 6px;
 }
@@ -2015,7 +2251,7 @@ button.secondary {
 .header-btn-primary {
   background: rgba(32, 184, 165, 0.15);
   border-color: rgba(32, 184, 165, 0.4);
-  color: #20b8a5;
+  color: var(--omarchy-accent);
 }
 
 .header-btn-primary:hover {
@@ -2040,7 +2276,7 @@ button.secondary {
 }
 
 .header-search:focus {
-  border-color: #20b8a5;
+  border-color: var(--omarchy-accent);
 }
 
 /* Window Controls */
@@ -2412,7 +2648,7 @@ dt {
 
 .file-icon.folder,
 .grid-icon.folder {
-  background: #1d3028;
+  background: color-mix(in srgb, var(--orbit-accent) 12%, transparent);
   color: var(--orbit-accent-2);
 }
 
@@ -2784,6 +3020,34 @@ dt {
   animation: orbit-pulse 1.4s ease-in-out infinite;
 }
 
+
+.graph-3d-label {
+  max-width: 260px;
+  border: 1px solid var(--orbit-border);
+  border-radius: 4px;
+  background: rgba(18, 18, 18, 0.94);
+  color: var(--orbit-text);
+  padding: 7px 9px;
+  font-family: var(--orbit-font-sans);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.graph-3d-label strong {
+  color: var(--orbit-text);
+  font-weight: 650;
+}
+
+.graph-3d-label span,
+.graph-3d-label small {
+  color: var(--orbit-muted);
+}
+
+.graph-layout-graph3d .graph-minimap {
+  display: none;
+}
+
 .graph-search {
   min-width: 0;
   padding: 3px;
@@ -2822,7 +3086,7 @@ dt {
 
 .graph-workbench .graph-stats strong {
   color: var(--orbit-text);
-  font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+  font-family: var(--orbit-font-mono);
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -2830,7 +3094,7 @@ dt {
 
 .graph-workbench .graph-stats span {
   color: var(--orbit-muted);
-  font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+  font-family: var(--orbit-font-mono);
   font-size: 10.5px;
   letter-spacing: -0.01em;
 }
@@ -2871,7 +3135,7 @@ dt {
   padding: 0 4px 0 2px;
   color: var(--orbit-muted);
   opacity: 0.7;
-  font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+  font-family: var(--orbit-font-mono);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -3290,7 +3554,7 @@ dt {
   place-items: center;
   width: 64px;
   height: 64px;
-  background: linear-gradient(135deg, #20b8a5, #15a090);
+  background: linear-gradient(135deg, var(--omarchy-accent), #15a090);
   border-radius: 12px;
   color: #0b0f12;
   font-size: 28px;
@@ -3333,7 +3597,7 @@ dt {
   background: rgba(32, 184, 165, 0.1);
   border: 1px solid rgba(32, 184, 165, 0.3);
   border-radius: 6px;
-  color: #20b8a5;
+  color: var(--omarchy-accent);
   font-size: 13px;
   text-decoration: none;
   transition: all 0.15s ease;
@@ -3382,9 +3646,9 @@ dt {
   background: #1a252d;
   border: 1px solid #2a3a47;
   border-radius: 6px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-family: var(--orbit-font-mono);
   font-size: 12px;
-  color: #20b8a5;
+  color: var(--omarchy-accent);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -4221,13 +4485,13 @@ dt {
 
 .image-preview {
   display: grid;
-  min-height: 180px;
+  min-height: clamp(240px, 44vh, 560px);
   place-items: center;
 }
 
 .image-preview img {
   max-width: 100%;
-  max-height: min(360px, 48vh);
+  max-height: min(640px, 70vh);
   object-fit: contain;
 }
 
@@ -4236,6 +4500,77 @@ dt {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.audio-preview--card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orbit-bg-sunken) 72%, transparent);
+}
+
+.audio-preview-art {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--orbit-accent-2, var(--orbit-accent)) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orbit-accent-2, var(--orbit-accent)) 10%, transparent);
+  color: color-mix(in srgb, var(--orbit-accent-2, var(--orbit-accent)) 88%, var(--orbit-fg) 12%);
+}
+
+.audio-preview-main {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.audio-preview-title {
+  overflow: hidden;
+  color: var(--orbit-fg);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-preview-error {
+  color: var(--omarchy-color9, #f47);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.audio-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audio-preview-mime {
+  color: var(--orbit-faint);
+  font-family: var(--orbit-font-mono);
+  font-size: 10px;
+}
+
+.audio-preview .link-button {
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 80%, transparent);
+  color: var(--omarchy-accent, #20b8a5);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.audio-preview .link-button:hover {
+  background: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 14%, transparent);
 }
 
 .audio-player {
@@ -4247,6 +4582,10 @@ dt {
 .text-preview {
   max-height: min(420px, 52vh);
   overflow: auto;
+}
+
+.text-preview--wrap {
+  overflow-x: hidden;
 }
 
 .preview-code-header {
@@ -4261,6 +4600,28 @@ dt {
   font-size: 10px;
 }
 
+.preview-wrap-toggle {
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orbit-bg-sunken) 70%, transparent);
+  color: var(--orbit-muted);
+  font-size: 9px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.preview-wrap-toggle:hover,
+.preview-wrap-toggle.active {
+  border-color: color-mix(in srgb, var(--orbit-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--orbit-accent) 12%, transparent);
+  color: color-mix(in srgb, var(--orbit-accent) 86%, var(--orbit-fg) 14%);
+}
+
 .preview-lang {
   display: inline-flex;
   align-items: center;
@@ -4271,15 +4632,28 @@ dt {
   display: grid;
   min-width: max-content;
   padding: 4px 0;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 11px;
-  line-height: 1.5;
+  font-family: var(--orbit-font-mono);
+  /* Zed-parity buffer font: 13px is comfortable in our 15px UI without the
+     code body stealing dominance from the surrounding inspector chrome. */
+  font-size: 13px;
+  /* Zed "comfortable" buffer line height. */
+  line-height: var(--orbit-mono-line-height);
+  font-feature-settings: "calt" 1, "liga" 1;
+}
+
+.text-preview--wrap .preview-code-body {
+  min-width: 0;
+  width: 100%;
 }
 
 .preview-code-line {
   display: grid;
   grid-template-columns: 44px max-content;
-  min-height: 18px;
+  min-height: calc(13px * var(--orbit-mono-line-height));
+}
+
+.text-preview--wrap .preview-code-line {
+  grid-template-columns: 44px minmax(0, 1fr);
 }
 
 .preview-code-line:hover {
@@ -4298,11 +4672,357 @@ dt {
   padding-right: 12px;
 }
 
+.text-preview--wrap .preview-code-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .preview-meta {
   display: grid;
   grid-template-columns: 82px minmax(0, 1fr);
   gap: 4px 8px;
   margin: 0;
+}
+
+/* Video preview ─ HTML5 <video> in a contained frame. Keeps aspect ratio
+   inside the inspector width; very tall videos cap at 60vh so the rest
+   of the preview chrome stays reachable. */
+.preview-content-video {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+.video-player {
+  width: 100%;
+  max-width: 100%;
+  max-height: 60vh;
+  background: #000;
+  border-radius: 4px;
+  outline: none;
+}
+
+/* PDF preview ─ iframe relies on WebKit's built-in viewer. Sized to fill
+   the inspector pane so multi-page documents are actually navigable. */
+.preview-content-pdf {
+  padding: 0;
+}
+.pdf-frame {
+  width: 100%;
+  height: min(70vh, 720px);
+  border: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 80%, transparent);
+  border-radius: 4px;
+  background: var(--orbit-bg, #0b0f12);
+}
+
+/* Font preview ─ tasting menu for the font being inspected. Pangram +
+   size ladder + alphabet, all rendered in the actual font (loaded via
+   FontFace API at mount). */
+.preview-content-font {
+  padding: 12px 14px;
+}
+.font-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: opacity 120ms ease;
+}
+.font-preview-pangram {
+  font-size: 28px;
+  line-height: 1.25;
+  font-weight: 400;
+  color: var(--orbit-fg, var(--omarchy-fg));
+}
+.font-preview-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.font-preview-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+}
+.font-preview-size {
+  font-family: var(--orbit-font-mono);
+  font-size: 10px;
+  color: var(--orbit-faint, color-mix(in srgb, var(--omarchy-fg) 50%, transparent));
+  text-align: right;
+}
+.font-preview-sample {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.font-preview-alphabet {
+  font-size: 16px;
+  line-height: 1.5;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 70%, transparent);
+  color: color-mix(in srgb, var(--orbit-fg, var(--omarchy-fg)) 85%, transparent);
+}
+
+/* Notes panel — read/edit Markdown notes attached to any file path.
+   Read mode reuses the .markdown-preview styles via the .notes-body
+   modifier; edit mode shows a no-frills textarea sized to be useful
+   without dominating the inspector. */
+.notes-panel {
+  display: flex;
+  flex-direction: column;
+}
+.notes-editor {
+  width: 100%;
+  min-height: 140px;
+  padding: 8px 10px;
+  font-family: var(--orbit-font-mono);
+  font-size: 12px;
+  line-height: var(--orbit-mono-line-height);
+  resize: vertical;
+  background: color-mix(in srgb, var(--orbit-bg, #0b0f12) 35%, transparent);
+  color: var(--orbit-fg, var(--omarchy-fg));
+  border: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 75%, transparent);
+  border-radius: 4px;
+  outline: none;
+}
+.notes-editor:focus {
+  border-color: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 70%, transparent);
+}
+.notes-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 22px 16px;
+  background: color-mix(in srgb, var(--orbit-bg, #0b0f12) 25%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--omarchy-border, #1c2831) 70%, transparent);
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--omarchy-fg) 70%, transparent);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.notes-empty:hover {
+  background: color-mix(in srgb, var(--orbit-bg, #0b0f12) 50%, transparent);
+  border-color: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 50%, transparent);
+}
+.notes-empty-hint {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--omarchy-fg) 50%, transparent);
+}
+.notes-error {
+  color: var(--omarchy-color9, #f47);
+  background: color-mix(in srgb, var(--omarchy-color9, #f47) 12%, transparent);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+}
+
+/* Smaller meta affordances shared by NotesPanel + BacklinksPanel. */
+.panel-meta {
+  font-size: 10px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--omarchy-fg) 55%, transparent);
+  margin-left: 4px;
+}
+.panel-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--omarchy-fg) 75%, transparent);
+  background: color-mix(in srgb, var(--omarchy-border, #1c2831) 80%, transparent);
+  border-radius: 8px;
+}
+
+/* Wikilinks that didn't resolve to any file get a strike-through hint so
+   the user can fix the link target. Real (resolvable) wikilinks keep
+   their normal pill look. */
+.md-wikilink-missing {
+  text-decoration: line-through;
+  opacity: 0.6;
+  background: color-mix(in srgb, var(--omarchy-color9, #f47) 20%, transparent) !important;
+}
+
+/* Backlinks panel — incoming wikilinks. Quiet list, click-to-navigate. */
+.backlinks-panel { display: flex; flex-direction: column; }
+.backlinks-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.backlinks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.backlinks-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--orbit-fg, var(--omarchy-fg));
+  text-align: left;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+.backlinks-row:hover {
+  background: color-mix(in srgb, var(--orbit-row, var(--omarchy-border, #1c2831)) 60%, transparent);
+}
+.backlinks-row-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.backlinks-row-target {
+  font-family: var(--orbit-font-mono);
+  font-size: 10px;
+  color: color-mix(in srgb, var(--omarchy-fg) 55%, transparent);
+}
+
+.preview-empty .link-button {
+  margin-top: 6px;
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 80%, transparent);
+  color: var(--omarchy-accent, #20b8a5);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.preview-empty .link-button:hover {
+  background: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 14%, transparent);
+}
+
+/* Markdown preview ─ rendered HTML from `marked`. Tuned to match the
+   surrounding inspector chrome: tight leading, Zed-like mono code, IBM
+   Plex Sans for body. Wikilinks get a subtle pill so the user can spot
+   "click to navigate" without us adding an icon. */
+.markdown-preview {
+  font-family: var(--orbit-font-sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--orbit-fg, var(--omarchy-fg));
+  padding: 10px 12px 12px;
+  overflow-wrap: anywhere;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.2em 0 0.4em;
+  letter-spacing: -0.01em;
+}
+.markdown-preview h1 { font-size: 1.45em; }
+.markdown-preview h2 { font-size: 1.25em; }
+.markdown-preview h3 { font-size: 1.1em; }
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 { font-size: 1em; }
+.markdown-preview h1:first-child,
+.markdown-preview h2:first-child,
+.markdown-preview h3:first-child { margin-top: 0; }
+
+.markdown-preview p { margin: 0 0 0.7em; }
+.markdown-preview ul,
+.markdown-preview ol { margin: 0 0 0.7em; padding-left: 1.4em; }
+.markdown-preview li { margin: 0.15em 0; }
+.markdown-preview li > p:only-child { margin: 0; }
+
+.markdown-preview a {
+  color: var(--omarchy-accent, #20b8a5);
+  text-decoration: none;
+  border-bottom: 1px dotted color-mix(in srgb, var(--omarchy-accent, #20b8a5) 60%, transparent);
+}
+.markdown-preview a:hover { border-bottom-style: solid; }
+
+.markdown-preview a.md-wikilink {
+  display: inline;
+  padding: 0 4px;
+  margin: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 14%, transparent);
+  border-bottom: none;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 90%, var(--omarchy-fg) 10%);
+}
+.markdown-preview a.md-wikilink:hover {
+  background: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 26%, transparent);
+}
+
+.markdown-preview code {
+  font-family: var(--orbit-font-mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--orbit-bg, #0b0f12) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 70%, transparent);
+}
+.markdown-preview pre {
+  margin: 0.8em 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--orbit-bg, #0b0f12) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 70%, transparent);
+}
+.text-preview--wrap .markdown-preview pre {
+  overflow-x: hidden;
+  white-space: pre-wrap;
+}
+.markdown-preview pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.92em;
+  line-height: var(--orbit-mono-line-height);
+}
+.text-preview--wrap .markdown-preview pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown-preview blockquote {
+  margin: 0.6em 0;
+  padding: 0.2em 0 0.2em 12px;
+  border-left: 3px solid color-mix(in srgb, var(--omarchy-accent, #20b8a5) 60%, transparent);
+  color: color-mix(in srgb, var(--omarchy-fg) 80%, transparent);
+}
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 80%, transparent);
+  margin: 1.2em 0;
+}
+.markdown-preview img { max-width: 100%; height: auto; }
+.markdown-preview table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.95em;
+}
+.markdown-preview th,
+.markdown-preview td {
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--omarchy-border, #1c2831) 70%, transparent);
+  text-align: left;
+}
+.markdown-preview th {
+  background: color-mix(in srgb, var(--orbit-bg, #0b0f12) 20%, transparent);
+  font-weight: 600;
 }
 
 .analysis-panel {
@@ -4433,8 +5153,8 @@ dt {
 }
 
 .markdown-outline .outline-bullet {
-  color: #20b8a5;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--omarchy-accent);
+  font-family: var(--orbit-font-mono);
   font-size: 10px;
   flex-shrink: 0;
 }
@@ -4505,7 +5225,7 @@ dt {
 .similar-image-distance {
   color: var(--orbit-muted);
   font-size: 10px;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--orbit-font-mono);
   flex-shrink: 0;
 }
 
@@ -4880,7 +5600,7 @@ dt {
   padding: 5px 8px;
   font-size: 12px;
   border-radius: 3px;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-family: var(--orbit-font-mono);
 }
 .ctx-input:focus {
   outline: 1px solid var(--orbit-accent, #2563eb);
@@ -5139,6 +5859,69 @@ dt {
   font-size: 12px;
   line-height: 1.45;
 }
+
+/* Flavor picker — grid of theme tiles in the Appearance section */
+.flavor-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+.flavor-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--omarchy-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--omarchy-fg);
+  cursor: pointer;
+  text-align: left;
+}
+.flavor-option:hover { border-color: var(--omarchy-accent); }
+.flavor-option.active {
+  border-color: var(--omarchy-accent);
+  background: var(--omarchy-sel-bg);
+  color: var(--omarchy-sel-fg);
+}
+.flavor-swatches { display: inline-flex; gap: 2px; }
+.flavor-swatch {
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+}
+.flavor-label { font-size: 12px; line-height: 1.2; }
+
+/* Per-flavor swatch colors — bg / accent / signature edge color */
+.flavor-swatch[data-flavor="omarchy"].flavor-swatch--bg     { background: var(--omarchy-bg); }
+.flavor-swatch[data-flavor="omarchy"].flavor-swatch--accent { background: var(--omarchy-accent); }
+.flavor-swatch[data-flavor="omarchy"].flavor-swatch--edge   { background: var(--orbit-edge-code); }
+
+.flavor-swatch[data-flavor="catppuccin-mocha"].flavor-swatch--bg     { background: #1e1e2e; }
+.flavor-swatch[data-flavor="catppuccin-mocha"].flavor-swatch--accent { background: #89b4fa; }
+.flavor-swatch[data-flavor="catppuccin-mocha"].flavor-swatch--edge   { background: #cba6f7; }
+
+.flavor-swatch[data-flavor="catppuccin-macchiato"].flavor-swatch--bg     { background: #24273a; }
+.flavor-swatch[data-flavor="catppuccin-macchiato"].flavor-swatch--accent { background: #8aadf4; }
+.flavor-swatch[data-flavor="catppuccin-macchiato"].flavor-swatch--edge   { background: #c6a0f6; }
+
+.flavor-swatch[data-flavor="catppuccin-frappe"].flavor-swatch--bg     { background: #303446; }
+.flavor-swatch[data-flavor="catppuccin-frappe"].flavor-swatch--accent { background: #8caaee; }
+.flavor-swatch[data-flavor="catppuccin-frappe"].flavor-swatch--edge   { background: #ca9ee6; }
+
+.flavor-swatch[data-flavor="catppuccin-latte"].flavor-swatch--bg     { background: #eff1f5; }
+.flavor-swatch[data-flavor="catppuccin-latte"].flavor-swatch--accent { background: #1e66f5; }
+.flavor-swatch[data-flavor="catppuccin-latte"].flavor-swatch--edge   { background: #8839ef; }
+
+.flavor-swatch[data-flavor="dracula"].flavor-swatch--bg     { background: #282a36; }
+.flavor-swatch[data-flavor="dracula"].flavor-swatch--accent { background: #bd93f9; }
+.flavor-swatch[data-flavor="dracula"].flavor-swatch--edge   { background: #ff79c6; }
+
+.flavor-swatch[data-flavor="gruvbox-dark"].flavor-swatch--bg     { background: #282828; }
+.flavor-swatch[data-flavor="gruvbox-dark"].flavor-swatch--accent { background: #7daea3; }
+.flavor-swatch[data-flavor="gruvbox-dark"].flavor-swatch--edge   { background: #d3869b; }
 @media (max-width: 760px) {
   .settings-content { grid-template-columns: 1fr; }
 }
@@ -5147,7 +5930,7 @@ dt {
 .about-panel {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #1c2831;
+  border-top: 1px solid var(--orbit-border);
 }
 .about-panel .panel-header {
   display: flex;
@@ -5159,7 +5942,7 @@ dt {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #8ca1af;
+  color: var(--orbit-muted);
   font-size: 11px;
   text-transform: uppercase;
   margin: 0;
@@ -5169,29 +5952,29 @@ dt {
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  background: #0f1418;
-  border: 1px solid #1c2831;
+  background: var(--orbit-field);
+  border: 1px solid var(--orbit-border);
   border-radius: 6px;
   margin-bottom: 10px;
 }
 .about-query-row:focus-within {
-  border-color: #2a3a48;
+  border-color: var(--orbit-border-strong);
 }
 .about-query-icon {
   flex-shrink: 0;
-  color: #5a6b75;
+  color: var(--orbit-muted);
 }
 .about-query-input {
   flex: 1;
   background: transparent;
   border: none;
   outline: none;
-  color: #dbe7ee;
+  color: var(--orbit-text);
   font-size: 12px;
   font-family: inherit;
 }
 .about-query-input::placeholder {
-  color: #5a6b75;
+  color: var(--orbit-muted);
 }
 .about-content {
   display: flex;
@@ -5239,4 +6022,277 @@ dt {
 }
 .about-link:hover {
   text-decoration: underline;
+}
+
+/* Inspector IA overrides — keep identity, preview, intel, notes, and links in
+   that order. The goal is less repeated file trivia and more room for the
+   thing being inspected, especially images. */
+.metadata-section--glance {
+  margin-top: 0;
+  padding: 7px 8px;
+  background: color-mix(in srgb, var(--orbit-bg, #0b0f12) 22%, transparent);
+}
+
+.metadata-section--glance h4 {
+  color: color-mix(in srgb, var(--orbit-fg, var(--omarchy-fg)) 55%, transparent);
+}
+
+.meta-grid--compact {
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 3px 8px;
+}
+
+.meta-grid--compact dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-section {
+  margin-top: 4px;
+}
+
+.preview-section .panel-header {
+  margin-bottom: 4px;
+}
+
+.preview-details {
+  margin-top: 6px;
+}
+
+
+/* ── Inspector cleanup: tabbed, quieter context surfaces ───────────── */
+.inspector-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 12px 0 10px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orbit-bg-sunken) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.inspector-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--orbit-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.inspector-tab span:not(.inspector-tab-count) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inspector-tab:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--orbit-accent) 28%, transparent);
+  color: var(--orbit-fg);
+}
+
+.inspector-tab.active {
+  border-color: color-mix(in srgb, var(--orbit-accent) 48%, transparent);
+  background: color-mix(in srgb, var(--orbit-accent) 14%, transparent);
+  color: var(--orbit-fg);
+}
+
+.inspector-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.inspector-tab-count {
+  display: inline-grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orbit-accent) 20%, transparent);
+  color: var(--orbit-fg);
+  font-size: 10px;
+}
+
+.context-summary-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.context-path-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orbit-bg-sunken) 72%, transparent);
+}
+
+.context-path-label {
+  color: var(--orbit-faint);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.context-path-card code {
+  overflow-wrap: anywhere;
+  color: var(--orbit-fg);
+  font-family: var(--orbit-font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.context-path-actions,
+.context-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.context-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.context-chip {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 65%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--orbit-bg-elevated, var(--orbit-bg-sunken)) 72%, transparent);
+}
+
+.context-chip span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--orbit-faint);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.context-chip strong {
+  display: block;
+  overflow: hidden;
+  color: var(--orbit-fg);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relationship-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--orbit-edge-docs, var(--orbit-accent)) 30%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orbit-edge-docs, var(--orbit-accent)) 8%, transparent);
+}
+
+.relationship-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--orbit-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.relationship-card button,
+.context-action-row button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 65%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--orbit-bg) 34%, transparent);
+  color: var(--orbit-muted);
+  font-size: 11px;
+  text-align: left;
+}
+
+.context-action-row button {
+  justify-content: center;
+  width: auto;
+  cursor: pointer;
+}
+
+.relationship-card button:not(:disabled) {
+  cursor: pointer;
+}
+
+.relationship-card button:not(:disabled):hover,
+.context-action-row button:hover {
+  border-color: color-mix(in srgb, var(--orbit-accent) 42%, transparent);
+  color: var(--orbit-fg);
+}
+
+.relationship-card button:disabled {
+  opacity: 0.48;
+}
+
+.relationship-card strong {
+  overflow: hidden;
+  max-width: 58%;
+  color: var(--orbit-fg);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-details {
+  margin-top: 10px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 62%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--orbit-bg-sunken) 62%, transparent);
+}
+
+.preview-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  color: var(--orbit-muted);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.preview-details summary::-webkit-details-marker { display: none; }
+
+.preview-details summary span:last-child {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--orbit-accent) 14%, transparent);
+  color: var(--orbit-fg);
+  font-size: 10px;
+}
+
+.preview-details[open] .preview-meta {
+  border-top: 1px solid color-mix(in srgb, var(--orbit-border) 54%, transparent);
+  padding: 8px 9px 9px;
 }

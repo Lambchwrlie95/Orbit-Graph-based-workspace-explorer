@@ -1,6 +1,8 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
+import ForceGraph3D, { type ForceGraph3DInstance, type LinkObject, type NodeObject } from "3d-force-graph";
+import * as THREE from "three";
 import {
   NodeCircleProgram,
   EdgeClampedProgram,
@@ -40,15 +42,24 @@ type EdgeCategory = "hierarchy" | "code" | "docs" | "symlink" | "semantic" | "ta
 
 const ALL_EDGE_CATEGORIES: EdgeCategory[] = ["hierarchy", "code", "docs", "symlink", "semantic", "tags", "other"];
 
-const EDGE_CATEGORY_CONFIG: Record<EdgeCategory, { label: string; color: string; description: string }> = {
-  hierarchy: { label: "Hierarchy", color: "#6f9ad0", description: "folder containment" },
-  code: { label: "Code refs", color: "#a78bfa", description: "imports/dependencies" },
-  docs: { label: "Doc links", color: "#5eead4", description: "markdown/wiki/web links" },
-  symlink: { label: "Symlink", color: "#ed9a4a", description: "filesystem aliases" },
-  semantic: { label: "Related", color: "#86efac", description: "semantic/similar edges" },
-  tags: { label: "Tags", color: "#f472b6", description: "tag relationships" },
-  other: { label: "Other edges", color: "#638fc3", description: "uncategorized relationships" },
+// Per-category metadata for the legend + edge renderer. The `color` field
+// resolves at read time so a flavor switch (Catppuccin, Dracula, etc.) or a
+// live Omarchy palette change picks up new colors without re-rendering the
+// constants. `cssVar`/`fallback` are the source of truth.
+const EDGE_CATEGORY_CONFIG: Record<EdgeCategory, { label: string; cssVar: string; fallback: string; description: string }> = {
+  hierarchy: { label: "Hierarchy", cssVar: "--orbit-edge-hierarchy", fallback: "#6f9ad0", description: "folder containment" },
+  code:      { label: "Code refs", cssVar: "--orbit-edge-code",      fallback: "#a78bfa", description: "imports/dependencies" },
+  docs:      { label: "Doc links", cssVar: "--orbit-edge-docs",      fallback: "#5eead4", description: "markdown/wiki/web links" },
+  symlink:   { label: "Symlink",   cssVar: "--orbit-edge-symlink",   fallback: "#ed9a4a", description: "filesystem aliases" },
+  semantic:  { label: "Related",   cssVar: "--orbit-edge-semantic",  fallback: "#86efac", description: "semantic/similar edges" },
+  tags:      { label: "Tags",      cssVar: "--orbit-edge-tags",      fallback: "#f472b6", description: "tag relationships" },
+  other:     { label: "Other edges", cssVar: "--orbit-edge-other",   fallback: "#638fc3", description: "uncategorized relationships" },
 };
+
+function edgeCategoryColor(category: EdgeCategory): string {
+  const entry = EDGE_CATEGORY_CONFIG[category];
+  return graphThemeColor(entry.cssVar, entry.fallback);
+}
 
 const PREF = {
   layout: "orbit:graph:layoutMode",
@@ -73,7 +84,7 @@ const VISUAL_FANOUT = {
   expanded: 200,
 };
 
-const GRAPH_LAYOUT_VERSION = "settled-constellation-v1";
+const GRAPH_LAYOUT_VERSION = "vega-radial-tidy-airy-v3";
 
 // Golden angle in radians (~137.5°). Spacing children at this angle around a
 // parent maximizes the minimum angular gap between any two siblings, which is
@@ -112,16 +123,91 @@ function edgeCategoryForType(edgeType: string): EdgeCategory {
   return "other";
 }
 
-type LayoutMode = "constellation" | "tree";
-type GraphDisplayNode = VisualGraphNode & { x: number; y: number; depth: number; childCount: number };
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function graphThemeColor(token: string, fallback: string): string {
+  return cssVar(token, fallback);
+}
+
+function clusterGlyphForNode(node: Pick<VisualGraphNode, "proxyKind" | "isCluster"> & { visualState?: VisualState }) {
+  if (node.proxyKind === "images") return "▧";
+  if (node.proxyKind === "folders") return "⌘";
+  if (node.proxyKind === "code") return "⌬";
+  if (node.proxyKind === "configs") return "⚙";
+  return node.isCluster || node.visualState === "proxy" ? "⬡" : "◇";
+}
+
+function clusterGlyphForAttrs(attrs: Record<string, unknown>) {
+  return clusterGlyphForNode({
+    isCluster: Boolean(attrs.isCluster),
+    proxyKind: typeof attrs.proxyKind === "string" ? attrs.proxyKind : undefined,
+    visualState: attrs.visualState as VisualState | undefined,
+  });
+}
+
+type LayoutMode = "constellation" | "tree" | "graph3d";
+
+type Graph3DNode = NodeObject & {
+  id: string;
+  name: string;
+  label: string;
+  path: string;
+  color: string;
+  val: number;
+  x?: number;
+  y?: number;
+  z?: number;
+  fx?: number;
+  fy?: number;
+  fz?: number;
+  isDir: boolean;
+  isCluster: boolean;
+  extension?: string | null;
+  parentPath?: string | null;
+  clusterSummary?: VisualGraphNode["clusterSummary"];
+  childCount: number;
+  depth: number;
+  visualState?: VisualState;
+  glyphText?: string;
+};
+
+type Graph3DLink = LinkObject<Graph3DNode> & {
+  id: string;
+  source: string | Graph3DNode;
+  target: string | Graph3DNode;
+  edgeType: string;
+  category: EdgeCategory;
+  color: string;
+  width: number;
+  curvature: number;
+};
+type GraphDisplayNode = VisualGraphNode & {
+  x: number;
+  y: number;
+  depth: number;
+  childCount: number;
+  /** Vega-style radial tree angle in degrees, 0=right/east. */
+  angle?: number;
+  /** True when radial label should read on the left side of the circle. */
+  leftside?: boolean;
+  /** Source depth in the projected 3D mode; used for visual scale/z ordering. */
+  z3d?: number;
+  projectionScale?: number;
+};
 
 const deserializeLayoutMode = (raw: string): LayoutMode => {
   try {
     const value = JSON.parse(raw);
     if (value === "tree") return "tree";
+    if (value === "graph3d" || value === "3d" || value === "3D") return "graph3d";
     if (value === "constellation" || value === "orbit" || value === "map") return "constellation";
   } catch {
     if (raw === "tree") return "tree";
+    if (raw === "graph3d" || raw === "3d" || raw === "3D") return "graph3d";
   }
   return "constellation";
 };
@@ -156,6 +242,8 @@ function GraphViewComponent({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
+  const graph3dRef = useRef<ForceGraph3DInstance<Graph3DNode, Graph3DLink> | null>(null);
+  const graph3dNodeRef = useRef<Map<string, Graph3DNode>>(new Map());
   const iconThemeRef = useRef<IconThemePayload | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
   const selectedNodeRef = useRef<string | null>(null);
@@ -190,6 +278,8 @@ function GraphViewComponent({
   const lastFrameKeyRef = useRef<string | null>(null);
   const cameraZoomTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraRatioRef = useRef<number>(1.0);
+  const previousNodePositionsRef = useRef<Map<string, { x: number; y: number }> | null>(null);
+  const transitionAnchorRef = useRef<{ path: string; x: number; y: number } | null>(null);
 
   /** Match Sigma wheel / double-click step (see DEFAULT_ZOOMING_RATIO in sigma) */
   const ZOOM_FACTOR = 1.5;
@@ -241,15 +331,17 @@ function GraphViewComponent({
         const isDir = Boolean(attrs.isDir);
         const isCluster = Boolean(attrs.isCluster);
         const baseColor = attrs.baseColor as string;
-        graph.setNodeAttribute(node, "glyphText", isCluster ? "" : icon.text);
+        const visualState = attrs.visualState as VisualState | undefined;
+        graph.setNodeAttribute(node, "glyphText", isCluster || visualState === "proxy" ? clusterGlyphForAttrs(attrs) : icon.text);
         graph.setNodeAttribute(
           node,
           "glyphColor",
-          isCluster ? baseColor : isDir ? String(attrs.glyphColor ?? baseColor) : icon.fg ?? baseColor,
+          isCluster || visualState === "proxy" ? baseColor : isDir ? String(attrs.glyphColor ?? baseColor) : icon.fg ?? baseColor,
         );
       });
     }
     rendererRef.current?.scheduleRefresh();
+    graph3dRef.current?.nodeColor(graph3dRef.current.nodeColor());
   }, [iconTheme]);
 
   // Listen for theme switches from elsewhere in the app (picker etc).
@@ -264,6 +356,24 @@ function GraphViewComponent({
     };
     document.addEventListener("orbit:icon-theme-changed", handler);
     return () => document.removeEventListener("orbit:icon-theme-changed", handler);
+  }, []);
+
+  // Repaint when the user picks a different flavor (or Omarchy re-emits a
+  // theme change). Reading the new CSS vars happens lazily inside
+  // edgeStyleForGraph / reduceNode — we just need to nudge Sigma.
+  useEffect(() => {
+    const handler = () => {
+      rendererRef.current?.scheduleRefresh();
+      graph3dRef.current?.backgroundColor(graphThemeColor("--orbit-graph-canvas", "#101010"));
+      graph3dRef.current?.nodeColor(graph3dRef.current.nodeColor());
+      graph3dRef.current?.linkColor(graph3dRef.current.linkColor());
+    };
+    window.addEventListener("orbit:flavor-changed", handler);
+    window.addEventListener("orbit:omarchy-theme-changed", handler);
+    return () => {
+      window.removeEventListener("orbit:flavor-changed", handler);
+      window.removeEventListener("orbit:omarchy-theme-changed", handler);
+    };
   }, []);
 
   const flushZoomDebounce = () => {
@@ -320,7 +430,7 @@ function GraphViewComponent({
     });
     // Merge breadcrumb nodes (parent folders from navigation history)
     const breadcrumbNodesFiltered = breadcrumbNodes.filter(bn => !nodes.some(n => n.path === bn.path));
-    const shaped = layoutMode === "constellation" && visibleTypes.has("cluster")
+    const shaped = layoutMode !== "tree" && visibleTypes.has("cluster")
       ? capVisualFanout(nodes, payload.edges, expandedFolders)
       : { nodes, edges: payload.edges };
     const allNodes: VisualGraphNode[] = [...shaped.nodes, ...breadcrumbNodesFiltered];
@@ -354,6 +464,11 @@ function GraphViewComponent({
     return buildGroupColors(tree, roots);
   }, [displayPayload]);
 
+  const graph3dData = useMemo(() => {
+    if (!displayPayload) return { nodes: [] as Graph3DNode[], links: [] as Graph3DLink[] };
+    return buildGraph3DData(displayNodes, displayPayload.edges, groupColors, iconTheme);
+  }, [displayPayload, displayNodes, groupColors, iconTheme]);
+
 
   useEffect(() => {
     navHistoryRef.current = navHistory;
@@ -374,6 +489,7 @@ function GraphViewComponent({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    capturePreviousNodePositions(graphRef.current, previousNodePositionsRef);
     rendererRef.current?.kill();
     rendererRef.current = null;
     graphRef.current = null;
@@ -381,11 +497,119 @@ function GraphViewComponent({
 
     if (!displayPayload || displayNodes.length === 0) return;
 
+    if (layoutMode === "graph3d") {
+      const container = containerRef.current;
+      const ForceGraph3DTyped = ForceGraph3D as unknown as {
+        new(element: HTMLElement, configOptions?: { controlType?: "trackball" | "orbit" | "fly"; rendererConfig?: { antialias?: boolean; alpha?: boolean } }): ForceGraph3DInstance<Graph3DNode, Graph3DLink>;
+      };
+      const graphApi = new ForceGraph3DTyped(container, {
+        controlType: "orbit",
+        rendererConfig: { antialias: true, alpha: false },
+      })
+        .backgroundColor(graphThemeColor("--orbit-graph-canvas", "#101010"))
+        .showNavInfo(false)
+        .width(container.clientWidth || 800)
+        .height(container.clientHeight || 600)
+        .nodeLabel((node) => showLabels ? graph3dNodeLabel(node) : "")
+        .nodeRelSize(nodeView === "icons" ? 7.5 : 9.2)
+        .nodeVal((node) => node.val)
+        .nodeColor((node) => graph3dNodeColor(node, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, graph3dData.links))
+        .nodeThreeObject((node: Graph3DNode) => graph3dNodeObject(node, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, graph3dData.links, showLabels))
+        .nodeOpacity(1)
+        .nodeResolution(nodeView === "icons" ? 18 : 22)
+        .linkColor((link) => graph3dLinkColor(link, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated))
+        .linkOpacity(0.74)
+        .linkWidth((link) => graph3dLinkWidth(link, hoveredNodeRef.current, selectedNodeRef.current))
+        .linkCurvature((link) => link.curvature)
+        .linkDirectionalParticles((link) => graph3dLinkParticles(link, hoveredNodeRef.current, selectedNodeRef.current))
+        .linkDirectionalParticleWidth(1.4)
+        .enableNodeDrag(true)
+        .enableNavigationControls(true)
+        .cooldownTicks(120)
+        .onEngineStop(() => graphApi.zoomToFit(480, 64))
+        .onNodeHover((node) => {
+          const id = node?.id ?? null;
+          hoveredNodeRef.current = id;
+          setHoveredNode((prev) => prev === id ? prev : id);
+          setGraph3DAutoRotate(graphApi, !id);
+          graphApi.nodeColor(graphApi.nodeColor());
+          graphApi.nodeThreeObject(graphApi.nodeThreeObject());
+          graphApi.linkColor(graphApi.linkColor());
+          graphApi.linkWidth(graphApi.linkWidth());
+          graphApi.linkDirectionalParticles(graphApi.linkDirectionalParticles());
+        })
+        .onBackgroundClick(() => {
+          hoveredNodeRef.current = null;
+          setHoveredNode(null);
+          setGraph3DAutoRotate(graphApi, true);
+        })
+        .onNodeClick((node, event) => {
+          selectedNodeRef.current = node.id;
+          setSelectedNode((prev) => prev === node.id ? prev : node.id);
+          if (node.path) onSelectPath(node.path);
+          setGraph3DAutoRotate(graphApi, false);
+          focusGraph3DNode(graphApi, node, 900);
+          graphApi.nodeColor(graphApi.nodeColor());
+          graphApi.nodeThreeObject(graphApi.nodeThreeObject());
+          graphApi.linkColor(graphApi.linkColor());
+          graphApi.linkWidth(graphApi.linkWidth());
+          if (event.detail > 1) {
+            if (node.isCluster) {
+              const folderPath = node.parentPath || node.path.replace("/__cluster__", "").replace(/\/__visual_[^/]+$/, "");
+              setExpandingCluster(folderPath);
+              onExpandCluster?.(folderPath);
+              setTimeout(() => setExpandingCluster(null), 550);
+            } else if (node.isDir) {
+              onFocusFolder?.(node.path);
+            } else {
+              onOpenPath?.(node.path);
+            }
+          }
+        })
+        .onNodeDragEnd((node) => {
+          node.fx = node.x;
+          node.fy = node.y;
+          node.fz = node.z;
+        })
+        .graphData(graph3dData);
+
+      const api = graphApi as unknown as { d3Force?: (name: string, force?: unknown) => any; d3ReheatSimulation?: () => void };
+      const nodesById = new Map(graph3dData.nodes.map((node) => [node.id, node]));
+      api.d3Force?.("link")?.distance?.((link: Graph3DLink) => graph3dLinkDistance(link, nodesById));
+      api.d3Force?.("charge")?.strength?.((node: Graph3DNode) => node.isDir ? -82 : -34);
+      const collide = api.d3Force?.("collide");
+      collide?.radius?.((node: Graph3DNode) => Math.max(node.isDir ? 20 : 13, Math.sqrt(Math.max(1, node.val)) * 4.2));
+      api.d3ReheatSimulation?.();
+
+      graph3dRef.current = graphApi;
+      graph3dNodeRef.current = new Map(graph3dData.nodes.map((node) => [node.id, node]));
+      configureGraph3DControls(graphApi);
+      setZoomLevel(1);
+
+      const resizeObserver = new ResizeObserver(([entry]) => {
+        const width = Math.max(1, Math.round(entry.contentRect.width));
+        const height = Math.max(1, Math.round(entry.contentRect.height));
+        graphApi.width(width).height(height);
+      });
+      resizeObserver.observe(container);
+
+      requestAnimationFrame(() => graphApi.zoomToFit(620, 72));
+
+      return () => {
+        resizeObserver.disconnect();
+        graphApi._destructor();
+        graph3dRef.current = null;
+        graph3dNodeRef.current = new Map();
+        container.replaceChildren();
+      };
+    }
+
     const graph = new Graph();
     graphRef.current = graph;
 
     for (const node of displayNodes) {
-      const baseSize = getNodeSize(node);
+      const baseSize = getNodeSize(node) * (node.projectionScale ?? 1);
+      const startPosition = transitionStartPosition(node, previousNodePositionsRef.current, transitionAnchorRef.current);
       const visualState = node.visualState ?? nodeVisualState(node);
       // Resolve glyph + color ONCE per node (path-derived; never changes).
       // The overlay reads these attrs directly so it never re-runs the
@@ -398,8 +622,10 @@ function GraphViewComponent({
       graph.addNode(String(node.id), {
         label: visibleNodeLabel(node),
         fullLabel: node.label,
-        x: node.x,
-        y: node.y,
+        x: startPosition.x,
+        y: startPosition.y,
+        targetX: node.x,
+        targetY: node.y,
         size: baseSize,
         baseSize,
         color: baseColor,
@@ -412,15 +638,20 @@ function GraphViewComponent({
         clusterSummary: node.clusterSummary,
         childCount: node.childCount,
         depth: node.depth,
+        angle: node.angle,
+        leftside: node.leftside,
+        z3d: node.z3d,
+        projectionScale: node.projectionScale,
         visualState,
         proxyKind: node.proxyKind,
-        glyphText: visualState === "proxy" || node.isCluster ? "" : icon.text,
-        glyphColor: node.isCluster ? baseColor : node.isDir ? folderGlyphColor : icon.fg ?? baseColor,
+        glyphText: node.isCluster || visualState === "proxy" ? clusterGlyphForNode(node) : icon.text,
+        glyphColor: node.isCluster || visualState === "proxy" ? baseColor : node.isDir ? folderGlyphColor : icon.fg ?? baseColor,
         // glyphBaseSize is stored so the renderer can scale glyphs independently
         // of the sphere size. In icons mode the sphere is set to 1 graph unit
         // (a tiny invisible hit-target); glyphBaseSize carries the true visual scale.
         glyphBaseSize: baseSize,
         forceLabel: nodeView === "icons" && !node.isCluster,
+        baseZIndex: Math.round(((node.z3d ?? 0) + 2000) * 10),
       });
     }
 
@@ -475,8 +706,8 @@ function GraphViewComponent({
         line: EdgeClampedProgram,
         curve: EdgeCurveProgram,
       },
-      labelColor: { color: "#d4d4d4" },
-      labelFont: "Inter, system-ui, sans-serif",
+      labelColor: { color: graphThemeColor("--omarchy-fg", "#d4d4d4") },
+      labelFont: "IBM Plex Sans, Inter, system-ui, sans-serif",
       labelSize: 12,
       labelWeight: "600",
       labelDensity: 0.56,
@@ -485,8 +716,8 @@ function GraphViewComponent({
       // Icons mode bypasses this entirely (forceLabel handles glyphs),
       // but in spheres mode this prevents the text storm at zoom-out.
       labelRenderedSizeThreshold: 5,
-      defaultNodeColor: "#94a3b8",
-      defaultEdgeColor: "rgba(51,80,100,0.12)",
+      defaultNodeColor: graphThemeColor("--omarchy-color7", "#94a3b8"),
+      defaultEdgeColor: withAlpha(graphThemeColor("--omarchy-border", "#335064"), 0.32),
       zIndex: true,
       minCameraRatio: 0.03,
       maxCameraRatio: 8,
@@ -515,7 +746,18 @@ function GraphViewComponent({
         return;
       }
       // Single click: folder → open its graph, file → preview in inspector
-      if (isDir) onFocusFolder?.(path);
+      if (isDir) {
+        const display = renderer.getNodeDisplayData(node);
+        const x = Number(graph.getNodeAttribute(node, "x"));
+        const y = Number(graph.getNodeAttribute(node, "y"));
+        transitionAnchorRef.current = { path, x, y };
+        if (display) {
+          renderer.getCamera().animate({ x: display.x, y: display.y, ratio: 0.32 }, { duration: 180, easing: "quadraticOut" });
+          window.setTimeout(() => onFocusFolder?.(path), 110);
+        } else {
+          onFocusFolder?.(path);
+        }
+      }
       else onSelectPath(path);
     });
 
@@ -586,7 +828,9 @@ function GraphViewComponent({
 
     // Reframe only when the loaded scope materially changes. This prevents HMR
     // and small visual-state updates from fighting the user's current camera.
-    const frameKey = `${GRAPH_LAYOUT_VERSION}:${displayPayload.rootPath}:${displayPayload.mode}:${displayNodes.length}:${displayPayload.edges.length}`;
+    animateGraphIntoPlace(graph, renderer, 420);
+
+    const frameKey = `${GRAPH_LAYOUT_VERSION}:${layoutMode}:${displayPayload.rootPath}:${displayPayload.mode}:${displayNodes.length}:${displayPayload.edges.length}`;
     if (isFirstRenderRef.current || lastFrameKeyRef.current !== frameKey) {
       isFirstRenderRef.current = false;
       lastFrameKeyRef.current = frameKey;
@@ -605,12 +849,18 @@ function GraphViewComponent({
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, groupColors, showLabels, dimUnrelated, nodeView, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
+  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster]);
 
   const focusSelected = () => {
+    const selected = selectedNodeRef.current;
+    if (layoutMode === "graph3d") {
+      const graph3d = graph3dRef.current;
+      const node = selected ? graph3dNodeRef.current.get(selected) : null;
+      if (graph3d && node) focusGraph3DNode(graph3d, node, 520);
+      return;
+    }
     const renderer = rendererRef.current;
     const graph = graphRef.current;
-    const selected = selectedNodeRef.current;
     if (!renderer || !graph || !selected || !graph.hasNode(selected)) return;
     // Sigma's camera coords are normalized framed-graph space, NOT raw layout
     // coordinates. Use getNodeDisplayData to get the correct (x,y) in camera
@@ -625,6 +875,10 @@ function GraphViewComponent({
   };
 
   const fitGraph = () => {
+    if (layoutMode === "graph3d") {
+      graph3dRef.current?.zoomToFit(420, 72);
+      return;
+    }
     const renderer = rendererRef.current;
     if (!renderer) return;
     const camera = renderer.getCamera();
@@ -679,17 +933,17 @@ function GraphViewComponent({
   const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
 
   return (
-    <div className="graph-wrap graph-workbench">
+    <div className={`graph-wrap graph-workbench graph-layout-${layoutMode}`}>
       <div className="graph-commandbar">
         <div className="graph-mode-tabs" aria-label="Graph layout">
-          {(["constellation", "tree"] as LayoutMode[]).map((mode) => (
+          {(["constellation", "tree", "graph3d"] as LayoutMode[]).map((mode) => (
             <button
               key={mode}
               className={layoutMode === mode ? "active" : ""}
               onClick={() => setLayoutMode(mode)}
-              title={`${mode} layout`}
+              title={layoutModeTitle(mode)}
             >
-              {mode}
+              {layoutModeLabel(mode)}
             </button>
           ))}
         </div>
@@ -706,6 +960,7 @@ function GraphViewComponent({
             </button>
           ))}
         </div>
+
 
         <div className="graph-switches">
           <button
@@ -889,10 +1144,386 @@ function GraphViewComponent({
   );
 }
 
+
+function buildGraph3DData(
+  nodes: GraphDisplayNode[],
+  edges: GraphEdge[],
+  groupColors: Map<number, string>,
+  iconTheme: IconThemePayload | null,
+): { nodes: Graph3DNode[]; links: Graph3DLink[] } {
+  const byId = new Set(nodes.map((node) => String(node.id)));
+  const parentByChild = new Map<number, number>();
+  const siblingIndex = new Map<number, number>();
+  const siblingCount = new Map<number, number>();
+  for (const edge of edges) {
+    if (edge.edgeType !== "contains") continue;
+    parentByChild.set(edge.targetId, edge.sourceId);
+  }
+  const childrenByParent = new Map<number, number[]>();
+  for (const [child, parent] of parentByChild) {
+    const siblings = childrenByParent.get(parent) ?? [];
+    siblings.push(child);
+    childrenByParent.set(parent, siblings);
+  }
+  for (const siblings of childrenByParent.values()) {
+    siblings.forEach((child, index) => {
+      siblingIndex.set(child, index);
+      siblingCount.set(child, siblings.length);
+    });
+  }
+  const scale = 0.14;
+  const graphNodes = nodes.map((node) => {
+    const visualState = node.visualState ?? nodeVisualState(node);
+    const icon = iconRuleForPath(node.path, node.isDir, node.isCluster, iconTheme);
+    const baseColor = graph3dNodeBaseColor(node, groupColors);
+    const glyphText = node.isCluster || visualState === "proxy" ? clusterGlyphForNode(node) : icon.text;
+    const depthZ = (node.depth - 1.5) * 14;
+    const index = siblingIndex.get(node.id) ?? node.id;
+    const total = Math.max(1, siblingCount.get(node.id) ?? 1);
+    const orbitAngle = index * GOLDEN_ANGLE;
+    const orbitRadius = parentByChild.has(node.id) ? Math.min(34, 10 + Math.sqrt(total) * 3.2 + node.depth * 1.4) : 0;
+    const localLift = parentByChild.has(node.id) ? ((index % 5) - 2) * 5.5 : 0;
+    return {
+      id: String(node.id),
+      name: node.label,
+      label: visibleNodeLabel(node),
+      path: node.path,
+      parentPath: node.parentPath,
+      color: baseColor,
+      val: Math.max(9, getNodeSize(node) * (node.isDir ? 2.05 : 1.55)),
+      x: Number.isFinite(node.x) ? node.x * scale + Math.cos(orbitAngle) * orbitRadius : undefined,
+      y: Number.isFinite(node.y) ? node.y * scale + Math.sin(orbitAngle) * orbitRadius : undefined,
+      z: Number.isFinite(depthZ) ? depthZ + localLift : undefined,
+      isDir: node.isDir,
+      isCluster: node.isCluster,
+      extension: node.extension,
+      clusterSummary: node.clusterSummary,
+      childCount: node.childCount,
+      depth: node.depth,
+      visualState,
+      glyphText,
+    } satisfies Graph3DNode;
+  });
+
+  const seen = new Set<string>();
+  const links: Graph3DLink[] = [];
+  for (const edge of edges) {
+    const source = String(edge.sourceId);
+    const target = String(edge.targetId);
+    if (!byId.has(source) || !byId.has(target)) continue;
+    const pairKey = graphEdgePairKey(source, target);
+    if (seen.has(pairKey)) continue;
+    seen.add(pairKey);
+    const category = edgeCategoryForType(edge.edgeType);
+    const style = edgeStyleForGraphEdge(edge, groupColors);
+    links.push({
+      id: String(edge.id),
+      source,
+      target,
+      edgeType: edge.edgeType,
+      category,
+      color: style.color,
+      width: style.size,
+      curvature: category === "hierarchy" ? 0 : style.curvature * 0.35,
+    });
+  }
+  return { nodes: graphNodes, links };
+}
+
+function graph3dNodeLabel(node: Graph3DNode): string {
+  const kind = node.isCluster ? "Cluster" : node.isDir ? "Folder" : node.extension || "File";
+  const glyph = node.glyphText ? `${node.glyphText} ` : "";
+  return `<div class="graph-3d-label"><strong>${escapeHtml(`${glyph}${node.name}`)}</strong><br/><span>${escapeHtml(kind)}</span><br/><small>${escapeHtml(shortNodePath(node.path))}</small></div>`;
+}
+
+function graph3dNodeBaseColor(node: GraphDisplayNode, groupColors: Map<number, string>): string {
+  if (node.isDir && !node.isCluster) return graph3dSolidColor(groupColors.get(node.id) ?? graphThemeColor("--omarchy-color2", "#8bd17c"), "#8bd17c");
+  const color = getNodeColor(node);
+  return graph3dSolidColor(color, NODE_TYPE_FALLBACKS[getNodeType(node)] ?? "#d8dee9");
+}
+
+function graph3dNodeObject(
+  node: Graph3DNode,
+  hoveredId: string | null,
+  selectedId: string | null,
+  dimUnrelated: boolean,
+  links: Graph3DLink[],
+  showText: boolean,
+): THREE.Object3D {
+  const focus = hoveredId || selectedId;
+  const isActive = node.id === hoveredId || node.id === selectedId;
+  const isRelated = Boolean(focus) && links.some((link) => {
+    const source = graph3dEndpointId(link.source);
+    const target = graph3dEndpointId(link.target);
+    return (source === focus && target === node.id) || (target === focus && source === node.id);
+  });
+  const dimmed = dimUnrelated && Boolean(focus) && !isActive && !isRelated;
+  const radius = Math.max(node.isDir ? 11 : 8.4, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 4.35 : 3.65));
+  const color = graph3dSolidColor(graph3dNodeColor(node, hoveredId, selectedId, dimUnrelated, links), node.color);
+  const group = new THREE.Group();
+  const geometry = graph3dNodeGeometry(node, isActive ? radius * 1.18 : radius);
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: dimmed ? 0.28 : 1,
+    depthWrite: !dimmed,
+  });
+  const core = new THREE.Mesh(geometry, material);
+  core.rotation.x = node.isDir ? Math.PI / 7 : 0;
+  core.rotation.y = node.isCluster || node.visualState === "proxy" ? Math.PI / 4 : 0;
+  group.add(core);
+
+  const shouldShowBillboard = showText && (node.isDir || node.isCluster || isActive || isRelated);
+  if (shouldShowBillboard && !dimmed) {
+    const sprite = graph3dBillboard(node, isActive, radius);
+    sprite.position.y = radius * 1.55;
+    group.add(sprite);
+  }
+
+  return group;
+}
+
+function graph3dNodeGeometry(node: Graph3DNode, radius: number): THREE.BufferGeometry {
+  if (node.isDir && !node.isCluster) return new THREE.BoxGeometry(radius * 1.55, radius * 1.12, radius * 1.18, 1, 1, 1);
+  if (node.isCluster || node.visualState === "proxy") return new THREE.OctahedronGeometry(radius * 1.08, 0);
+  if (node.extension === "md" || node.extension === "txt") return new THREE.CylinderGeometry(radius * 0.78, radius * 0.78, radius * 0.44, 6);
+  return new THREE.SphereGeometry(radius, 16, 10);
+}
+
+function graph3dBillboard(node: Graph3DNode, active: boolean, radius: number): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  const width = active ? 420 : 340;
+  const height = active ? 124 : 96;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.clearRect(0, 0, width, height);
+    ctx.font = `${active ? 42 : 34}px Lilex, IBM Plex Sans, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = graph3dSolidColor(active ? "#f5c542" : node.color, "#e5e7eb");
+    const glyph = node.glyphText || (node.isDir ? "" : "•");
+    ctx.fillText(glyph, width / 2, height * 0.34);
+    ctx.font = `${active ? 24 : 19}px IBM Plex Sans, sans-serif`;
+    ctx.fillStyle = active ? "#f8f1bf" : "#e5e7eb";
+    const label = node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label;
+    ctx.fillText(label, width / 2, height * 0.72);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+  const scale = active ? radius * 3.15 : radius * 2.45;
+  sprite.scale.set(scale * (width / height), scale, 1);
+  return sprite;
+}
+
+function graph3dSolidColor(value: string, fallback = "#d8dee9"): string {
+  const token = value.trim().match(/^var\((--[^),\s]+)(?:,\s*([^)]*))?\)$/);
+  if (token) return graph3dSolidColor(graphThemeColor(token[1], token[2]?.trim() || fallback), fallback);
+  const rgb = value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgb) return graph3dRgbToHex(Number(rgb[1]), Number(rgb[2]), Number(rgb[3]));
+  const hex = value.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!hex) return fallback;
+  if (hex[1].length === 6) return `#${hex[1]}`;
+  return `#${hex[1].split("").map((char) => char + char).join("")}`;
+}
+
+function graph3dBrighten(value: string, factor: number): string {
+  const color = graph3dSolidColor(value);
+  const raw = color.slice(1);
+  const parsed = Number.parseInt(raw, 16);
+  const r = Math.min(255, Math.round(((parsed >> 16) & 255) * factor));
+  const g = Math.min(255, Math.round(((parsed >> 8) & 255) * factor));
+  const b = Math.min(255, Math.round((parsed & 255) * factor));
+  return graph3dRgbToHex(r, g, b);
+}
+
+function graph3dRgbToHex(r: number, g: number, b: number): string {
+  return `#${[r, g, b].map((part) => Math.max(0, Math.min(255, part)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function graph3dNodeColor(
+  node: Graph3DNode,
+  hoveredId: string | null,
+  selectedId: string | null,
+  dimUnrelated: boolean,
+  links: Graph3DLink[],
+): string {
+  if (node.id === selectedId) return "#f5c542";
+  if (node.id === hoveredId) return "#fff4a8";
+  if (!dimUnrelated || (!hoveredId && !selectedId)) return node.color;
+  const focus = hoveredId || selectedId;
+  const related = links.some((link) => {
+    const source = graph3dEndpointId(link.source);
+    const target = graph3dEndpointId(link.target);
+    return (source === focus && target === node.id) || (target === focus && source === node.id);
+  });
+  return related ? node.color : withAlpha(node.color, 0.22);
+}
+
+function graph3dLinkColor(link: Graph3DLink, hoveredId: string | null, selectedId: string | null, dimUnrelated: boolean): string {
+  const source = graph3dEndpointId(link.source);
+  const target = graph3dEndpointId(link.target);
+  const focus = hoveredId || selectedId;
+  if (focus && (source === focus || target === focus)) return withAlpha(link.color, 0.95);
+  return dimUnrelated && focus ? withAlpha(link.color, 0.18) : withAlpha(link.color, link.category === "hierarchy" ? 0.82 : 0.9);
+}
+
+function graph3dLinkWidth(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
+  const source = graph3dEndpointId(link.source);
+  const target = graph3dEndpointId(link.target);
+  const focus = hoveredId || selectedId;
+  return focus && (source === focus || target === focus) ? Math.max(4.2, link.width * 4.6) : Math.max(1.35, link.width * 1.8);
+}
+
+function graph3dLinkDistance(link: Graph3DLink, nodesById: Map<string, Graph3DNode>): number {
+  const source = nodesById.get(graph3dEndpointId(link.source));
+  const target = nodesById.get(graph3dEndpointId(link.target));
+  if (link.category !== "hierarchy") return 46;
+  if (source?.isDir && target?.isDir) return 42;
+  if (source?.isDir || target?.isDir) return 24;
+  return 18;
+}
+
+function graph3dLinkParticles(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
+  if (link.category === "hierarchy") return 0;
+  const source = graph3dEndpointId(link.source);
+  const target = graph3dEndpointId(link.target);
+  const focus = hoveredId || selectedId;
+  return focus && (source === focus || target === focus) ? 2 : 0;
+}
+
+function graph3dEndpointId(endpoint: string | number | Graph3DNode): string {
+  return typeof endpoint === "object" ? String(endpoint.id) : String(endpoint);
+}
+
+function focusGraph3DNode(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>, node: Graph3DNode, duration = 700) {
+  const x = node.x ?? 0;
+  const y = node.y ?? 0;
+  const z = node.z ?? 0;
+  const distance = 42;
+  const length = Math.hypot(x, y, z);
+  const ratio = length > 0 ? 1 + distance / length : 1;
+  graph.cameraPosition(
+    length > 0 ? { x: x * ratio, y: y * ratio, z: z * ratio } : { x: 0, y: 0, z: distance },
+    { x, y, z },
+    duration,
+  );
+}
+
+function configureGraph3DControls(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>) {
+  const controls = graph3dControls(graph);
+  if (!controls) return;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.28;
+}
+
+function setGraph3DAutoRotate(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>, enabled: boolean) {
+  const controls = graph3dControls(graph);
+  if (controls) controls.autoRotate = enabled;
+}
+
+function graph3dControls(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>) {
+  return (graph as unknown as { controls?: () => { autoRotate?: boolean; autoRotateSpeed?: number; enableDamping?: boolean; dampingFactor?: number } }).controls?.();
+}
+
+function edgeStyleForGraphEdge(edge: GraphEdge, groupColors: Map<number, string>) {
+  const category = edgeCategoryForType(edge.edgeType);
+  const base = category === "hierarchy" ? (groupColors.get(edge.sourceId) ?? edgeCategoryColor(category)) : edgeCategoryColor(category);
+  return {
+    color: withAlpha(base, category === "hierarchy" ? 0.82 : 0.9),
+    size: category === "hierarchy" ? 1.35 : 1.9,
+    curvature: category === "hierarchy" ? 0 : Math.sin(Number(edge.id) * 12.9898) * 0.22,
+  };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function layoutModeLabel(mode: LayoutMode): string {
+  if (mode === "constellation") return "Atlas";
+  if (mode === "tree") return "Tree";
+  return "3D";
+}
+
+function layoutModeTitle(mode: LayoutMode): string {
+  if (mode === "constellation") return "Atlas radial map layout";
+  if (mode === "tree") return "2D tree layout";
+  return "Real Three.js 3D force graph with orbit controls";
+}
+
 function layoutNodes(nodes: VisualGraphNode[], edges: GraphEdge[], mode: LayoutMode): GraphDisplayNode[] {
   if (nodes.length === 0) return [];
   if (mode === "tree") return treeLayout(nodes, edges);
   return constellationLayout(nodes, edges);
+}
+
+function capturePreviousNodePositions(
+  graph: Graph | null,
+  target: React.MutableRefObject<Map<string, { x: number; y: number }> | null>,
+) {
+  if (!graph) return;
+  const positions = new Map<string, { x: number; y: number }>();
+  graph.forEachNode((_node, attrs) => {
+    const path = typeof attrs.path === "string" ? attrs.path : null;
+    const x = Number(attrs.x);
+    const y = Number(attrs.y);
+    if (path && Number.isFinite(x) && Number.isFinite(y)) positions.set(path, { x, y });
+  });
+  target.current = positions;
+}
+
+function transitionStartPosition(
+  node: GraphDisplayNode,
+  previous: Map<string, { x: number; y: number }> | null,
+  anchor: { path: string; x: number; y: number } | null,
+) {
+  const direct = previous?.get(node.path);
+  if (direct) return direct;
+  if (anchor && (node.path === anchor.path || node.path.startsWith(`${anchor.path}/`))) {
+    const jitter = seededAngle(node.id);
+    return {
+      x: anchor.x + Math.cos(jitter) * 10,
+      y: anchor.y + Math.sin(jitter) * 10,
+    };
+  }
+  return { x: node.x, y: node.y };
+}
+
+function animateGraphIntoPlace(graph: Graph, renderer: Sigma, duration = 420) {
+  const starts = new Map<string, { x: number; y: number; tx: number; ty: number }>();
+  graph.forEachNode((node, attrs) => {
+    const x = Number(attrs.x);
+    const y = Number(attrs.y);
+    const tx = Number(attrs.targetX ?? attrs.x);
+    const ty = Number(attrs.targetY ?? attrs.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(tx) || !Number.isFinite(ty)) return;
+    if (Math.abs(x - tx) < 0.5 && Math.abs(y - ty) < 0.5) return;
+    starts.set(node, { x, y, tx, ty });
+  });
+  if (!starts.size) return;
+  const startTime = performance.now();
+  const step = (now: number) => {
+    const t = clampNumber((now - startTime) / duration, 0, 1);
+    const eased = 1 - Math.pow(1 - t, 3);
+    starts.forEach((pos, node) => {
+      if (!graph.hasNode(node)) return;
+      graph.setNodeAttribute(node, "x", pos.x + (pos.tx - pos.x) * eased);
+      graph.setNodeAttribute(node, "y", pos.y + (pos.ty - pos.y) * eased);
+    });
+    renderer.scheduleRefresh();
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 function dedupeGraphEdges(edges: GraphEdge[]): GraphEdge[] {
@@ -1097,186 +1728,147 @@ function syntheticEdgeId(parentId: number, index = 0) {
   return -60_000_000 - Math.abs(parentId) * 10 - index;
 }
 
-// Constellation layout: folders are structural branch arms; files and proxy
-// clusters are local preview shelves near their parent. This intentionally
-// avoids global depth rings, which create donut/spoke-wheel graphs on broad
-// folders.
+// Vega radial tidy layout: mirrors the Vega `stratify -> tree -> polar`
+// example the user referenced. The hierarchy decides position first: leaves get
+// stable angular slots, every parent sits at the midpoint of its children, and
+// depth maps directly to radius. No global force solver runs afterward, because
+// that destroys the readable tree structure and creates the "bunches" problem.
 function constellationLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
   if (nodes.length === 0) return [];
   const tree = hierarchy(nodes, edges);
   const roots = tree.roots.length ? tree.roots : [nodes[0].id];
+  return vegaRadialTidyLayout(nodes, roots, tree);
+}
+
+const VEGA_RADIAL_LEAF_GAP = 180;
+const VEGA_RADIAL_DEPTH_GAP = 520;
+const VEGA_RADIAL_ROOT_GAP_LEAVES = 8;
+const VEGA_RADIAL_MIN_RADIUS = 1350;
+const VEGA_RADIAL_START_ANGLE = 270; // Same visual start as Vega sample: root fan begins at top.
+
+function vegaRadialTidyLayout(
+  nodes: VisualGraphNode[],
+  roots: number[],
+  tree: ReturnType<typeof hierarchy>,
+): GraphDisplayNode[] {
   const placed = new Map<number, GraphDisplayNode>();
-  const familyWedges: FamilyWedge[] = [];
+  const orderedRoots = [...roots].sort((a, b) => compareGraphChildren(tree.byId.get(a), tree.byId.get(b)));
+  const maxDepth = Math.max(1, ...orderedRoots.map((id) => subtreeMaxDepth(id, tree.children)));
+  const totalLeafSlots = orderedRoots.reduce((sum, id) => sum + vegaLeafSlots(id, tree), 0)
+    + Math.max(0, orderedRoots.length - 1) * VEGA_RADIAL_ROOT_GAP_LEAVES;
 
-  const familyIds = roots.length === 1 ? (tree.children.get(roots[0]) ?? roots) : roots;
-  const familyLeafCounts = familyIds.map(id => Math.max(1, countLeaves(id, tree.children)));
-  const familyLeafTotal = familyLeafCounts.reduce((a, b) => a + b, 0) || 1;
+  // Vega's sample exposes this as a radius signal. Orbit derives it from graph
+  // density so crowded folders expand outward instead of stacking icons.
+  const circumferenceRadius = (Math.max(8, totalLeafSlots) * VEGA_RADIAL_LEAF_GAP) / (Math.PI * 2);
+  const depthRadius = (maxDepth + 0.5) * VEGA_RADIAL_DEPTH_GAP;
+  const radius = Math.max(VEGA_RADIAL_MIN_RADIUS, circumferenceRadius, depthRadius);
+  const depthGap = radius / Math.max(1, maxDepth + 0.35);
 
-  if (roots.length === 1) {
-    const rootId = roots[0];
-    const rootNode = tree.byId.get(rootId);
-    if (rootNode) {
-      const kidCount = (tree.children.get(rootId) ?? []).length;
-      placed.set(rootId, { ...rootNode, x: 0, y: 0, depth: 0, childCount: kidCount });
-    }
+  let cursor = 0;
+  const rootDepth = orderedRoots.length === 1 ? 0 : 1;
+  for (const root of orderedRoots) {
+    const slots = vegaLeafSlots(root, tree);
+    // Multiple filesystem roots behave like children of an implicit center root,
+    // matching Vega's stratified hierarchy without drawing a fake node.
+    placeVegaRadialNode(root, rootDepth, cursor, slots, totalLeafSlots, depthGap, tree, placed);
+    cursor += slots + VEGA_RADIAL_ROOT_GAP_LEAVES;
   }
 
-  const FAMILY_GAP = familyIds.length > 1 ? 0.05 : 0;
-  const totalGap = FAMILY_GAP * familyIds.length;
-  const usableArc = Math.PI * 2 - totalGap;
-  let cursor = -Math.PI / 2;
-
-  for (let i = 0; i < familyIds.length; i += 1) {
-    const span = usableArc * (familyLeafCounts[i] / familyLeafTotal);
-    const wedgeStart = cursor;
-    const wedgeEnd = cursor + span;
-    const heading = (wedgeStart + wedgeEnd) / 2;
-    const maxDepth = subtreeMaxDepth(familyIds[i], tree.children);
-    placeConstellationBranch(
-      familyIds[i],
-      0,
-      0,
-      heading,
-      roots.length === 1 ? 1 : 0,
-      wedgeStart,
-      wedgeEnd,
-      tree,
-      placed,
-    );
-    familyWedges.push({
-      id: familyIds[i],
-      startAngle: wedgeStart,
-      endAngle: wedgeEnd,
-      maxDepth: (roots.length === 1 ? 1 : 0) + maxDepth,
-    });
-    cursor += span + FAMILY_GAP;
-  }
-
-  lastFamilyWedges = familyWedges;
+  lastFamilyWedges = orderedRoots.map((id) => {
+    const node = placed.get(id);
+    const angle = ((node?.angle ?? VEGA_RADIAL_START_ANGLE) * Math.PI) / 180;
+    const spread = Math.max(0.08, (vegaLeafSlots(id, tree) / Math.max(1, totalLeafSlots)) * Math.PI * 2 * 0.5);
+    return {
+      id,
+      startAngle: angle - spread,
+      endAngle: angle + spread,
+      maxDepth: subtreeMaxDepth(id, tree.children),
+    };
+  });
 
   return nodes.map((node, index) => placed.get(node.id) ?? fallbackNode(node, index, 0, 0));
 }
 
-const BRANCH_BASE_STEP = 210;
-const BRANCH_MIN_STEP = 118;
-const PREVIEW_COLUMNS = 9;
+function placeVegaRadialNode(
+  id: number,
+  depth: number,
+  startSlot: number,
+  slotSpan: number,
+  totalSlots: number,
+  depthGap: number,
+  tree: ReturnType<typeof hierarchy>,
+  placed: Map<number, GraphDisplayNode>,
+): number {
+  const node = tree.byId.get(id);
+  if (!node || placed.has(id)) return startSlot + slotSpan / 2;
+
+  const kids = orderedVegaChildren(id, tree);
+  let alpha: number;
+  if (!kids.length) {
+    alpha = startSlot + slotSpan / 2;
+  } else {
+    let cursor = startSlot;
+    const childAlphas: number[] = [];
+    for (const child of kids) {
+      const childSlots = vegaLeafSlots(child, tree);
+      childAlphas.push(placeVegaRadialNode(child, depth + 1, cursor, childSlots, totalSlots, depthGap, tree, placed));
+      cursor += childSlots;
+    }
+    alpha = childAlphas.reduce((sum, value) => sum + value, 0) / Math.max(1, childAlphas.length);
+  }
+
+  const normalized = totalSlots <= 0 ? 0 : alpha / totalSlots;
+  const angle = (VEGA_RADIAL_START_ANGLE + normalized * 360) % 360;
+  const radians = (Math.PI * angle) / 180;
+  const childCount = kids.length;
+  const radialDepth = depth === 0 && tree.roots.length === 1 ? 0 : depth;
+  const nodeRadius = radialDepth * depthGap;
+  const leftside = angle >= 90 && angle <= 270;
+
+  placed.set(id, {
+    ...node,
+    x: Math.cos(radians) * nodeRadius,
+    y: Math.sin(radians) * nodeRadius,
+    depth,
+    childCount,
+    angle,
+    leftside,
+  });
+
+  return alpha;
+}
+
+function orderedVegaChildren(id: number, tree: ReturnType<typeof hierarchy>) {
+  const kids = [...(tree.children.get(id) ?? [])];
+  return kids.sort((a, b) => {
+    const nodeA = tree.byId.get(a);
+    const nodeB = tree.byId.get(b);
+    // Keep folders first so the radial tree reads as structural branches, but
+    // otherwise preserve name ordering for deterministic inspectability.
+    return compareGraphChildren(nodeA, nodeB);
+  });
+}
+
+function vegaLeafSlots(id: number, tree: ReturnType<typeof hierarchy>, seen = new Set<number>()): number {
+  if (seen.has(id)) return 1;
+  seen.add(id);
+  const node = tree.byId.get(id);
+  if (!node) return 1;
+  const kids = orderedVegaChildren(id, tree);
+  if (!kids.length) {
+    if (node.visualState === "proxy" || node.isCluster) return 5.4;
+    if (node.isDir) return 3.2;
+    return 1.35;
+  }
+  const childSlots = kids.reduce((sum, child) => sum + vegaLeafSlots(child, tree, new Set(seen)), 0);
+  // Parents with many direct children reserve a little extra arc, matching the
+  // Vega mental model while avoiding the old shelf pile-ups.
+  return Math.max(childSlots, Math.min(14, 1.6 + kids.length * 0.42));
+}
 
 function orbitRadiusForDepth(depth: number): number {
   if (depth <= 0) return 0;
-  // Used only by the soft halo layer. Keep it roughly aligned with cumulative
-  // branch reach, not a placement radius, so it doesn't imply visible rings.
-  return 170 + depth * 165;
-}
-
-function branchStepFor(depth: number, childCount: number): number {
-  const depthFalloff = Math.max(BRANCH_MIN_STEP, BRANCH_BASE_STEP - depth * 18);
-  const breadthBoost = Math.min(58, Math.log2(Math.max(1, childCount) + 1) * 14);
-  return depth <= 1 ? 230 + breadthBoost : depthFalloff + breadthBoost;
-}
-
-function placeConstellationBranch(
-  id: number,
-  parentX: number,
-  parentY: number,
-  heading: number,
-  depth: number,
-  start: number,
-  end: number,
-  tree: ReturnType<typeof hierarchy>,
-  placed: Map<number, GraphDisplayNode>,
-) {
-  const node = tree.byId.get(id);
-  if (!node || placed.has(id)) return;
-  const kids = tree.children.get(id) ?? [];
-  const distance = depth <= 0 ? 0 : branchStepFor(depth, kids.length);
-  const x = depth <= 0 ? parentX : parentX + Math.cos(heading) * distance;
-  const y = depth <= 0 ? parentY : parentY + Math.sin(heading) * distance;
-
-  placed.set(id, { ...node, x, y, depth, childCount: kids.length });
-  if (!kids.length) return;
-
-  const branchKids: number[] = [];
-  const previewKids: number[] = [];
-  for (const childId of kids) {
-    const child = tree.byId.get(childId);
-    if (child?.isDir && !child.isCluster) branchKids.push(childId);
-    else previewKids.push(childId);
-  }
-
-  placePreviewShelf(previewKids, x, y, heading, depth, tree, placed);
-
-  if (!branchKids.length) return;
-
-  const parentSpan = Math.max(0.2, end - start);
-  const localSpan = Math.min(parentSpan, Math.max(0.42, Math.min(depth <= 1 ? 1.75 : 1.15, branchKids.length * 0.22)));
-  const branchStart = heading - localSpan / 2;
-  const gap = branchKids.length > 1 ? Math.min(0.06, localSpan / (branchKids.length * 4)) : 0;
-  const weights = branchKids.map(child => Math.max(1, subtreeWeight(child, tree.children)));
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
-  let cursor = branchStart;
-
-  branchKids.forEach((childId, index) => {
-    const usableSpan = Math.max(0.08, localSpan - gap * Math.max(0, branchKids.length - 1));
-    const childSpan = Math.max(0.08, usableSpan * (weights[index] / totalWeight));
-    const childStart = cursor;
-    const childEnd = cursor + childSpan;
-    const wobble = Math.sin(childId * 12.9898) * 0.035;
-    placeConstellationBranch(
-      childId,
-      x,
-      y,
-      (childStart + childEnd) / 2 + wobble,
-      depth + 1,
-      childStart,
-      childEnd,
-      tree,
-      placed,
-    );
-    cursor += childSpan + gap;
-  });
-}
-
-function placePreviewShelf(
-  ids: number[],
-  parentX: number,
-  parentY: number,
-  heading: number,
-  depth: number,
-  tree: ReturnType<typeof hierarchy>,
-  placed: Map<number, GraphDisplayNode>,
-) {
-  if (!ids.length) return;
-  const tangent = heading + Math.PI / 2;
-  const columns = Math.min(PREVIEW_COLUMNS, Math.max(3, Math.ceil(Math.sqrt(ids.length) * 1.25)));
-  const sideSpacing = depth <= 1 ? 27 : 23;
-  const rowSpacing = depth <= 1 ? 38 : 32;
-  const forwardBase = depth <= 1 ? 68 : 50;
-
-  ids.forEach((id, index) => {
-    const node = tree.byId.get(id);
-    if (!node || placed.has(id)) return;
-    const col = index % columns;
-    const row = Math.floor(index / columns);
-    const centeredCol = col - (Math.min(columns, ids.length - row * columns) - 1) / 2;
-    const rowFan = (row % 2 === 0 ? 1 : -1) * Math.min(10, row * 2);
-    const forward = forwardBase + row * rowSpacing + (node.isCluster ? 26 : 0);
-    const side = centeredCol * sideSpacing + rowFan;
-    placed.set(id, {
-      ...node,
-      x: parentX + Math.cos(heading) * forward + Math.cos(tangent) * side,
-      y: parentY + Math.sin(heading) * forward + Math.sin(tangent) * side,
-      depth: depth + 1,
-      childCount: (tree.children.get(id) ?? []).length,
-    });
-  });
-}
-
-function countLeaves(id: number, children: Map<number, number[]>, seen = new Set<number>()): number {
-  if (seen.has(id)) return 1;
-  seen.add(id);
-  const kids = children.get(id) ?? [];
-  if (!kids.length) return 1;
-  return kids.reduce((sum, c) => sum + countLeaves(c, children, new Set(seen)), 0);
+  return depth * VEGA_RADIAL_DEPTH_GAP;
 }
 
 function subtreeMaxDepth(id: number, children: Map<number, number[]>, seen = new Set<number>()): number {
@@ -1456,18 +2048,18 @@ function reduceNode(
 
   const effectiveBase = rawBase;
 
-  const isClusterNode = Boolean(data.isCluster);
+  const isClusterNode = Boolean(data.isCluster) || visualState === "proxy";
 
   // Determine target values. In icons mode normal files/folders are rendered by
   // the glyph overlay, but proxy/cluster nodes remain as spheres so they don't
   // become noisy yellow placeholder icons.
-  let targetColor = iconsMode && !isClusterNode ? "rgba(0,0,0,0)" : (data.baseColor as string);
+  let targetColor = iconsMode || isClusterNode ? "rgba(0,0,0,0)" : (data.baseColor as string);
   let targetSize = effectiveBase;
   let targetZIndex = data.baseZIndex ?? 1;
   let targetLabel = data.label as string;
   let targetGlyphOpacity = 1;
   let targetGlyphScale = 1;
-  const targetForceLabel = iconsMode && !isClusterNode ? true : Boolean(data.forceLabel);
+  const targetForceLabel = iconsMode || isClusterNode ? true : Boolean(data.forceLabel);
   const fullLabel = String(data.fullLabel ?? data.label ?? "");
 
   if (!iconsMode && visualState === "ghost") {
@@ -1487,7 +2079,7 @@ function reduceNode(
       targetColor = adjustColorBrightness(targetColor, 0.42);
       targetSize = Math.max(2, effectiveBase * 0.72);
     }
-    if (iconsMode) targetGlyphOpacity = isClusterNode ? 0 : 0.32;
+    if (iconsMode || isClusterNode) targetGlyphOpacity = isClusterNode ? 0.24 : 0.32;
     targetLabel = "";
     targetZIndex = 0;
   }
@@ -1508,10 +2100,10 @@ function reduceNode(
 
   if (isHovered) {
     if (!iconsMode) {
-      targetColor = "#f5c542";
+      targetColor = graphThemeColor("--omarchy-color3", "#f5c542");
       targetSize = Math.max(8, effectiveBase * 1.35);
-    } else if (!isClusterNode) {
-      targetGlyphScale = 1.2;
+    } else {
+      targetGlyphScale = isClusterNode ? 1.14 : 1.2;
     }
     targetLabel = fullLabel;
     targetZIndex = 90;
@@ -1519,10 +2111,10 @@ function reduceNode(
 
   if (isSelected) {
     if (!iconsMode) {
-      targetColor = "#ffffff";
+      targetColor = graphThemeColor("--omarchy-fg", "#ffffff");
       targetSize = Math.max(9, effectiveBase * 1.45);
-    } else if (!isClusterNode) {
-      targetGlyphScale = 1.35;
+    } else {
+      targetGlyphScale = isClusterNode ? 1.22 : 1.35;
     }
     targetLabel = fullLabel;
     targetZIndex = 100;
@@ -1644,16 +2236,21 @@ function adjustColorBrightness(hex: string, factor: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
-const GROUP_COLORS = [
-  "rgba(99,179,237,0.30)",   // sky blue
-  "rgba(154,117,243,0.30)",  // purple
-  "rgba(72,187,120,0.30)",   // green
-  "rgba(237,137,54,0.30)",   // orange
-  "rgba(237,100,166,0.30)",  // pink
-  "rgba(56,189,248,0.30)",   // cyan
-  "rgba(251,191,36,0.30)",   // yellow
-  "rgba(248,113,113,0.30)",  // red
+const GROUP_COLOR_TOKENS: Array<{ cssVar: string; fallback: string }> = [
+  { cssVar: "--orbit-family-1", fallback: "#63b3ed" },
+  { cssVar: "--orbit-family-2", fallback: "#9a75f3" },
+  { cssVar: "--orbit-family-3", fallback: "#48bb78" },
+  { cssVar: "--orbit-family-4", fallback: "#ed8936" },
+  { cssVar: "--orbit-family-5", fallback: "#ed64a6" },
+  { cssVar: "--orbit-family-6", fallback: "#38bdf8" },
+  { cssVar: "--orbit-family-7", fallback: "#fbbf24" },
+  { cssVar: "--orbit-family-8", fallback: "#f87171" },
 ];
+
+function groupColorAt(index: number): string {
+  const token = GROUP_COLOR_TOKENS[index % GROUP_COLOR_TOKENS.length];
+  return withAlpha(graphThemeColor(token.cssVar, token.fallback), 0.30);
+}
 
 function buildGroupColors(
   tree: ReturnType<typeof hierarchy>,
@@ -1664,7 +2261,7 @@ function buildGroupColors(
     colorMap.set(id, color);
     for (const child of tree.children.get(id) ?? []) assign(child, color);
   }
-  roots.forEach((rootId, i) => assign(rootId, GROUP_COLORS[i % GROUP_COLORS.length]));
+  roots.forEach((rootId, i) => assign(rootId, groupColorAt(i)));
   return colorMap;
 }
 
@@ -1718,7 +2315,7 @@ function edgeStyleForGraph(
   const curve = edgeCurvatureForId(edge.id);
 
   // Visual vocabulary:
-  // contains      = solid thin branch backbone, family-colored
+  // contains      = Vega-like radial branch links, family-colored
   // import/code   = purple, stronger curved arc
   // markdown/wiki = teal, medium curved arc
   // symlink       = orange, thicker curved arc
@@ -1730,30 +2327,33 @@ function edgeStyleForGraph(
   if (edgeType === "contains") {
     const baseColor = groupColors?.get(edge.sourceId) ?? groupColors?.get(edge.targetId) ?? "rgba(99,143,195,0.24)";
     return {
-      program: "line",
-      size: muted ? 0.34 : 0.5,
-      color: withAlpha(baseColor, muted ? 0.14 : 0.28),
-      curvature: 0,
+      program: "curve",
+      size: muted ? 0.34 : 0.54,
+      color: withAlpha(baseColor, muted ? 0.14 : 0.30),
+      // Vega radial linkpath with shape=curve/diagonal bends hierarchy links
+      // instead of drawing rigid spokes. Keep this deterministic and modest so
+      // parent-child structure stays readable.
+      curvature: 0.22,
     };
   }
 
   if (edgeType === "import" || edgeType === "dependency" || edgeType === "code_ref") {
-    return { program: "curve", size: muted ? 0.46 : 0.9, color: `rgba(167,139,250,${muted ? 0.16 : 0.42})`, curvature: curve * 1.15 };
+    return { program: "curve", size: muted ? 0.46 : 0.9, color: withAlpha(edgeCategoryColor("code"), muted ? 0.16 : 0.42), curvature: curve * 1.15 };
   }
   if (edgeType === "markdown_link" || edgeType === "wikilink" || edgeType === "link") {
-    return { program: "curve", size: muted ? 0.42 : 0.72, color: `rgba(94,234,212,${muted ? 0.15 : 0.38})`, curvature: curve * 0.95 };
+    return { program: "curve", size: muted ? 0.42 : 0.72, color: withAlpha(edgeCategoryColor("docs"), muted ? 0.15 : 0.38), curvature: curve * 0.95 };
   }
   if (edgeType === "symlink") {
-    return { program: "curve", size: muted ? 0.55 : 1.1, color: `rgba(237,154,74,${muted ? 0.18 : 0.48})`, curvature: curve * 1.3 };
+    return { program: "curve", size: muted ? 0.55 : 1.1, color: withAlpha(edgeCategoryColor("symlink"), muted ? 0.18 : 0.48), curvature: curve * 1.3 };
   }
   if (edgeType === "related" || edgeType === "similar" || edgeType === "similarity" || edgeType === "semantic") {
-    return { program: "curve", size: muted ? 0.36 : 0.62, color: `rgba(134,239,172,${muted ? 0.12 : 0.30})`, curvature: curve * 1.45 };
+    return { program: "curve", size: muted ? 0.36 : 0.62, color: withAlpha(edgeCategoryColor("semantic"), muted ? 0.12 : 0.30), curvature: curve * 1.45 };
   }
   if (edgeType === "tag" || edgeType === "hashtag") {
-    return { program: "curve", size: muted ? 0.36 : 0.62, color: `rgba(244,114,182,${muted ? 0.12 : 0.30})`, curvature: curve * 1.45 };
+    return { program: "curve", size: muted ? 0.36 : 0.62, color: withAlpha(edgeCategoryColor("tags"), muted ? 0.12 : 0.30), curvature: curve * 1.45 };
   }
 
-  return { program: "curve", size: muted ? 0.34 : 0.58, color: `rgba(99,143,195,${muted ? 0.10 : 0.24})`, curvature: curve };
+  return { program: "curve", size: muted ? 0.34 : 0.58, color: withAlpha(edgeCategoryColor("other"), muted ? 0.10 : 0.24), curvature: curve };
 }
 
 
@@ -1786,15 +2386,27 @@ function getNodeType(node: GraphNode): NodeType {
 }
 
 const NODE_TYPE_CONFIG: Record<NodeType, { label: string; color: string }> = {
-  folder: { label: 'Folder', color: '#73c991' },
-  code: { label: 'Code', color: '#a78bfa' },
-  image: { label: 'Image', color: '#38bdf8' },
-  text: { label: 'Text', color: '#d4d4d4' },
-  config: { label: 'Config', color: '#f5c542' },
-  web: { label: 'Web', color: '#f472b6' },
-  document: { label: 'Doc', color: '#fb923c' },
-  other: { label: 'Other', color: '#94a3b8' },
-  cluster: { label: 'Cluster', color: '#7b8790' },
+  folder: { label: 'Folder', color: 'var(--omarchy-color2)' },
+  code: { label: 'Code', color: 'var(--omarchy-color4)' },
+  image: { label: 'Image', color: 'var(--omarchy-color6)' },
+  text: { label: 'Text', color: 'var(--omarchy-fg)' },
+  config: { label: 'Config', color: 'var(--omarchy-color3)' },
+  web: { label: 'Web', color: 'var(--omarchy-color5)' },
+  document: { label: 'Doc', color: 'var(--omarchy-color11)' },
+  other: { label: 'Other', color: 'var(--omarchy-color7)' },
+  cluster: { label: 'Cluster', color: 'var(--omarchy-accent)' },
+};
+
+const NODE_TYPE_FALLBACKS: Record<NodeType, string> = {
+  folder: '#8bd17c',
+  code: '#a78bfa',
+  image: '#5eead4',
+  text: '#e5e7eb',
+  config: '#f6c177',
+  web: '#f472b6',
+  document: '#93c5fd',
+  other: '#94a3b8',
+  cluster: '#f5c542',
 };
 
 interface GraphLegendProps {
@@ -1928,6 +2540,7 @@ function GraphLegend({
         {ALL_EDGE_CATEGORIES.map((category) => {
           const config = EDGE_CATEGORY_CONFIG[category];
           const isVisible = visibleEdgeCategories.has(category);
+          const swatch = edgeCategoryColor(category);
           return (
             <button
               key={category}
@@ -1935,7 +2548,7 @@ function GraphLegend({
               onClick={(e) => handleEdgeClick(category, e)}
               title={`${isVisible ? 'Hide' : 'Show'} ${config.description} (double-click to isolate/restore all edge types)`}
             >
-              <i className="legend-edge-swatch" style={{ background: isVisible ? config.color : '#555' }} />
+              <i className="legend-edge-swatch" style={{ background: isVisible ? swatch : '#555' }} />
               <span>{config.label}</span>
             </button>
           );
@@ -2017,32 +2630,27 @@ function seededAngle(id: number) {
 
 function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabelDrawingFunction {
   return (context, data, settings) => {
-    if (nodeView !== "icons") {
+    const attrs = data as Record<string, unknown>;
+    const isAggregate = Boolean(attrs.isCluster) || attrs.visualState === "proxy";
+    if (nodeView !== "icons" && !isAggregate) {
       if (showNames) drawDiscNodeLabel(context, data, settings);
       return;
     }
 
-    const attrs = data as Record<string, unknown>;
-    if (Boolean(attrs.isCluster)) {
-      // Cluster/proxy nodes intentionally stay as Sigma spheres in icons mode.
-      // The colored sphere is cleaner than a yellow file/folder glyph and makes
-      // "more items here" read as an aggregate, not another real folder.
-      return;
-    }
-    const glyph = String(attrs.glyphText ?? "·");
+    const glyph = String(attrs.glyphText ?? (isAggregate ? "⬡" : "·"));
     if (!glyph) return;
-    const glyphColor = String(attrs.glyphColor ?? data.color ?? "#a8bbc8");
+    const glyphColor = String(attrs.glyphColor ?? data.color ?? graphThemeColor("--omarchy-color7", "#a8bbc8"));
     const opacity = Number(attrs.glyphOpacity ?? 1);
     const glyphScale = Number(attrs.glyphScale ?? 1);
     // Glyph size scales linearly with zoom. data.size is the camera-adjusted
     // pixel size of the (invisible) sphere, which now equals the node's natural
     // radius so EdgeClampedProgram terminates edges at the icon perimeter.
-    // Multiplier 2.0 preserves the prior visual scale (when sphere was 1 graph
-    // unit and the formula was glyphBase * data.size * 2.0, with glyphBase ==
-    // sphere size, the two factors collapse to data.size * 2.0).
+    // Keep icons smaller than their invisible hit radius. The Vega radial layout
+    // now provides more angular/radial room, and the glyph should sit inside
+    // that room instead of becoming the collision footprint.
     // No minimum floor — let glyphs shrink naturally when zoomed out.
     // Skip rendering entirely when the glyph would be <6px (invisible squiggle).
-    const rawFontSize = data.size * 2.0;
+    const rawFontSize = data.size * (isAggregate ? 1.28 : 1.42);
     if (rawFontSize < 6) {
       context.restore();
       return;
@@ -2054,7 +2662,7 @@ function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabe
 
     // Drop shadow via drawImage shadow (applies to the whole bitmap alpha)
     context.shadowColor = "rgba(0,0,0,0.55)";
-    context.shadowBlur = 4;
+    context.shadowBlur = isAggregate ? 2 : 3;
     context.shadowOffsetX = 1;
     context.shadowOffsetY = 1;
 
@@ -2069,10 +2677,10 @@ function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabe
     context.shadowOffsetY = 0;
 
     // Only draw filename text when the icon is large enough to read.
-    // fontSize < 20 means zoomed out — skip text to avoid clutter.
-    if (showNames && data.label && fontSize >= 20) {
+    // Higher threshold prevents radial leaves from turning into a text pile.
+    if (!isAggregate && showNames && data.label && fontSize >= 28) {
       context.globalAlpha = Math.min(0.92, context.globalAlpha);
-      context.fillStyle = "#d4d4d4";
+      context.fillStyle = graphThemeColor("--omarchy-fg", "#d4d4d4");
       context.font = '600 11px Inter, system-ui, sans-serif';
       context.textAlign = "center";
       context.textBaseline = "top";

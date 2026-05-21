@@ -11,6 +11,7 @@ import type {
   IconThemeMeta,
   IconThemePayload,
   MarkdownAnalysis,
+  NodeNote,
   OmarchyColors,
   OperationStats,
   PerformanceMetrics,
@@ -52,6 +53,8 @@ export const TAURI_COMMANDS = [
   "get_supported_code_extensions",
   "find_git_repo_root",
   "is_in_git_repo",
+  "get_node_note",
+  "save_node_note",
   "analyze_image_file",
   "extract_colors",
   "compute_image_phash",
@@ -107,6 +110,8 @@ type CommandArgsMap = {
   get_supported_code_extensions: undefined;
   find_git_repo_root: { path: string };
   is_in_git_repo: { path: string };
+  get_node_note: { path: string };
+  save_node_note: { path: string; body: string };
   analyze_image_file: { fileId: number; filePath: string };
   extract_colors: { fileId: number; filePath: string; colorCount: number };
   compute_image_phash: { fileId: number; filePath: string };
@@ -165,6 +170,8 @@ type CommandResultMap = {
   get_supported_code_extensions: string[];
   find_git_repo_root: string | null;
   is_in_git_repo: boolean;
+  get_node_note: NodeNote;
+  save_node_note: NodeNote;
   analyze_image_file: ImageMetadataResult;
   extract_colors: ColorExtractionResult;
   compute_image_phash: number[];

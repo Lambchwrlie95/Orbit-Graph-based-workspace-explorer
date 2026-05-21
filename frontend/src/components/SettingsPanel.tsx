@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Settings, X } from "lucide-react";
+import { FLAVORS, type FlavorId, applyFlavor, loadStoredFlavor, storeFlavor } from "../lib/theme";
 
 export type PerformanceMode = "eco" | "balanced" | "full";
 
@@ -106,6 +107,10 @@ export function SettingsPanel({
             </button>
           </SettingsSection>
 
+          <SettingsSection title="Appearance">
+            <FlavorPicker />
+          </SettingsSection>
+
           <SettingsSection title="Icons">
             <button type="button" className="settings-action" onClick={() => document.dispatchEvent(new CustomEvent("orbit:open-icon-editor"))}>
               Open icon editor
@@ -175,4 +180,44 @@ function NumberRow({
 function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
+}
+
+function FlavorPicker() {
+  const [active, setActive] = useState<FlavorId>(() => loadStoredFlavor());
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: FlavorId }>).detail;
+      if (detail?.id) setActive(detail.id);
+    };
+    window.addEventListener("orbit:flavor-changed", handler);
+    return () => window.removeEventListener("orbit:flavor-changed", handler);
+  }, []);
+
+  const choose = (id: FlavorId) => {
+    storeFlavor(id);
+    setActive(id);
+    applyFlavor(id).catch(() => {});
+  };
+
+  return (
+    <div className="flavor-picker">
+      {FLAVORS.map((flavor) => (
+        <button
+          key={flavor.id}
+          type="button"
+          className={`flavor-option ${active === flavor.id ? "active" : ""}`}
+          onClick={() => choose(flavor.id)}
+          title={flavor.hint ?? flavor.label}
+        >
+          <span className="flavor-swatches" aria-hidden>
+            <i data-flavor={flavor.id} className="flavor-swatch flavor-swatch--bg" />
+            <i data-flavor={flavor.id} className="flavor-swatch flavor-swatch--accent" />
+            <i data-flavor={flavor.id} className="flavor-swatch flavor-swatch--edge" />
+          </span>
+          <span className="flavor-label">{flavor.label}</span>
+        </button>
+      ))}
+    </div>
+  );
 }

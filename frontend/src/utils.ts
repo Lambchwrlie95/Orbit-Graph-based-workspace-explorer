@@ -150,9 +150,33 @@ export function isImageFile(extension?: string | null): boolean {
 
 export function isAudioFile(extension?: string | null): boolean {
   if (!extension) return false;
+  // `.webm` is a container — assume video by default; `.weba` covers the
+  // audio-only variant. Matches the backend MIME mapping in preview.rs.
   return [
-    "mp3", "wav", "ogg", "opus", "flac", "aac", "m4a", "weba", "webm"
+    "mp3", "wav", "ogg", "oga", "opus", "flac", "aac", "m4a", "weba", "aiff", "aif", "aifc", "au"
   ].includes(extension.toLowerCase());
+}
+
+export function isVideoFile(extension?: string | null): boolean {
+  if (!extension) return false;
+  return [
+    "mp4", "m4v", "webm", "ogv", "mov", "mkv", "avi"
+  ].includes(extension.toLowerCase());
+}
+
+export function isPdfFile(extension?: string | null): boolean {
+  if (!extension) return false;
+  return extension.toLowerCase() === "pdf";
+}
+
+export function isFontFile(extension?: string | null): boolean {
+  if (!extension) return false;
+  return ["ttf", "otf", "woff", "woff2"].includes(extension.toLowerCase());
+}
+
+export function isArchiveFile(extension?: string | null): boolean {
+  if (!extension) return false;
+  return ["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar"].includes(extension.toLowerCase());
 }
 
 export function getFileIconClass(extension?: string | null): string {

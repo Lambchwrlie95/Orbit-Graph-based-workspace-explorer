@@ -2,7 +2,7 @@ use std::path::Path;
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
-use crate::models::{FileRecord, ScannedEntry};
+use crate::models::{FileRecord, NoteBacklink, NoteLink, ScannedEntry};
 
 pub fn init_database(db_path: &Path) -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
@@ -112,6 +112,24 @@ pub fn init_database(db_path: &Path) -> Result<(), String> {
           UNIQUE(source_id, target_id, edge_type)
         );
 
+        CREATE TABLE IF NOT EXISTS node_notes (
+          node_path TEXT PRIMARY KEY,
+          body TEXT NOT NULL DEFAULT '',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS node_note_links (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_path TEXT NOT NULL,
+          target TEXT NOT NULL,
+          label TEXT NOT NULL,
+          UNIQUE(source_path, target, label)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_node_note_links_source ON node_note_links(source_path);
+        CREATE INDEX IF NOT EXISTS idx_node_note_links_target ON node_note_links(target);
+
         CREATE TABLE IF NOT EXISTS tags (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE
@@ -131,7 +149,71 @@ pub fn init_database(db_path: &Path) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
         "#,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    migrate_node_notes_schema(&conn)?;
+    Ok(())
+}
+
+fn migrate_node_notes_schema(conn: &Connection) -> Result<(), String> {
+    ensure_column(
+        conn,
+        "node_notes",
+        "body",
+        "ALTER TABLE node_notes ADD COLUMN body TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "node_notes",
+        "created_at",
+        "ALTER TABLE node_notes ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "node_notes",
+        "updated_at",
+        "ALTER TABLE node_notes ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "node_note_links",
+        "source_path",
+        "ALTER TABLE node_note_links ADD COLUMN source_path TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "node_note_links",
+        "target",
+        "ALTER TABLE node_note_links ADD COLUMN target TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "node_note_links",
+        "label",
+        "ALTER TABLE node_note_links ADD COLUMN label TEXT NOT NULL DEFAULT ''",
+    )?;
+    Ok(())
+}
+
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    alter_sql: &str,
+) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|e| e.to_string())?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?;
+    for existing in columns {
+        if existing.map_err(|e| e.to_string())? == column {
+            return Ok(());
+        }
+    }
+    conn.execute(alter_sql, []).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 pub fn index_rows(
@@ -423,6 +505,128 @@ pub fn child_prefix(root_path: &str) -> String {
     }
     prefix.push('%');
     prefix
+}
+
+pub fn get_note_body(db_path: &Path, path: &str) -> Result<(String, Option<i64>), String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.query_row(
+        "SELECT body, updated_at FROM node_notes WHERE node_path = ?1",
+        params![path],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+    )
+    .optional()
+    .map(|row| {
+        row.map(|(body, updated_at)| (body, Some(updated_at)))
+            .unwrap_or_else(|| (String::new(), None))
+    })
+    .map_err(|e| e.to_string())
+}
+
+pub fn save_node_note(
+    db_path: &Path,
+    path: &str,
+    body: &str,
+    links: &[NoteLink],
+) -> Result<i64, String> {
+    let mut conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().timestamp();
+    tx.execute(
+        r#"
+        INSERT INTO node_notes(node_path, body, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?3)
+        ON CONFLICT(node_path) DO UPDATE SET
+          body = excluded.body,
+          updated_at = excluded.updated_at
+        "#,
+        params![path, body, now],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM node_note_links WHERE source_path = ?1",
+        params![path],
+    )
+    .map_err(|e| e.to_string())?;
+    for link in links {
+        tx.execute(
+            "INSERT OR IGNORE INTO node_note_links(source_path, target, label) VALUES (?1, ?2, ?3)",
+            params![path, link.target, link.label],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(now)
+}
+
+pub fn note_links_for_source(db_path: &Path, path: &str) -> Result<Vec<NoteLink>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT target, label
+            FROM node_note_links
+            WHERE source_path = ?1
+            ORDER BY label COLLATE NOCASE, target COLLATE NOCASE
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![path], |row| {
+            Ok(NoteLink {
+                target: row.get(0)?,
+                label: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut links = Vec::new();
+    for row in rows {
+        links.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(links)
+}
+
+pub fn note_backlinks_for_target(db_path: &Path, path: &str) -> Result<Vec<NoteBacklink>, String> {
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let name = Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(path);
+    let stem = Path::new(path)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or(name);
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT DISTINCT source_path, target, label
+            FROM node_note_links
+            WHERE source_path != ?1
+              AND (target = ?1 OR target = ?2 OR target = ?3)
+            ORDER BY source_path COLLATE NOCASE
+            LIMIT 100
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![path, name, stem], |row| {
+            let source_path: String = row.get(0)?;
+            let source_label = Path::new(&source_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(&source_path)
+                .to_string();
+            Ok(NoteBacklink {
+                source_path,
+                source_label,
+                target: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut backlinks = Vec::new();
+    for row in rows {
+        backlinks.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(backlinks)
 }
 
 fn bool_to_int(value: bool) -> i64 {

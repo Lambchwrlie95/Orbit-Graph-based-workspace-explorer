@@ -30,6 +30,25 @@ export interface PreviewPayload {
   metadata: Array<{ key: string; value: string }>;
 }
 
+export interface NoteLink {
+  target: string;
+  label: string;
+}
+
+export interface NoteBacklink {
+  sourcePath: string;
+  sourceLabel: string;
+  target: string;
+}
+
+export interface NodeNote {
+  path: string;
+  body: string;
+  links: NoteLink[];
+  backlinks: NoteBacklink[];
+  updatedAt?: number | null;
+}
+
 export interface GraphEdge {
   id: number;
   sourceId: number;
@@ -247,8 +266,22 @@ export interface OmarchyColors {
   selectionBackground: string;
   /** ANSI color0–color15 */
   palette: string[];
+  /** Optional graph-edge overrides from ~/.config/omarchy/current/theme/orbit.toml */
+  graph?: OmarchyGraphPalette;
   /** false when ~/.config/omarchy was not found */
   available: boolean;
+}
+
+export interface OmarchyGraphPalette {
+  edgeHierarchy: string;
+  edgeCode: string;
+  edgeDocs: string;
+  edgeSymlink: string;
+  edgeSemantic: string;
+  edgeTags: string;
+  edgeOther: string;
+  canvas: string;
+  nodeDefault: string;
 }
 
 export interface IconThemePayload {

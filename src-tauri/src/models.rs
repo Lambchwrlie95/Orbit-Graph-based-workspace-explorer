@@ -80,6 +80,31 @@ pub struct GraphPayload {
     pub total_in_scope: i64,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLink {
+    pub target: String,
+    pub label: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteBacklink {
+    pub source_path: String,
+    pub source_label: String,
+    pub target: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeNote {
+    pub path: String,
+    pub body: String,
+    pub links: Vec<NoteLink>,
+    pub backlinks: Vec<NoteBacklink>,
+    pub updated_at: Option<i64>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanProgress {

@@ -632,6 +632,8 @@ fn main() {
             commands::analysis::get_supported_code_extensions,
             commands::analysis::find_git_repo_root,
             commands::analysis::is_in_git_repo,
+            commands::notes::get_node_note,
+            commands::notes::save_node_note,
             commands::image_analysis::analyze_image_file,
             commands::image_analysis::extract_colors,
             commands::image_analysis::compute_image_phash,
@@ -654,6 +656,32 @@ fn main() {
             create_folder,
             rename,
         ])
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                use tauri::Emitter;
+                let path = omarchy::colors_path();
+                let mut last_mtime = None;
+                loop {
+                    if let Ok(meta) = std::fs::metadata(&path) {
+                        if let Ok(modified) = meta.modified() {
+                            if let Some(last) = last_mtime {
+                                if last != modified {
+                                    last_mtime = Some(modified);
+                                    let colors = omarchy::read_omarchy_colors();
+                                    let _ = app_handle.emit("omarchy-theme-changed", colors);
+                                    logger::log_event("Omarchy theme change detected & emitted");
+                                }
+                            } else {
+                                last_mtime = Some(modified);
+                            }
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                }
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running Orbit");
 }

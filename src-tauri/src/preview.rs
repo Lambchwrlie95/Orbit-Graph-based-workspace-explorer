@@ -36,6 +36,22 @@ pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
         },
     ];
 
+    if let Some(ext) = target.extension().and_then(|ext| ext.to_str()) {
+        meta.push(PreviewMetaItem {
+            key: "Extension".into(),
+            value: ext.to_ascii_lowercase(),
+        });
+    }
+
+    if let Ok(created) = metadata.created() {
+        if let Ok(epoch) = created.duration_since(std::time::UNIX_EPOCH) {
+            meta.push(PreviewMetaItem {
+                key: "Created".into(),
+                value: epoch.as_secs().to_string(),
+            });
+        }
+    }
+
     if let Ok(modified) = metadata.modified() {
         if let Ok(epoch) = modified.duration_since(std::time::UNIX_EPOCH) {
             meta.push(PreviewMetaItem {
@@ -67,6 +83,68 @@ pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
             title,
             path: path.into(),
             summary: "Audio preview".into(),
+            content: None,
+            metadata: meta,
+        });
+    }
+
+    if let Some(mime) = video_mime(target) {
+        meta.push(PreviewMetaItem {
+            key: "MIME".into(),
+            value: mime.into(),
+        });
+        return Ok(PreviewPayload {
+            kind: "video".into(),
+            title,
+            path: path.into(),
+            summary: "Video preview".into(),
+            // Content stays empty — the frontend uses Tauri's asset protocol
+            // (convertFileSrc) to stream large media without base64ing them.
+            content: None,
+            metadata: meta,
+        });
+    }
+
+    if let Some(mime) = pdf_mime(target) {
+        meta.push(PreviewMetaItem {
+            key: "MIME".into(),
+            value: mime.into(),
+        });
+        return Ok(PreviewPayload {
+            kind: "pdf".into(),
+            title,
+            path: path.into(),
+            summary: "PDF document".into(),
+            content: None,
+            metadata: meta,
+        });
+    }
+
+    if let Some(mime) = font_mime(target) {
+        meta.push(PreviewMetaItem {
+            key: "MIME".into(),
+            value: mime.into(),
+        });
+        return Ok(PreviewPayload {
+            kind: "font".into(),
+            title,
+            path: path.into(),
+            summary: "Font preview".into(),
+            content: None,
+            metadata: meta,
+        });
+    }
+
+    if let Some(mime) = archive_mime(target) {
+        meta.push(PreviewMetaItem {
+            key: "MIME".into(),
+            value: mime.into(),
+        });
+        return Ok(PreviewPayload {
+            kind: "archive".into(),
+            title,
+            path: path.into(),
+            summary: "Archive (listing not yet supported)".into(),
             content: None,
             metadata: meta,
         });
@@ -143,12 +221,78 @@ fn audio_mime(path: &Path) -> Option<&'static str> {
     {
         "mp3" => Some("audio/mpeg"),
         "wav" => Some("audio/wav"),
-        "ogg" => Some("audio/ogg"),
-        "opus" => Some("audio/opus"),
+        "ogg" | "oga" => Some("audio/ogg"),
+        // `.opus` files are normally Opus-in-Ogg; WebKit/GStreamer is more
+        // reliable when the source advertises the container MIME.
+        "opus" => Some("audio/ogg"),
         "flac" => Some("audio/flac"),
         "aac" => Some("audio/aac"),
         "m4a" => Some("audio/mp4"),
-        "weba" | "webm" => Some("audio/webm"),
+        "weba" => Some("audio/webm"),
+        "aiff" | "aif" | "aifc" => Some("audio/aiff"),
+        "au" => Some("audio/basic"),
+        _ => None,
+    }
+}
+
+fn video_mime(path: &Path) -> Option<&'static str> {
+    match path
+        .extension()?
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "mp4" | "m4v" => Some("video/mp4"),
+        "webm" => Some("video/webm"),
+        "ogv" => Some("video/ogg"),
+        "mov" => Some("video/quicktime"),
+        "mkv" => Some("video/x-matroska"),
+        "avi" => Some("video/x-msvideo"),
+        _ => None,
+    }
+}
+
+fn pdf_mime(path: &Path) -> Option<&'static str> {
+    match path
+        .extension()?
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "pdf" => Some("application/pdf"),
+        _ => None,
+    }
+}
+
+fn font_mime(path: &Path) -> Option<&'static str> {
+    match path
+        .extension()?
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "ttf" => Some("font/ttf"),
+        "otf" => Some("font/otf"),
+        "woff" => Some("font/woff"),
+        "woff2" => Some("font/woff2"),
+        _ => None,
+    }
+}
+
+fn archive_mime(path: &Path) -> Option<&'static str> {
+    match path
+        .extension()?
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "zip" => Some("application/zip"),
+        "tar" => Some("application/x-tar"),
+        "gz" | "tgz" => Some("application/gzip"),
+        "bz2" => Some("application/x-bzip2"),
+        "xz" => Some("application/x-xz"),
+        "7z" => Some("application/x-7z-compressed"),
+        "rar" => Some("application/vnd.rar"),
         _ => None,
     }
 }

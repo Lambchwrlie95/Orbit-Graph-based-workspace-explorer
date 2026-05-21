@@ -29,8 +29,16 @@ import { useDebounce } from "./hooks/useDebounce";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { useViewPersistence } from "./hooks/useViewPersistence";
 import { tauriInvoke } from "./lib/tauriCommands";
+import { clearWikilinkCache } from "./lib/wikilinkResolver";
+import { applyFlavor, applyOmarchyColors, loadStoredFlavor } from "./lib/theme";
 import { CacheStatus, FileRecord, GraphNode, GraphPayload, PreviewPayload, ScanProgress } from "./types";
 import { formatDate, shortPath } from "./utils";
+// Zed's UI typography — IBM Plex Sans (OFL) Regular + SemiBold + Italic.
+// Loaded via @fontsource so Vite bundles the woff2s with content hashes; we
+// don't have to maintain @font-face declarations or download URLs by hand.
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/400-italic.css";
+import "@fontsource/ibm-plex-sans/600.css";
 import "./styles.css";
 
 type ExplorerViewMode = "list" | "tree";
@@ -151,22 +159,26 @@ function App() {
     rootPathRef.current = rootPath;
   }, [rootPath]);
 
-  // Load Omarchy theme colors and apply as CSS custom properties.
-  // This runs once at startup; on Linux/Omarchy the colors.toml is read
-  // and the graph + UI automatically follow the active Omarchy palette.
+  // Apply the user's saved flavor (or "Follow Omarchy") at startup, and
+  // keep listening for live Omarchy theme changes so the graph + UI follow
+  // along whenever colors.toml flips.
   useEffect(() => {
-    tauriInvoke("get_omarchy_colors").then((colors) => {
-      if (!colors.available) return;
-      const root = document.documentElement;
-      root.style.setProperty("--omarchy-bg", colors.background);
-      root.style.setProperty("--omarchy-fg", colors.foreground);
-      root.style.setProperty("--omarchy-accent", colors.accent);
-      root.style.setProperty("--omarchy-cursor", colors.cursor);
-      root.style.setProperty("--omarchy-border", colors.activeBorderColor);
-      root.style.setProperty("--omarchy-sel-bg", colors.selectionBackground);
-      root.style.setProperty("--omarchy-sel-fg", colors.selectionForeground);
-      colors.palette.forEach((c, i) => root.style.setProperty(`--omarchy-color${i}`, c));
-    }).catch(() => {});
+    applyFlavor(loadStoredFlavor()).catch(() => {});
+
+    const unlistenPromise = listen("omarchy-theme-changed", (event) => {
+      if (loadStoredFlavor() !== "omarchy") return;
+      const payload = event.payload as { available?: boolean } | null;
+      if (!payload?.available) return;
+      applyOmarchyColors(payload as Parameters<typeof applyOmarchyColors>[0]);
+      window.dispatchEvent(new CustomEvent("orbit:omarchy-theme-changed", { detail: payload }));
+    });
+
+    const unlistenFlavor = () => {};
+    window.addEventListener("orbit:flavor-changed", unlistenFlavor);
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+      window.removeEventListener("orbit:flavor-changed", unlistenFlavor);
+    };
   }, []);
 
   const checkCacheStatus = useCallback(async (path: string) => {
@@ -368,6 +380,11 @@ function App() {
     graphRequestSeqRef.current += 1;
     graphInFlightKeyRef.current = null;
     lastLoadedGraphKeyRef.current = null;
+    // Any wikilink resolutions cached from a previous workspace are now
+    // suspect: paths may not even exist in the new workspace, and a
+    // returning-to-the-same-workspace flow may have stale results if files
+    // moved between visits. Drop the lot on every root change.
+    clearWikilinkCache();
     rootPathRef.current = path;
     setRootPath(path);
     setCurrentPath(path);
@@ -396,6 +413,9 @@ function App() {
         // Empty or stale cache: auto-scan
         setStatus(status.fileCount === 0 ? "Scanning new workspace…" : "Refreshing stale cache…");
         const progress = await tauriInvoke("scan_workspace", { rootPath: path });
+        // Filesystem has been re-indexed — any prior wikilink misses might
+        // now be hits and any prior hits might point at moved/renamed files.
+        clearWikilinkCache();
         rootPathRef.current = progress.rootPath;
         setRootPath(progress.rootPath);
         setScan(progress);
@@ -438,6 +458,9 @@ function App() {
     const scanStartTime = performance.now();
     try {
       const progress = await tauriInvoke("scan_workspace", { rootPath });
+      // Same invalidation as the workspace-switch scan path: file index
+      // changed, so cached wikilink resolutions can no longer be trusted.
+      clearWikilinkCache();
       rootPathRef.current = progress.rootPath;
       setRootPath(progress.rootPath);
       setScan(progress);
@@ -662,6 +685,9 @@ function App() {
           return;
         }
         await tauriInvoke("scan_workspace", { rootPath });
+        // Background rescan refreshed the file index; wipe wikilink cache
+        // so any open inspector resolves links against the new state.
+        clearWikilinkCache();
         await loadChildren(target);
         await loadGraph(target, undefined, { force: true });
         await checkCacheStatus(rootPath);
