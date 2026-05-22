@@ -744,6 +744,7 @@ function GraphViewComponent({
         graph3dRef.current = null;
         graph3dNodeRef.current = new Map();
       };
+      return;
     }
 
     const graph = new Graph();
