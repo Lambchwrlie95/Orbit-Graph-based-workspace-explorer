@@ -17,6 +17,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     return { error };
   }
 
+  private retryTimer: number | null = null;
+
   componentDidUpdate(previousProps: ErrorBoundaryProps) {
     if (this.state.error && previousProps.resetKey !== this.props.resetKey) {
       this.setState({ error: null });
@@ -25,6 +27,24 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    // Many in-app errors are transient stale-state on navigation: the same
+    // render that just threw will succeed once parent state has settled.
+    // Auto-retry once on the next microtask so the user does not have to
+    // click Retry for every folder change. If the retry also throws, the
+    // boundary stays errored.
+    if (this.retryTimer === null) {
+      this.retryTimer = window.setTimeout(() => {
+        this.retryTimer = null;
+        this.setState({ error: null });
+      }, 60);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.retryTimer !== null) {
+      window.clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
 
   render() {

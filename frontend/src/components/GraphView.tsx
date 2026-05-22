@@ -177,6 +177,7 @@ type Graph3DNode = NodeObject & {
   parentPath?: string | null;
   clusterSummary?: VisualGraphNode["clusterSummary"];
   childCount: number;
+  sizeBytes: number;
   depth: number;
   visualState?: VisualState;
   glyphText?: string;
@@ -609,17 +610,18 @@ function GraphViewComponent({
           graphApi.nodeColor(graphApi.nodeColor());
           graphApi.linkColor(graphApi.linkColor());
           graphApi.linkWidth(graphApi.linkWidth());
-          if (event.detail > 1) {
-            if (node.isCluster) {
-              const folderPath = node.parentPath || node.path.replace("/__cluster__", "").replace(/\/__visual_[^/]+$/, "");
-              setExpandingCluster(folderPath);
-              onExpandCluster?.(folderPath);
-              setTimeout(() => setExpandingCluster(null), 550);
-            } else if (node.isDir) {
-              onFocusFolder?.(node.path);
-            } else {
-              void openNodeInEditor(node.path);
-            }
+          if (node.isCluster) {
+            const folderPath = node.parentPath || node.path.replace("/__cluster__", "").replace(/\/__visual_[^/]+$/, "");
+            setExpandingCluster(folderPath);
+            onExpandCluster?.(folderPath);
+            setTimeout(() => setExpandingCluster(null), 550);
+          } else if (node.isDir) {
+            // Match the 2D graph: clicking a folder enters that folder's graph.
+            // Do not camera-focus/rebuild the Three object first; navigate the
+            // data scope directly to avoid the click-to-black crash path.
+            onFocusFolder?.(node.path);
+          } else if (event.detail > 1) {
+            void openNodeInEditor(node.path);
           }
         })
         .onNodeRightClick((node, event) => {
@@ -647,9 +649,9 @@ function GraphViewComponent({
       const api = graphApi as unknown as { d3Force?: (name: string, force?: unknown) => any; d3ReheatSimulation?: () => void };
       const nodesById = new Map(graph3dData.nodes.map((node) => [node.id, node]));
       api.d3Force?.("link")?.distance?.((link: Graph3DLink) => graph3dLinkDistance(link, nodesById));
-      api.d3Force?.("charge")?.strength?.((node: Graph3DNode) => node.isDir ? -46 : -18);
+      api.d3Force?.("charge")?.strength?.((node: Graph3DNode) => node.isDir ? -72 : node.isCluster ? -48 : -24);
       const collide = api.d3Force?.("collide");
-      collide?.radius?.((node: Graph3DNode) => Math.max(node.isDir ? 10 : 7, Math.sqrt(Math.max(1, node.val)) * 2.4));
+      collide?.radius?.((node: Graph3DNode) => Math.max(node.isDir ? 18 : node.isCluster ? 13 : 8, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 4.4 : 3.0)));
       api.d3Force?.("orbitCollide", createGraph3DCollisionForce());
       api.d3ReheatSimulation?.();
       setGraph3dRunning(true);
@@ -741,7 +743,6 @@ function GraphViewComponent({
         graphApi._destructor();
         graph3dRef.current = null;
         graph3dNodeRef.current = new Map();
-        container.replaceChildren();
       };
     }
 
@@ -849,14 +850,14 @@ function GraphViewComponent({
       },
       labelColor: { color: graphThemeColor("--omarchy-fg", "#d4d4d4") },
       labelFont: "IBM Plex Sans, Inter, system-ui, sans-serif",
-      labelSize: 12,
+      labelSize: 15,
       labelWeight: "600",
-      labelDensity: 0.56,
-      labelGridCellSize: 72,
-      // Only render Sigma's own text labels when a node is ≥8px on screen.
+      labelDensity: 0.64,
+      labelGridCellSize: 80,
+      // Only render Sigma's own text labels when a node is ≥3px on screen.
       // Icons mode bypasses this entirely (forceLabel handles glyphs),
       // but in spheres mode this prevents the text storm at zoom-out.
-      labelRenderedSizeThreshold: 5,
+      labelRenderedSizeThreshold: 3,
       defaultNodeColor: graphThemeColor("--omarchy-color7", "#94a3b8"),
       defaultEdgeColor: withAlpha(graphThemeColor("--omarchy-border", "#335064"), 0.32),
       zIndex: true,
@@ -866,7 +867,7 @@ function GraphViewComponent({
       // proportional to their screen spacing regardless of zoom level — they
       // neither "float" too large when zoomed out nor disappear when zoomed in.
       zoomToSizeRatioFunction: (ratio: number) => Math.max(ratio, 0.001),
-      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current, nodeView),
+      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current, nodeView, cameraRatioRef),
       edgeReducer: (edge, data) => reduceEdge(edge, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, cameraRatioRef),
     });
 
@@ -1363,7 +1364,15 @@ const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
         onOpenEditor={(path) => void openNodeInEditor(path)}
       />
 
-      <div className="graph-canvas" ref={containerRef}>
+      <div className="graph-canvas">
+        {/*
+          Sigma and ForceGraph3D mount their canvas children imperatively into
+          this inner div. Keeping it free of any React children prevents the
+          reconciler from racing with library DOM mutations — without this
+          split, `NotFoundError: The object can not be found here.` fires
+          whenever the overlay below toggles while a canvas is alive.
+        */}
+        <div className="graph-canvas-mount" ref={containerRef} />
         {isLoading && (
           <div className="graph-loading-overlay" role="status" aria-live="polite">
             <span className="orbit-spinner" aria-hidden />
@@ -1533,7 +1542,7 @@ function buildGraph3DData(
       path: node.path,
       parentPath: node.parentPath,
       color: baseColor,
-      val: Math.max(node.isDir ? 4.2 : node.isCluster ? 3.8 : 2.6, getNodeSize(node) * (node.isDir ? 0.72 : 0.52)),
+      val: graph3dNodeValue(node, visualState),
       x,
       y,
       z,
@@ -1546,6 +1555,7 @@ function buildGraph3DData(
       extension: node.extension,
       clusterSummary: node.clusterSummary,
       childCount: node.childCount,
+      sizeBytes: node.sizeBytes,
       depth: node.depth,
       visualState,
       glyphText,
@@ -1589,6 +1599,25 @@ function graph3dNodeBaseColor(node: GraphDisplayNode, groupColors: Map<number, s
   return graph3dBrighten(graph3dSolidColor(color, NODE_TYPE_FALLBACKS[getNodeType(node)] ?? "#d8dee9"), 1.25);
 }
 
+function graph3dNodeValue(node: GraphDisplayNode, visualState: VisualState): number {
+  const clusterTotal = node.clusterSummary?.totalChildren ?? node.childCount ?? 0;
+  const contentWeight = node.isCluster || visualState === "proxy"
+    ? Math.log2(Math.max(1, clusterTotal) + 1)
+    : node.isDir
+      ? Math.log2(Math.max(1, node.childCount) + 1)
+      : Math.log10(Math.max(1, node.sizeBytes) + 1);
+
+  if (node.isCluster || visualState === "proxy") {
+    return Math.min(20, 6.2 + contentWeight * 1.15);
+  }
+  if (node.isDir) {
+    // Folders are the skill-tree hubs: visibly larger by default, then grow
+    // smoothly with visible children. Log scaling avoids giant outliers.
+    return Math.min(24, 8.4 + contentWeight * 1.35);
+  }
+  return Math.min(9.2, 3.1 + contentWeight * 0.42);
+}
+
 function graph3dNodeObject(
   node: Graph3DNode,
   hoveredId: string | null,
@@ -1609,11 +1638,11 @@ function graph3dNodeObject(
     return (source === focus && target === node.id) || (target === focus && source === node.id);
   });
   const dimmed = dimUnrelated && Boolean(focus) && !isActive && !isRelated;
-  const radius = Math.max(node.isDir ? 3.6 : node.isCluster ? 3.2 : 2.35, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 1.55 : node.isCluster ? 1.42 : 1.12));
+  const radius = Math.max(node.isDir ? 4.8 : node.isCluster ? 3.6 : 2.35, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 1.9 : node.isCluster ? 1.48 : 1.08));
   const tint = graph3dSolidColor(graph3dNodeColor(node, hoveredId, selectedId, dimUnrelated, links), node.color);
 
   const group = new THREE.Group();
-  const badge = graph3dBadgeSprite(node, isActive, radius, tint, dimmed);
+  const badge = graph3dBadgeSprite(node, isActive, radius, tint);
   group.add(badge);
 
   const shouldShowBillboard = showText && (node.isDir || node.isCluster || isActive || isRelated);
@@ -1805,10 +1834,10 @@ function graph3dLinkWidth(link: Graph3DLink, hoveredId: string | null, selectedI
 function graph3dLinkDistance(link: Graph3DLink, nodesById: Map<string, Graph3DNode>): number {
   const source = nodesById.get(graph3dEndpointId(link.source));
   const target = nodesById.get(graph3dEndpointId(link.target));
-  if (link.category !== "hierarchy") return 88;
-  if (source?.isDir && target?.isDir) return 118;
-  if (source?.isDir || target?.isDir) return 54;
-  return 34;
+  if (link.category !== "hierarchy") return 96;
+  if (source?.isDir && target?.isDir) return 134;
+  if (source?.isDir || target?.isDir) return 66;
+  return 38;
 }
 
 function graph3dLinkParticles(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
@@ -1841,8 +1870,8 @@ function graph3dEndpointId(endpoint: string | number | Graph3DNode): string {
 }
 
 function graph3dCollisionRadius(node: Graph3DNode): number {
-  if (node.isDir && !node.isCluster) return Math.max(13, Math.sqrt(Math.max(1, node.val)) * 3.1);
-  if (node.isCluster || node.visualState === "proxy") return Math.max(11, Math.sqrt(Math.max(1, node.val)) * 2.8);
+  if (node.isDir && !node.isCluster) return Math.max(20, Math.sqrt(Math.max(1, node.val)) * 4.6);
+  if (node.isCluster || node.visualState === "proxy") return Math.max(14, Math.sqrt(Math.max(1, node.val)) * 3.1);
   return Math.max(8, Math.sqrt(Math.max(1, node.val)) * 2.25);
 }
 
@@ -2479,10 +2508,15 @@ function constellationLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): Grap
   return vegaRadialTidyLayout(nodes, roots, tree);
 }
 
-const VEGA_RADIAL_LEAF_GAP = 180;
-const VEGA_RADIAL_DEPTH_GAP = 520;
-const VEGA_RADIAL_ROOT_GAP_LEAVES = 8;
-const VEGA_RADIAL_MIN_RADIUS = 1350;
+// Per-leaf arc allocation. Bumped from 180 → 230 so sibling files no longer
+// crush into the same arc segment at default zoom.
+const VEGA_RADIAL_LEAF_GAP = 230;
+// Per-depth radial spacing. Bumped from 520 → 760 so deep single-child folder
+// chains (home → lamb → Library → lab → …) separate radially instead of
+// stacking on top of each other along the same angle.
+const VEGA_RADIAL_DEPTH_GAP = 760;
+const VEGA_RADIAL_ROOT_GAP_LEAVES = 10;
+const VEGA_RADIAL_MIN_RADIUS = 1600;
 const VEGA_RADIAL_START_ANGLE = 270; // Same visual start as Vega sample: root fan begins at top.
 
 function vegaRadialTidyLayout(
@@ -2600,9 +2634,14 @@ function relaxRadialVisualFootprints(nodes: GraphDisplayNode[]): GraphDisplayNod
   if (nodes.length < 2) return nodes;
   const placed = nodes.map((node) => ({ ...node }));
   const maxNodes = Math.min(placed.length, 900);
-  const iterations = placed.length > 500 ? 2 : 4;
+  // Iterate until no overlap is detected, capped to avoid pathological cases.
+  // Empirically a tight 5-stack of files needs ~12 passes at high push factor
+  // to fully fan out. Stop early once a pass made no corrections.
+  const maxIterations = placed.length > 500 ? 18 : 32;
+  const pushFactor = 0.88;
 
-  for (let pass = 0; pass < iterations; pass += 1) {
+  for (let pass = 0; pass < maxIterations; pass += 1) {
+    let movedAny = false;
     for (let i = 0; i < maxNodes; i += 1) {
       const a = placed[i];
       const aPinned = a.depth <= 0;
@@ -2619,9 +2658,9 @@ function relaxRadialVisualFootprints(nodes: GraphDisplayNode[]): GraphDisplayNod
           dy = Math.sin(angle);
           distance = 1;
         }
-        const minDistance = Math.min(170, visualFootprintRadius(a) + visualFootprintRadius(b));
+        const minDistance = visualFootprintRadius(a) + visualFootprintRadius(b) + 26;
         if (distance >= minDistance) continue;
-        const push = (minDistance - distance) * 0.42;
+        const push = (minDistance - distance) * pushFactor;
         const nx = dx / distance;
         const ny = dy / distance;
         if (!aPinned) {
@@ -2632,8 +2671,10 @@ function relaxRadialVisualFootprints(nodes: GraphDisplayNode[]): GraphDisplayNod
           b.x += nx * push * (aPinned ? 1 : 0.5);
           b.y += ny * push * (aPinned ? 1 : 0.5);
         }
+        movedAny = true;
       }
     }
+    if (!movedAny) break;
   }
 
   return placed;
@@ -2646,9 +2687,9 @@ function vegaLeafSlots(id: number, tree: ReturnType<typeof hierarchy>, seen = ne
   if (!node) return 1;
   const kids = orderedVegaChildren(id, tree);
   if (!kids.length) {
-    if (node.visualState === "proxy" || node.isCluster) return 5.4;
-    if (node.isDir) return 3.2;
-    return 1.35;
+    if (node.visualState === "proxy" || node.isCluster) return 6.4;
+    if (node.isDir) return 4.2;
+    return 2.1;
   }
   const childSlots = kids.reduce((sum, child) => sum + vegaLeafSlots(child, tree, new Set(seen)), 0);
   // Parents with many direct children reserve a little extra arc, matching the
@@ -2834,6 +2875,7 @@ function reduceNode(
   navHistory: string[] = [],
   breadcrumbNodes: GraphNode[] = [],
   nodeView: NodeView = "spheres",
+  cameraRatioRef?: { current: number },
 ) {
   const isHovered = hovered === node;
   const isSelected = selected === node;
@@ -2851,9 +2893,21 @@ function reduceNode(
   const iconsMode = nodeView === "icons";
   const visualState = String(data.visualState ?? "primary");
 
-  const effectiveBase = rawBase;
-
   const isClusterNode = Boolean(data.isCluster) || visualState === "proxy";
+
+  // In icons mode the visible glyph is rendered at a screen-pixel min floor
+  // (9px files, 12px clusters), but the underlying sphere — which is what
+  // Sigma uses for hit detection — was staying at the base graph size. That
+  // mismatch made clicks land on a *neighboring* node whenever the user
+  // clicked the icon's edge. Match the sphere's graph-space size to the
+  // rendered icon so the hit zone tracks what the user sees.
+  let effectiveBase = rawBase;
+  if (iconsMode) {
+    const ratio = Math.max(0.001, cameraRatioRef?.current ?? 1);
+    const minScreenRadius = isClusterNode ? 7 : 6;
+    const sphereGraphSize = minScreenRadius * ratio;
+    effectiveBase = Math.max(rawBase, sphereGraphSize);
+  }
 
   // INVARIANT — do not regress: in icons mode, BOTH files/folders AND
   // proxy/cluster nodes render as icons only. The sphere is always invisible
@@ -3451,20 +3505,15 @@ function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabe
     const glyphColor = String(attrs.glyphColor ?? data.color ?? graphThemeColor("--omarchy-color7", "#a8bbc8"));
     const opacity = Number(attrs.glyphOpacity ?? 1);
     const glyphScale = Number(attrs.glyphScale ?? 1);
-    // Glyph size scales linearly with zoom. data.size is the camera-adjusted
-    // pixel size of the (invisible) sphere, which now equals the node's natural
-    // radius so EdgeClampedProgram terminates edges at the icon perimeter.
-    // Keep icons smaller than their invisible hit radius. The Vega radial layout
-    // now provides more angular/radial room, and the glyph should sit inside
-    // that room instead of becoming the collision footprint.
-    // No minimum floor — let glyphs shrink naturally when zoomed out.
-    // Skip rendering entirely when the glyph would be <6px (invisible squiggle).
+    // Glyph size scales with zoom (data.size is the camera-adjusted pixel
+    // size of the invisible sphere). A soft floor keeps icons legible at
+    // zoom-out without making them so large that the graph-space layout
+    // appears stacked: when the floor is much bigger than the rendered slot,
+    // siblings end up visually overlapping even though the layout spaced them
+    // correctly. Keep the floor close to typical zoomed-in sizes.
+    const minFontSize = isAggregate ? 12 : 9;
     const rawFontSize = data.size * (isAggregate ? 1.28 : 1.42);
-    if (rawFontSize < 6) {
-      context.restore();
-      return;
-    }
-    const fontSize = Math.min(96, rawFontSize) * glyphScale;
+    const fontSize = Math.min(96, Math.max(minFontSize, rawFontSize)) * glyphScale;
 
     context.save();
     context.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
@@ -3485,15 +3534,16 @@ function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabe
     context.shadowOffsetX = 0;
     context.shadowOffsetY = 0;
 
-    // Only draw filename text when the icon is large enough to read.
-    // Higher threshold prevents radial leaves from turning into a text pile.
-    if (!isAggregate && showNames && data.label && fontSize >= 28) {
+    // Draw the filename once the icon is reasonably readable. The previous
+    // threshold (28px) meant labels only appeared when zoomed in close;
+    // 16px lets them surface at a typical default-zoom view.
+    if (!isAggregate && showNames && data.label && fontSize >= 16) {
       context.globalAlpha = Math.min(0.92, context.globalAlpha);
       context.fillStyle = graphThemeColor("--omarchy-fg", "#d4d4d4");
-      context.font = '600 11px Inter, system-ui, sans-serif';
+      context.font = '600 13px IBM Plex Sans, Inter, system-ui, sans-serif';
       context.textAlign = "center";
       context.textBaseline = "top";
-      context.fillText(String(data.label), data.x, data.y + fontSize * 0.52 + 3, 120);
+      context.fillText(String(data.label), data.x, data.y + fontSize * 0.52 + 3, 160);
     }
     context.restore();
   };

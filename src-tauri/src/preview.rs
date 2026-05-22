@@ -1,12 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use base64::{engine::general_purpose, Engine as _};
-
 use crate::models::{PreviewMetaItem, PreviewPayload};
 
 const MAX_TEXT_PREVIEW_BYTES: usize = 32_000;
-const MAX_IMAGE_PREVIEW_BYTES: u64 = 32 * 1024 * 1024;
 
 pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
     let target = Path::new(path);
@@ -155,29 +152,17 @@ pub fn build_preview(path: &str) -> Result<PreviewPayload, String> {
             key: "MIME".into(),
             value: mime.into(),
         });
-        if metadata.len() > MAX_IMAGE_PREVIEW_BYTES {
-            return Ok(PreviewPayload {
-                kind: "binary".into(),
-                title,
-                path: path.into(),
-                summary: format!(
-                    "Image preview skipped because the file is larger than {} MB.",
-                    MAX_IMAGE_PREVIEW_BYTES / 1024 / 1024
-                ),
-                content: None,
-                metadata: meta,
-            });
-        }
-        let data = fs::read(target).map_err(|e| e.to_string())?;
         return Ok(PreviewPayload {
             kind: "image".into(),
             title,
             path: path.into(),
+            // The frontend streams the image via Tauri's asset protocol
+            // (`convertFileSrc`) instead of base64-inlining it here. Inlining
+            // multi-megabyte wallpapers was making the Inspector allocate huge
+            // strings and could crash/reset the React tree while clicking
+            // through image folders.
             summary: "Image preview".into(),
-            content: Some(format!(
-                "data:{mime};base64,{}",
-                general_purpose::STANDARD.encode(data)
-            )),
+            content: None,
             metadata: meta,
         });
     }

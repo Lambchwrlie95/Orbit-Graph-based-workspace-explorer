@@ -63,6 +63,17 @@ function InspectorComponent({
     setActiveTab("preview");
   }, [record?.path]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string }>).detail;
+      if (!detail?.path || detail.path === record?.path) {
+        setActiveTab("notes");
+      }
+    };
+    document.addEventListener("orbit:inspector:open-notes", handler);
+    return () => document.removeEventListener("orbit:inspector:open-notes", handler);
+  }, [record?.path]);
+
   const startRename = () => {
     if (!record) return;
     setRenameValue(record.name);
@@ -114,17 +125,6 @@ function InspectorComponent({
   const previewKind = (preview?.kind ?? (record.isDir ? "directory" : "binary")) as PreviewKind;
   const previewTitle = preview?.title || record.name;
   const previewSummary = preview?.summary || (record.isDir ? "Folder" : "No preview available");
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ path?: string }>).detail;
-      if (!detail?.path || detail.path === record?.path) {
-        setActiveTab("notes");
-      }
-    };
-    document.addEventListener("orbit:inspector:open-notes", handler);
-    return () => document.removeEventListener("orbit:inspector:open-notes", handler);
-  }, [record?.path]);
 
   const recordType = record.isDir ? "Folder" : record.mimeType || record.extension || "File";
   const noteLinkCount = currentNote?.links.length ?? 0;
@@ -553,10 +553,13 @@ function PreviewSection({
         </div>
       ) : preview ? (
         <div className={`preview-content preview-content-${preview.kind}`}>
-          {isImage && preview.content && (
-            <div className="image-preview">
-              <img src={preview.content} alt={preview.title} />
-            </div>
+          {isImage && (
+            <ImagePreview
+              path={record.path}
+              title={preview.title || record.name}
+              src={preview.content || convertFileSrc(record.path)}
+              onOpen={onOpen}
+            />
           )}
 
           {isText && isMarkdownFile(record.extension) && (
@@ -666,6 +669,45 @@ function languageLabel(record: FileRecord): string {
 
 function previewMime(preview: PreviewPayload | null): string | undefined {
   return preview?.metadata.find((item) => item.key.toLowerCase() === "mime")?.value;
+}
+
+interface ImagePreviewProps {
+  path: string;
+  title: string;
+  src: string;
+  onOpen: (path: string) => void;
+}
+
+function ImagePreview({ path, title, src, onOpen }: ImagePreviewProps) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [path, src]);
+
+  if (failed || !src) {
+    return (
+      <div className="image-preview image-preview--error">
+        <ImageIcon size={26} strokeWidth={1.5} />
+        <span>Image preview failed in the Inspector.</span>
+        <button type="button" className="link-button" onClick={() => onOpen(path)}>
+          Open externally
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="image-preview">
+      <img
+        src={src}
+        alt={title}
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
 }
 
 interface AudioPreviewProps {

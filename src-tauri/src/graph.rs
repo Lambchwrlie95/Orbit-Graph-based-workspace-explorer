@@ -191,7 +191,9 @@ fn direct_children(
             SELECT id, name, path, is_dir, size_bytes, extension, parent_path
             FROM files
             WHERE parent_path = ?1
-            ORDER BY is_dir DESC, name COLLATE NOCASE ASC
+            ORDER BY is_dir DESC,
+                     CASE WHEN substr(name, 1, 1) = '.' THEN 1 ELSE 0 END ASC,
+                     name COLLATE NOCASE ASC
             LIMIT ?2
             "#,
         )
@@ -235,7 +237,9 @@ fn hidden_child_summary(
               SELECT is_dir, size_bytes, extension
               FROM files
               WHERE parent_path = ?1
-              ORDER BY is_dir DESC, name COLLATE NOCASE ASC
+              ORDER BY is_dir DESC,
+                       CASE WHEN substr(name, 1, 1) = '.' THEN 1 ELSE 0 END ASC,
+                       name COLLATE NOCASE ASC
               LIMIT -1 OFFSET ?2
             )
             SELECT
@@ -261,7 +265,9 @@ fn hidden_child_summary(
               SELECT is_dir, extension
               FROM files
               WHERE parent_path = ?1
-              ORDER BY is_dir DESC, name COLLATE NOCASE ASC
+              ORDER BY is_dir DESC,
+                       CASE WHEN substr(name, 1, 1) = '.' THEN 1 ELSE 0 END ASC,
+                       name COLLATE NOCASE ASC
               LIMIT -1 OFFSET ?2
             )
             SELECT extension
