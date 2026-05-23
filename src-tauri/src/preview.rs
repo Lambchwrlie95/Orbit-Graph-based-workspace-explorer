@@ -206,14 +206,14 @@ fn audio_mime(path: &Path) -> Option<&'static str> {
     {
         "mp3" => Some("audio/mpeg"),
         "wav" => Some("audio/wav"),
-        "ogg" | "oga" => Some("audio/ogg"),
-        // `.opus` files are normally Opus-in-Ogg; WebKit/GStreamer is more
-        // reliable when the source advertises the container MIME.
-        "opus" => Some("audio/ogg"),
+        // Codec parameters help WebKitGTK/GStreamer pick the right decoder.
+        // Without them the browser often falls back to "unknown" and gives up.
+        "ogg" | "oga" => Some("audio/ogg; codecs=vorbis"),
+        "opus" => Some("audio/ogg; codecs=opus"),
         "flac" => Some("audio/flac"),
         "aac" => Some("audio/aac"),
         "m4a" => Some("audio/mp4"),
-        "weba" => Some("audio/webm"),
+        "weba" => Some("audio/webm; codecs=opus"),
         "aiff" | "aif" | "aifc" => Some("audio/aiff"),
         "au" => Some("audio/basic"),
         _ => None,

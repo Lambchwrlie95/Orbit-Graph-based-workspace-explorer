@@ -12,7 +12,7 @@ const MAX_NODE_LIMIT: usize = 5_000;
 // Lower per-folder limit so large flat dirs (e.g. ~/.config with 60+ subdirs)
 // collapse into a cluster node instead of creating a visual fan in the orbit graph.
 // Users can expand the cluster to reveal more children.
-const DEFAULT_FOLDER_CHILD_LIMIT: usize = 22;
+const DEFAULT_FOLDER_CHILD_LIMIT: usize = 16;
 const EXPANDED_FOLDER_CHILD_LIMIT: usize = 500;
 // Cap non-containment edges per source node. A single file with 200 imports
 // produces 200 chord lines through the canvas — visual noise that drowns the

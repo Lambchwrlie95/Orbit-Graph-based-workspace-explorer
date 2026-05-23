@@ -137,16 +137,67 @@ async function loadHljsCore(): Promise<HLJSApi> {
   return hljsPromise;
 }
 
+// Static import map so Vite can code-split each language at build time.
+// Only languages referenced by EXTENSION_TO_LANGUAGE / FILENAME_TO_LANGUAGE
+// are included here. Add new entries when extending the maps above.
+const LANGUAGE_IMPORTS: Record<string, () => Promise<unknown>> = {
+  bash: () => import("highlight.js/lib/languages/bash"),
+  c: () => import("highlight.js/lib/languages/c"),
+  clojure: () => import("highlight.js/lib/languages/clojure"),
+  cmake: () => import("highlight.js/lib/languages/cmake"),
+  cpp: () => import("highlight.js/lib/languages/cpp"),
+  csharp: () => import("highlight.js/lib/languages/csharp"),
+  css: () => import("highlight.js/lib/languages/css"),
+  diff: () => import("highlight.js/lib/languages/diff"),
+  dockerfile: () => import("highlight.js/lib/languages/dockerfile"),
+  dos: () => import("highlight.js/lib/languages/dos"),
+  elixir: () => import("highlight.js/lib/languages/elixir"),
+  erlang: () => import("highlight.js/lib/languages/erlang"),
+  fsharp: () => import("highlight.js/lib/languages/fsharp"),
+  go: () => import("highlight.js/lib/languages/go"),
+  graphql: () => import("highlight.js/lib/languages/graphql"),
+  haskell: () => import("highlight.js/lib/languages/haskell"),
+  ini: () => import("highlight.js/lib/languages/ini"),
+  java: () => import("highlight.js/lib/languages/java"),
+  javascript: () => import("highlight.js/lib/languages/javascript"),
+  json: () => import("highlight.js/lib/languages/json"),
+  kotlin: () => import("highlight.js/lib/languages/kotlin"),
+  latex: () => import("highlight.js/lib/languages/latex"),
+  less: () => import("highlight.js/lib/languages/less"),
+  lua: () => import("highlight.js/lib/languages/lua"),
+  makefile: () => import("highlight.js/lib/languages/makefile"),
+  markdown: () => import("highlight.js/lib/languages/markdown"),
+  nim: () => import("highlight.js/lib/languages/nim"),
+  ocaml: () => import("highlight.js/lib/languages/ocaml"),
+  perl: () => import("highlight.js/lib/languages/perl"),
+  php: () => import("highlight.js/lib/languages/php"),
+  powershell: () => import("highlight.js/lib/languages/powershell"),
+  protobuf: () => import("highlight.js/lib/languages/protobuf"),
+  python: () => import("highlight.js/lib/languages/python"),
+  r: () => import("highlight.js/lib/languages/r"),
+  ruby: () => import("highlight.js/lib/languages/ruby"),
+  rust: () => import("highlight.js/lib/languages/rust"),
+  scala: () => import("highlight.js/lib/languages/scala"),
+  scss: () => import("highlight.js/lib/languages/scss"),
+  sql: () => import("highlight.js/lib/languages/sql"),
+  swift: () => import("highlight.js/lib/languages/swift"),
+  typescript: () => import("highlight.js/lib/languages/typescript"),
+  vim: () => import("highlight.js/lib/languages/vim"),
+  "x86asm": () => import("highlight.js/lib/languages/x86asm"),
+  xml: () => import("highlight.js/lib/languages/xml"),
+  yaml: () => import("highlight.js/lib/languages/yaml"),
+};
+
 async function ensureLanguageLoaded(hljs: HLJSApi, language: string): Promise<void> {
   if (loadedLanguages.has(language)) return;
+  const load = LANGUAGE_IMPORTS[language];
+  if (!load) return; // unknown language — no warning, no registration
   try {
-    // Vite resolves this dynamic specifier at build time; only the languages
-    // actually referenced get bundled (one chunk each, lazy on use).
-    const mod = await import(`highlight.js/lib/languages/${language}`);
-    const grammar = (mod.default ?? mod) as Parameters<HLJSApi["registerLanguage"]>[1];
+    const mod = await load();
+    const grammar = (mod as any).default ?? mod;
     hljs.registerLanguage(language, grammar);
     loadedLanguages.add(language);
   } catch {
-    // Unknown language id — leave it unregistered; caller falls back to plain.
+    // leave unregistered; caller falls back to plain text.
   }
 }

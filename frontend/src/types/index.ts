@@ -294,3 +294,9 @@ export interface IconThemePayload {
   defaultDir: IconRule;
   defaultCluster: IconRule;
 }
+
+export interface GraphWallpaper {
+  theme: string;
+  name: string;
+  path: string;
+}

@@ -93,46 +93,60 @@ export function KeyboardShortcutsDialog() {
     const unlisten = listen("menu-keyboard-shortcuts", () => {
       setIsOpen(true);
     });
+    const handleOrbitEvent = () => setIsOpen(prev => !prev);
+    document.addEventListener("orbit:keyboard-help", handleOrbitEvent);
 
     return () => {
       unlisten.then((f) => f());
+      document.removeEventListener("orbit:keyboard-help", handleOrbitEvent);
     };
   }, []);
 
   const shortcuts = [
-    { key: "Ctrl/Cmd + O", description: "Open Folder" },
-    { key: "Ctrl/Cmd + N", description: "New Window" },
-    { key: "Ctrl/Cmd + R", description: "Reload" },
-    { key: "Ctrl/Cmd + Shift + I", description: "Toggle Developer Tools" },
-    { key: "Ctrl/Cmd + B", description: "Toggle Left Sidebar" },
-    { key: "Ctrl/Cmd + Shift + B", description: "Toggle Right Sidebar" },
-    { key: "Ctrl/Cmd + 1", description: "Show Explorer" },
-    { key: "Ctrl/Cmd + 2", description: "Show Grid View" },
-    { key: "Ctrl/Cmd + 3", description: "Show Columns View" },
-    { key: "Ctrl/Cmd + 4", description: "Show Search" },
-    { key: "Ctrl/Cmd + 5", description: "Show Assets" },
-    { key: "Ctrl/Cmd + 6", description: "Show Status" },
-    { key: "Ctrl/Cmd + F", description: "Search Files" },
-    { key: "Ctrl/Cmd + S", description: "Save File (in editor)" },
-    { key: "Esc", description: "Close Dialog / Cancel Operation" },
-    { key: "Enter", description: "Confirm / Open Selected" },
-    { key: "Arrow Keys", description: "Navigate in Lists" },
+    { section: "Global", items: [
+      { key: "Ctrl/Cmd + P", description: "Open command palette" },
+      { key: "Ctrl/Cmd + B", description: "Toggle left sidebar" },
+      { key: "Ctrl/Cmd + Shift + B", description: "Toggle right sidebar" },
+      { key: "Ctrl/Cmd + L", description: "Edit workspace path" },
+      { key: "Ctrl/Cmd + 1", description: "Show Explorer" },
+      { key: "Ctrl/Cmd + 2", description: "Show Search" },
+      { key: "Ctrl/Cmd + 3", description: "Show Assets" },
+      { key: "Backspace", description: "Navigate back in graph" },
+      { key: "Enter", description: "Open / drill into selection" },
+      { key: "Space", description: "Quick-open image in viewer" },
+    ]},
+    { section: "Graph", items: [
+      { key: "Click node", description: "Select and inspect node" },
+      { key: "Double-click node", description: "Open in editor" },
+      { key: "Right-click node", description: "Context menu (open, copy path, notes)" },
+      { key: "Click folder node", description: "Drill into folder graph" },
+      { key: "Backspace", description: "Go back to parent folder" },
+      { key: "Escape", description: "Deselect / exit PathFinder mode" },
+    ]},
+    { section: "3D Graph", items: [
+      { key: "Left drag", description: "Rotate graph" },
+      { key: "Right drag / scroll", description: "Zoom" },
+      { key: "Arrow keys", description: "Navigate between nodes" },
+    ]},
   ];
 
   return (
     <Dialog isOpen={isOpen} onClose={() => setIsOpen(false)} title="Keyboard Shortcuts">
       <div className="shortcuts-dialog">
-        <div className="shortcuts-list">
-          {shortcuts.map((shortcut, index) => (
-            <div key={index} className="shortcut-item">
-              <kbd className="shortcut-key">{shortcut.key}</kbd>
-              <span className="shortcut-description">{shortcut.description}</span>
-            </div>
-          ))}
-        </div>
+        {shortcuts.map((section) => (
+          <div key={section.section} className="shortcuts-section">
+            <div className="shortcuts-section-title">{section.section}</div>
+            {section.items.map((shortcut, i) => (
+              <div key={i} className="shortcut-item">
+                <kbd className="shortcut-key">{shortcut.key}</kbd>
+                <span className="shortcut-description">{shortcut.description}</span>
+              </div>
+            ))}
+          </div>
+        ))}
         <p className="shortcuts-note">
           <HelpCircle size={14} />
-          Keyboard shortcuts may vary by platform
+          Press <kbd>?</kbd> anytime to open this panel
         </p>
       </div>
     </Dialog>

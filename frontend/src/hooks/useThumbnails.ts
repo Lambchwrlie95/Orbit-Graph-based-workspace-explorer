@@ -2,138 +2,108 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { tauriInvoke } from '../lib/tauriCommands';
 import type { ThumbnailInfo, ThumbnailResponse } from '../types';
 
-// Cap RAM use during long browsing sessions. Cold thumbs still live on disk
-// at ~/.local/share/orbit/thumbnails/ and reload on demand.
 const THUMBNAIL_CAP_KEY = "orbit:settings:thumbnailMemoryCap";
+const MAX_CONCURRENT = 6;
 
 export function useThumbnails() {
-  const [loading, setLoading] = useState<Set<string>>(new Set());
+  // Render state — only what the UI reads.
   const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
-  const [errors, setErrors] = useState<Map<string, string>>(new Map());
-  const [memoryCap, setMemoryCap] = useState(() => readNumberSetting(THUMBNAIL_CAP_KEY, 300));
-  const pendingRequests = useRef<Set<string>>(new Set());
+  const [loadingCount, setLoadingCount] = useState(0);
+
+  // Refs for mutation tracking — read inside callbacks without causing cascade.
+  const thumbnailsRef = useRef<Map<string, string>>(new Map());
+  const inFlight = useRef<Set<string>>(new Set());
+  const memoryCapRef = useRef(readNumberSetting(THUMBNAIL_CAP_KEY, 300));
+  const concurrentRef = useRef(0);
+  const queue = useRef<Array<() => void>>([]);
 
   useEffect(() => {
-    const refreshSettings = () => setMemoryCap(readNumberSetting(THUMBNAIL_CAP_KEY, 300));
-    const clearMemoryCache = () => {
+    const refreshCap = () => { memoryCapRef.current = readNumberSetting(THUMBNAIL_CAP_KEY, 300); };
+    const clearCache = () => {
+      thumbnailsRef.current = new Map();
+      inFlight.current = new Set();
       setThumbnails(new Map());
-      setErrors(new Map());
     };
-    document.addEventListener("orbit:settings-changed", refreshSettings);
-    document.addEventListener("orbit:thumbnail-cache-changed", clearMemoryCache);
+    document.addEventListener("orbit:settings-changed", refreshCap);
+    document.addEventListener("orbit:thumbnail-cache-changed", clearCache);
     return () => {
-      document.removeEventListener("orbit:settings-changed", refreshSettings);
-      document.removeEventListener("orbit:thumbnail-cache-changed", clearMemoryCache);
+      document.removeEventListener("orbit:settings-changed", refreshCap);
+      document.removeEventListener("orbit:thumbnail-cache-changed", clearCache);
     };
   }, []);
 
-  const getThumbnailKey = (fileId: number, size: number): string => 
-    `${fileId}_${size}`;
+  const drainQueue = useCallback(() => {
+    while (concurrentRef.current < MAX_CONCURRENT && queue.current.length > 0) {
+      const next = queue.current.shift();
+      next?.();
+    }
+  }, []);
 
-  const ensureThumbnail = useCallback(async (
-    fileId: number, 
+  // Stable callback — no state in deps, reads refs instead.
+  const ensureThumbnail = useCallback((
+    fileId: number,
     filePath: string,
     fileModifiedAt: number,
-    size: number
-  ): Promise<string | null> => {
-    const key = getThumbnailKey(fileId, size);
-    
-    // Return cached
-    if (thumbnails.has(key)) {
-      return thumbnails.get(key)!;
-    }
-    
-    // Skip if already loading or pending
-    if (loading.has(key) || pendingRequests.current.has(key)) {
-      return null;
-    }
-    
-    pendingRequests.current.add(key);
-    setLoading(prev => new Set(prev).add(key));
-    
-    try {
-      const response: ThumbnailResponse = await tauriInvoke('ensure_thumbnail', {
-        request: {
-          file_id: fileId,
-          file_path: filePath,
-          file_modified_at: fileModifiedAt,
-          size,
-        }
-      });
-      
-      if (response.status === 'ready' && response.path) {
-        // Convert to asset URL for Tauri
-        const assetUrl = `asset://localhost${response.path}`;
-        
-        // Cap in-memory thumbnails. Map preserves insertion order, so the
-        // first key is the oldest. Evicting from the head keeps the most
-        // recently used thumbs hot in memory; cold ones reload from the
-        // disk cache on next browse.
-        setThumbnails(prev => {
-          const next = new Map(prev);
-          next.delete(key); // re-insert at the end
-          next.set(key, assetUrl);
-          while (next.size > memoryCap) {
-            const oldest = next.keys().next().value;
-            if (oldest === undefined) break;
-            next.delete(oldest);
+    size: number,
+  ): void => {
+    const key = `${fileId}_${size}`;
+    if (thumbnailsRef.current.has(key) || inFlight.current.has(key)) return;
+
+    inFlight.current.add(key);
+
+    const run = async () => {
+      concurrentRef.current += 1;
+      setLoadingCount(c => c + 1);
+      try {
+        const response: ThumbnailResponse = await tauriInvoke('ensure_thumbnail', {
+          request: {
+            file_id: fileId,
+            file_path: filePath,
+            file_modified_at: fileModifiedAt,
+            size,
           }
-          return next;
         });
-        setErrors(prev => {
-          const next = new Map(prev);
-          next.delete(key);
-          return next;
-        });
-        
-        return assetUrl;
-      } else if (response.status === 'error') {
-        setErrors(prev => new Map(prev).set(key, response.error || 'Unknown error'));
-        return null;
+        if (response.status === 'ready' && response.path) {
+          const assetUrl = `asset://localhost${response.path}`;
+          thumbnailsRef.current.delete(key);
+          thumbnailsRef.current.set(key, assetUrl);
+          while (thumbnailsRef.current.size > memoryCapRef.current) {
+            const oldest = thumbnailsRef.current.keys().next().value;
+            if (oldest === undefined) break;
+            thumbnailsRef.current.delete(oldest);
+          }
+          setThumbnails(new Map(thumbnailsRef.current));
+        }
+      } catch {
+        // silently drop; tile stays as placeholder
+      } finally {
+        inFlight.current.delete(key);
+        concurrentRef.current -= 1;
+        setLoadingCount(c => Math.max(0, c - 1));
+        drainQueue();
       }
-      // status === 'generating' - will be cached on next call
-      return null;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      setErrors(prev => new Map(prev).set(key, errorMsg));
-      return null;
-    } finally {
-      setLoading(prev => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-      pendingRequests.current.delete(key);
+    };
+
+    if (concurrentRef.current < MAX_CONCURRENT) {
+      void run();
+    } else {
+      queue.current.push(() => void run());
     }
-  }, [thumbnails, loading, memoryCap]);
+  }, [drainQueue]);
 
   const getThumbnailInfo = useCallback(async (fileId: number): Promise<ThumbnailInfo[]> => {
     try {
       return await tauriInvoke('get_thumbnail_info', { fileId });
-    } catch (err) {
-      console.error('Failed to get thumbnail info:', err);
+    } catch {
       return [];
     }
   }, []);
 
   const isLoading = useCallback((fileId: number, size: number): boolean => {
-    return loading.has(getThumbnailKey(fileId, size));
-  }, [loading]);
+    return inFlight.current.has(`${fileId}_${size}`);
+  }, []);
 
-  const getError = useCallback((fileId: number, size: number): string | undefined => {
-    return errors.get(getThumbnailKey(fileId, size));
-  }, [errors]);
-
-  const loadingCount = loading.size;
-
-  return {
-    thumbnails,
-    ensureThumbnail,
-    getThumbnailInfo,
-    isLoading,
-    getError,
-    loadingCount,
-  };
+  return { thumbnails, ensureThumbnail, getThumbnailInfo, isLoading, loadingCount };
 }
 
 export default useThumbnails;

@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Archive, Copy, ExternalLink, FileText, FolderOpen, Image as ImageIcon, Info, Link2, ListTree, Music, Play, RefreshCcw, Pencil, StickyNote, Type } from "lucide-react";
+import { Archive, Copy, ExternalLink, FileText, FolderOpen, Image as ImageIcon, Info, Link2, ListTree, Music, Play, RefreshCcw, Pencil, StickyNote, Terminal, Type } from "lucide-react";
 import { FileRecord, NodeNote, PreviewPayload } from "../types";
 import { formatBytes, formatDate, isArchiveFile, isAudioFile, isFontFile, isImageFile, isPdfFile, isTextFile, isVideoFile, shortPath } from "../utils";
 import { AboutPanel } from "./inspector/AboutPanel";
@@ -148,6 +148,15 @@ function InspectorComponent({
             >
               <ExternalLink size={13} strokeWidth={2} />
             </button>
+            {!record.isDir && (
+              <button
+                type="button"
+                onClick={() => void tauriInvoke("open_in_terminal_editor", { path: record.path })}
+                title="Open in terminal editor (nvim / helix / $EDITOR)"
+              >
+                <Terminal size={13} strokeWidth={2} />
+              </button>
+            )}
             {record.parentPath && onNavigate && (
               <button
                 type="button"
@@ -406,6 +415,11 @@ function ContextSummaryPanel({ record, preview, rootPath, currentNote, onOpen, o
       </div>
       <div className="context-action-row">
         <button type="button" onClick={() => onOpen(record.path)}><ExternalLink size={12} /> Open externally</button>
+        {!record.isDir && (
+          <button type="button" onClick={() => void tauriInvoke("open_in_terminal_editor", { path: record.path })}>
+            <Terminal size={12} /> Edit in terminal
+          </button>
+        )}
         {record.parentPath && onNavigate && <button type="button" onClick={() => onNavigate(record.parentPath!)}><FolderOpen size={12} /> Show parent</button>}
       </div>
     </section>
@@ -721,10 +735,6 @@ function AudioPreview({ path, title, mime, onOpen }: AudioPreviewProps) {
   const [playbackError, setPlaybackError] = useState(false);
   const src = React.useMemo(() => convertFileSrc(path), [path]);
 
-  useEffect(() => {
-    setPlaybackError(false);
-  }, [path]);
-
   return (
     <div className="preview-content preview-content-audio">
       <div className="audio-preview audio-preview--card">
@@ -733,7 +743,12 @@ function AudioPreview({ path, title, mime, onOpen }: AudioPreviewProps) {
         </div>
         <div className="audio-preview-main">
           <div className="audio-preview-title" title={title}>{title}</div>
+          {/* key=src forces a full <audio> DOM remount when the file changes.
+              <source type> provides the codec hint to WebKitGTK/GStreamer so
+              it selects the right decoder without sniffing. Both are needed:
+              key fixes React re-use; type fixes decoder selection on Linux. */}
           <audio
+            key={src}
             controls
             className="audio-player"
             preload="metadata"
@@ -741,7 +756,6 @@ function AudioPreview({ path, title, mime, onOpen }: AudioPreviewProps) {
             onError={() => setPlaybackError(true)}
           >
             <source src={src} type={mime || undefined} />
-            Your browser does not support audio playback.
           </audio>
           {playbackError && (
             <div className="audio-preview-error">

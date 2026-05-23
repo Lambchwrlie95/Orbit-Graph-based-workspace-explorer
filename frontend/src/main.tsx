@@ -31,7 +31,7 @@ import { useViewPersistence } from "./hooks/useViewPersistence";
 import { tauriInvoke } from "./lib/tauriCommands";
 import { clearWikilinkCache } from "./lib/wikilinkResolver";
 import { applyFlavor, applyOmarchyColors, loadStoredFlavor } from "./lib/theme";
-import { CacheStatus, FileRecord, GraphNode, GraphPayload, PreviewPayload, ScanProgress } from "./types";
+import { CacheStatus, FileRecord, GraphNode, GraphPayload, GraphWallpaper, PreviewPayload, ScanProgress } from "./types";
 import { formatDate, shortPath } from "./utils";
 // Zed's UI typography — IBM Plex Sans (OFL) Regular + SemiBold + Italic.
 // Loaded via @fontsource so Vite bundles the woff2s with content hashes; we
@@ -53,6 +53,7 @@ const SETTINGS_KEYS = {
   graphNodeLimit: "orbit:settings:graphNodeLimit",
   visibleFolderRescan: "orbit:settings:visibleFolderRescan",
   editorCommand: "orbit:settings:editorCommand",
+  graph3dWallpaper: "orbit:settings:graph3dWallpaper",
 };
 
 const PERFORMANCE_PRESETS: Record<
@@ -156,6 +157,12 @@ function App() {
   const [graphNodeLimit, setGraphNodeLimit] = usePersistedState<number>(SETTINGS_KEYS.graphNodeLimit, 900);
   const [visibleFolderRescan, setVisibleFolderRescan] = usePersistedState<boolean>(SETTINGS_KEYS.visibleFolderRescan, true);
   const [editorCommand, setEditorCommand] = usePersistedState<string>(SETTINGS_KEYS.editorCommand, "kitty -e nvim {file}");
+  const [graph3dWallpaper, setGraph3dWallpaper] = usePersistedState<string | null>(SETTINGS_KEYS.graph3dWallpaper, null);
+  const [graphWallpapers, setGraphWallpapers] = useState<GraphWallpaper[]>([]);
+
+  useEffect(() => {
+    tauriInvoke("list_graph_wallpapers").then(setGraphWallpapers).catch(() => {});
+  }, []);
 
   useEffect(() => {
     rootPathRef.current = rootPath;
@@ -757,6 +764,12 @@ function App() {
         target?.isContentEditable === true;
       if (isTyping || e.metaKey || e.ctrlKey || e.altKey) return;
 
+      // ? - keyboard shortcuts dialog
+      if (e.key === "?") {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent("orbit:keyboard-help"));
+      }
+
       // Alt/Backspace - graph back navigation
       if (e.key === "Backspace") {
         e.preventDefault();
@@ -988,6 +1001,7 @@ function App() {
             <GraphView
               payload={graphPayload}
               selectedPath={selected?.path}
+              wallpaper3d={graph3dWallpaper}
               onSelectPath={selectPathInsideOrbit}
               onOpenPath={openPath}
               editorCommand={editorCommand}
@@ -1136,6 +1150,9 @@ function App() {
         onOpenThemesFolder={() => void openThemesFolder()}
         onClearSelectedThumbnailCache={() => void clearSelectedThumbnailCache()}
         canClearSelectedThumbnailCache={Boolean(selected && !selected.isDir)}
+        wallpapers={graphWallpapers}
+        graph3dWallpaper={graph3dWallpaper}
+        onGraph3dWallpaperChange={setGraph3dWallpaper}
       />
     </main>
   );

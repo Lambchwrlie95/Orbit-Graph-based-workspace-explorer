@@ -1,6 +1,22 @@
-import React, { useEffect, useState } from "react";
-import { Settings, X } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Accessibility,
+  Cpu,
+  Database,
+  ExternalLink,
+  Folder,
+  Image as ImageIcon,
+  Info,
+  Keyboard,
+  Layers,
+  Palette,
+  Search,
+  Settings as SettingsIcon,
+  X,
+} from "lucide-react";
 import { FLAVORS, type FlavorId, applyFlavor, loadStoredFlavor, storeFlavor } from "../lib/theme";
+import type { GraphWallpaper } from "../types";
+import { fileToAssetUrl } from "../lib/tauriCommands";
 
 export type PerformanceMode = "eco" | "balanced" | "full";
 
@@ -22,28 +38,167 @@ interface SettingsPanelProps {
   onOpenThemesFolder: () => void;
   onClearSelectedThumbnailCache: () => void;
   canClearSelectedThumbnailCache: boolean;
+  wallpapers?: GraphWallpaper[];
+  graph3dWallpaper?: string | null;
+  onGraph3dWallpaperChange?: (path: string | null) => void;
 }
 
-export function SettingsPanel({
-  open,
-  onClose,
-  performanceMode,
-  onPerformanceModeChange,
-  thumbnailMemoryCap,
-  onThumbnailMemoryCapChange,
-  deepScan,
-  onDeepScanChange,
-  graphNodeLimit,
-  onGraphNodeLimitChange,
-  visibleFolderRescan,
-  onVisibleFolderRescanChange,
-  editorCommand,
-  onEditorCommandChange,
-  onOpenThemesFolder,
-  onClearSelectedThumbnailCache,
-  canClearSelectedThumbnailCache,
-}: SettingsPanelProps) {
+type SectionId =
+  | "general"
+  | "graph"
+  | "performance"
+  | "appearance"
+  | "icons"
+  | "external"
+  | "accessibility"
+  | "data"
+  | "shortcuts"
+  | "about";
+
+interface SectionMeta {
+  id: SectionId;
+  label: string;
+  hint: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  search: string;
+}
+
+const SECTIONS: SectionMeta[] = [
+  { id: "general",       label: "General",        hint: "Workspace defaults & focus behavior", icon: SettingsIcon,  search: "visible folder focus rescan workspace general" },
+  { id: "graph",         label: "Graph",          hint: "Layout, labels, wallpapers",          icon: Layers,        search: "graph node cap labels icons particle wallpaper 3d" },
+  { id: "performance",   label: "Performance",    hint: "Modes, memory, scanning",             icon: Cpu,           search: "performance mode eco balanced full thumbnail memory cap deep scan" },
+  { id: "appearance",    label: "Appearance",     hint: "Theme flavor",                        icon: Palette,       search: "appearance color theme flavor catppuccin dracula gruvbox omarchy" },
+  { id: "icons",         label: "Icons",          hint: "Icon themes & editor",                icon: ImageIcon,     search: "icons icon theme editor folder glyph" },
+  { id: "external",      label: "External Apps",  hint: "Editor & browser launch",             icon: ExternalLink,  search: "external app editor command vscode neovim nvim kitty" },
+  { id: "accessibility", label: "Accessibility",  hint: "Motion & contrast",                   icon: Accessibility, search: "accessibility motion contrast reduced" },
+  { id: "data",          label: "Data & Storage", hint: "Index, cache, disk usage",            icon: Database,      search: "data storage cache thumbnail clear index database" },
+  { id: "shortcuts",     label: "Shortcuts",      hint: "Keyboard reference",                  icon: Keyboard,      search: "shortcuts keyboard hotkey binding key" },
+  { id: "about",         label: "About",          hint: "Version & credits",                   icon: Info,          search: "about version credits orbit" },
+];
+
+const KEYBOARD_SHORTCUTS: Array<{ group: string; entries: Array<{ keys: string; label: string }> }> = [
+  {
+    group: "Global",
+    entries: [
+      { keys: "Ctrl + L", label: "Edit address bar" },
+      { keys: "Ctrl + K", label: "Open command palette" },
+      { keys: "?",        label: "Show keyboard help" },
+      { keys: "Esc",      label: "Cancel / close dialogs" },
+    ],
+  },
+  {
+    group: "Graph",
+    entries: [
+      { keys: "F", label: "Fit graph to view" },
+      { keys: "L", label: "Toggle labels" },
+      { keys: "I", label: "Toggle icons mode" },
+      { keys: "D", label: "Toggle dim-unrelated" },
+    ],
+  },
+  {
+    group: "Navigation",
+    entries: [
+      { keys: "← / →",     label: "Cycle siblings" },
+      { keys: "Enter",     label: "Open selected" },
+      { keys: "Backspace", label: "Go to parent folder" },
+    ],
+  },
+];
+
+export function SettingsPanel(props: SettingsPanelProps) {
+  const {
+    open, onClose,
+    performanceMode, onPerformanceModeChange,
+    thumbnailMemoryCap, onThumbnailMemoryCapChange,
+    deepScan, onDeepScanChange,
+    graphNodeLimit, onGraphNodeLimitChange,
+    visibleFolderRescan, onVisibleFolderRescanChange,
+    editorCommand, onEditorCommandChange,
+    onOpenThemesFolder,
+    onClearSelectedThumbnailCache, canClearSelectedThumbnailCache,
+    wallpapers = [],
+    graph3dWallpaper, onGraph3dWallpaperChange,
+  } = props;
+
+  const [section, setSection] = useState<SectionId>("general");
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() =>
+    typeof window !== "undefined" && window.localStorage.getItem("orbit:reduced-motion") === "1",
+  );
+  const [highContrast, setHighContrast] = useState<boolean>(() =>
+    typeof window !== "undefined" && window.localStorage.getItem("orbit:high-contrast") === "1",
+  );
+  const [appName, setAppName] = useState<string>("Orbit");
+  const [appVersion, setAppVersion] = useState<string>("");
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("orbit-reduced-motion", reducedMotion);
+    window.localStorage.setItem("orbit:reduced-motion", reducedMotion ? "1" : "0");
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("orbit-high-contrast", highContrast);
+    window.localStorage.setItem("orbit:high-contrast", highContrast ? "1" : "0");
+  }, [highContrast]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const tauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+        if (!tauri) return;
+        const mod = await import("@tauri-apps/api/app");
+        const [name, version] = await Promise.all([
+          mod.getName().catch(() => ""),
+          mod.getVersion().catch(() => ""),
+        ]);
+        if (cancelled) return;
+        if (name) setAppName(name);
+        if (version) setAppVersion(version);
+      } catch {
+        /* not running in Tauri — ignore */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "/" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  const filteredSections = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return SECTIONS;
+    return SECTIONS.filter((s) =>
+      s.label.toLowerCase().includes(q) || s.search.toLowerCase().includes(q),
+    );
+  }, [query]);
+
+  useEffect(() => {
+    if (filteredSections.length === 0) return;
+    if (!filteredSections.some((s) => s.id === section)) {
+      setSection(filteredSections[0].id);
+    }
+  }, [filteredSections, section]);
+
   if (!open) return null;
+
+  const activeMeta = SECTIONS.find((s) => s.id === section);
 
   return (
     <div className="modal-backdrop settings-backdrop" onMouseDown={onClose}>
@@ -55,143 +210,427 @@ export function SettingsPanel({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="settings-header">
-          <div>
-            <Settings size={16} />
+          <div className="settings-title">
+            <SettingsIcon size={13} strokeWidth={1.8} />
             <h2>Settings</h2>
           </div>
-          <button type="button" onClick={onClose} title="Close settings" aria-label="Close settings">
-            <X size={15} />
+          <div className="settings-search">
+            <Search size={11} strokeWidth={1.8} />
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search settings…"
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
+              aria-label="Search settings"
+            />
+            <kbd className="settings-search-hint">/</kbd>
+          </div>
+          <button
+            type="button"
+            className="settings-close"
+            onClick={onClose}
+            title="Close (Esc)"
+            aria-label="Close settings"
+          >
+            <X size={13} strokeWidth={1.9} />
           </button>
         </header>
 
-        <div className="settings-content">
-          <SettingsSection title="General">
-            <ToggleRow
-              label="Visible-folder focus rescan"
-              checked={visibleFolderRescan}
-              onChange={onVisibleFolderRescanChange}
-            />
-          </SettingsSection>
+        <div className="settings-body">
+          <nav className="settings-nav" aria-label="Settings categories">
+            {filteredSections.length === 0 ? (
+              <div className="settings-nav-empty">No matches</div>
+            ) : (
+              filteredSections.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={section === s.id ? "settings-nav-item active" : "settings-nav-item"}
+                    onClick={() => setSection(s.id)}
+                    aria-current={section === s.id ? "page" : undefined}
+                  >
+                    <Icon size={12} strokeWidth={1.8} />
+                    <span>{s.label}</span>
+                  </button>
+                );
+              })
+            )}
+          </nav>
 
-          <SettingsSection title="Performance">
-            <div className="segmented-control">
-              {(["eco", "balanced", "full"] as PerformanceMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={performanceMode === mode ? "active" : ""}
-                  onClick={() => onPerformanceModeChange(mode)}
-                >
-                  {mode === "eco" ? "Eco" : mode === "balanced" ? "Balanced" : "Full Visuals"}
-                </button>
-              ))}
-            </div>
-            <NumberRow label="Thumbnail memory cap" value={thumbnailMemoryCap} min={50} max={2000} step={50} onChange={onThumbnailMemoryCapChange} />
-            <ToggleRow label="Deep scan flag" checked={deepScan} onChange={onDeepScanChange} />
-          </SettingsSection>
+          <main className="settings-content">
+            {activeMeta && (
+              <div className="settings-section-head">
+                <h3>{activeMeta.label}</h3>
+                <p>{activeMeta.hint}</p>
+              </div>
+            )}
 
-          <SettingsSection title="Graph">
-            <NumberRow label="Graph node cap" value={graphNodeLimit} min={100} max={5000} step={100} onChange={onGraphNodeLimitChange} />
-            <button type="button" className="settings-action" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-labels"))}>
-              Toggle labels
-            </button>
-            <button type="button" className="settings-action" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-icons"))}>
-              Toggle particle/icon mode
-            </button>
-          </SettingsSection>
+            {section === "general" && (
+              <div className="settings-stack">
+                <ToggleRow
+                  label="Visible-folder focus rescan"
+                  description="Rescan only the folder currently in view when the window regains focus."
+                  checked={visibleFolderRescan}
+                  onChange={onVisibleFolderRescanChange}
+                />
+              </div>
+            )}
 
-          <SettingsSection title="Assets">
-            <button
-              type="button"
-              className="settings-action"
-              onClick={onClearSelectedThumbnailCache}
-              disabled={!canClearSelectedThumbnailCache}
-            >
-              Clear selected thumbnail cache
-            </button>
-          </SettingsSection>
+            {section === "graph" && (
+              <div className="settings-stack">
+                <NumberRow
+                  label="Graph node cap"
+                  description="Maximum nodes Sigma will render at once. Higher values cost frame rate."
+                  value={graphNodeLimit}
+                  min={100} max={5000} step={100}
+                  onChange={onGraphNodeLimitChange}
+                />
+                <ActionRow
+                  label="Labels"
+                  description="Show or hide labels above icons."
+                  onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-labels"))}
+                  cta="Toggle"
+                />
+                <ActionRow
+                  label="Particle / icon mode"
+                  description="Switch between sphere particles and file-type icon glyphs."
+                  onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-icons"))}
+                  cta="Toggle"
+                />
+                <div className="settings-block">
+                  <div className="settings-block-label">3D wallpaper</div>
+                  {wallpapers.length > 0 ? (
+                    <div className="wallpaper-grid">
+                      <button
+                        type="button"
+                        className={`wallpaper-option ${!graph3dWallpaper ? "active" : ""}`}
+                        onClick={() => onGraph3dWallpaperChange?.(null)}
+                        title="No wallpaper"
+                      >
+                        <span className="wallpaper-none">None</span>
+                      </button>
+                      {wallpapers.map((w) => (
+                        <button
+                          key={w.path}
+                          type="button"
+                          className={`wallpaper-option ${graph3dWallpaper === w.path ? "active" : ""}`}
+                          onClick={() => onGraph3dWallpaperChange?.(w.path)}
+                          title={`${w.theme} — ${w.name}\n${w.path}`}
+                        >
+                          <img src={fileToAssetUrl(w.path)} alt={w.name} className="wallpaper-thumb" loading="lazy" />
+                          <span className="wallpaper-label">{w.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="settings-help">No wallpapers found.</p>
+                  )}
+                  <p className="settings-help">
+                    Wallpapers are loaded from any <code>backgrounds/</code> subdirectory inside
+                    {" "}<code>~/.config/omarchy/themes/</code>. Drop image files there
+                    (jpg, png, webp) and they'll appear here on next launch.
+                  </p>
+                  <button type="button" className="settings-cta" onClick={onOpenThemesFolder}>
+                    Open themes folder
+                  </button>
+                </div>
+              </div>
+            )}
 
-          <SettingsSection title="Appearance">
-            <FlavorPicker />
-          </SettingsSection>
+            {section === "performance" && (
+              <div className="settings-stack">
+                <div className="settings-block">
+                  <div className="settings-block-label">Mode</div>
+                  <div className="segmented-control">
+                    {(["eco", "balanced", "full"] as PerformanceMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={performanceMode === mode ? "active" : ""}
+                        onClick={() => onPerformanceModeChange(mode)}
+                      >
+                        {mode === "eco" ? "Eco" : mode === "balanced" ? "Balanced" : "Full"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="settings-help">{describePerfMode(performanceMode)}</p>
+                </div>
+                <NumberRow
+                  label="Thumbnail memory cap"
+                  description="Megabytes of decoded thumbnails kept resident in memory."
+                  value={thumbnailMemoryCap}
+                  min={50} max={2000} step={50}
+                  unit="MB"
+                  onChange={onThumbnailMemoryCapChange}
+                />
+                <ToggleRow
+                  label="Deep scan"
+                  description="Walk into hidden directories during indexing."
+                  checked={deepScan}
+                  onChange={onDeepScanChange}
+                />
+              </div>
+            )}
 
-          <SettingsSection title="Icons">
-            <button type="button" className="settings-action" onClick={() => document.dispatchEvent(new CustomEvent("orbit:open-icon-editor"))}>
-              Open icon editor
-            </button>
-            <button type="button" className="settings-action" onClick={onOpenThemesFolder}>
-              Open themes folder
-            </button>
-          </SettingsSection>
+            {section === "appearance" && (
+              <div className="settings-stack">
+                <div className="settings-block">
+                  <div className="settings-block-label">Color flavor</div>
+                  <FlavorPicker />
+                  <p className="settings-help">Hot-swaps the whole UI palette. Drop custom themes into <code>~/.config/omarchy/themes/</code>.</p>
+                </div>
+              </div>
+            )}
 
-          <SettingsSection title="External Apps">
-            <div className="settings-note">Choose how Orbit launches files for editing. Use <code>{"{file}"}</code> as the selected path placeholder.</div>
-            <div className="segmented-control">
-              <button type="button" className={editorCommand === "kitty -e nvim {file}" ? "active" : ""} onClick={() => onEditorCommandChange("kitty -e nvim {file}")}>Neovim</button>
-              <button type="button" className={editorCommand === "code {file}" ? "active" : ""} onClick={() => onEditorCommandChange("code {file}")}>VS Code</button>
-              <button type="button" className={!editorCommand.trim() ? "active" : ""} onClick={() => onEditorCommandChange("")}>$EDITOR</button>
-            </div>
-            <label className="settings-row settings-row--stacked">
-              <span>Editor command</span>
-              <input
-                type="text"
-                value={editorCommand}
-                placeholder="kitty -e nvim {file}"
-                onChange={(event) => onEditorCommandChange(event.target.value)}
-              />
-            </label>
-          </SettingsSection>
+            {section === "icons" && (
+              <div className="settings-stack">
+                <ActionRow
+                  label="Icon editor"
+                  description="Edit your icon overrides and per-path glyph mappings."
+                  onClick={() => document.dispatchEvent(new CustomEvent("orbit:open-icon-editor"))}
+                  cta="Open"
+                />
+                <ActionRow
+                  label="Themes folder"
+                  description="Reveal the icon themes directory in your file manager."
+                  onClick={onOpenThemesFolder}
+                  cta="Reveal"
+                  icon={Folder}
+                />
+              </div>
+            )}
+
+            {section === "external" && (
+              <div className="settings-stack">
+                <div className="settings-block">
+                  <div className="settings-block-label">Editor preset</div>
+                  <div className="segmented-control">
+                    <button type="button" className={editorCommand === "kitty -e nvim {file}" ? "active" : ""} onClick={() => onEditorCommandChange("kitty -e nvim {file}")}>Neovim</button>
+                    <button type="button" className={editorCommand === "code {file}" ? "active" : ""} onClick={() => onEditorCommandChange("code {file}")}>VS Code</button>
+                    <button type="button" className={!editorCommand.trim() ? "active" : ""} onClick={() => onEditorCommandChange("")}>$EDITOR</button>
+                  </div>
+                </div>
+                <div className="settings-block">
+                  <div className="settings-block-label">Custom command</div>
+                  <input
+                    className="settings-input settings-input--mono"
+                    type="text"
+                    value={editorCommand}
+                    placeholder="kitty -e nvim {file}"
+                    onChange={(event) => onEditorCommandChange(event.target.value)}
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                  />
+                  <p className="settings-help">
+                    Use <code>{"{file}"}</code> as the selected path placeholder. Blank falls back to <code>$EDITOR</code>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {section === "accessibility" && (
+              <div className="settings-stack">
+                <ToggleRow
+                  label="Reduce motion"
+                  description="Disable animations, transitions, and graph relax-pass jitter."
+                  checked={reducedMotion}
+                  onChange={setReducedMotion}
+                />
+                <ToggleRow
+                  label="High contrast"
+                  description="Strengthen text, border, and selection contrast."
+                  checked={highContrast}
+                  onChange={setHighContrast}
+                />
+                <p className="settings-help settings-help--block">
+                  Preferences are stored in localStorage and apply only to Orbit. With both off, the app inherits
+                  <code>prefers-reduced-motion</code> from the OS.
+                </p>
+              </div>
+            )}
+
+            {section === "data" && (
+              <div className="settings-stack">
+                <ActionRow
+                  label="Clear thumbnails for selected file"
+                  description="Remove cached thumbnails generated for the currently selected path. The index is not affected."
+                  onClick={onClearSelectedThumbnailCache}
+                  disabled={!canClearSelectedThumbnailCache}
+                  cta="Clear"
+                />
+                <div className="settings-block">
+                  <div className="settings-block-label">On-disk locations</div>
+                  <dl className="settings-paths">
+                    <div>
+                      <dt>Index</dt>
+                      <dd><code>~/.local/share/orbit/orbit.db</code></dd>
+                    </div>
+                    <div>
+                      <dt>Thumbnails</dt>
+                      <dd><code>~/.local/share/orbit/thumbnails/</code></dd>
+                    </div>
+                    <div>
+                      <dt>Log</dt>
+                      <dd><code>~/.local/share/orbit/app.log</code></dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+            )}
+
+            {section === "shortcuts" && (
+              <div className="settings-stack">
+                {KEYBOARD_SHORTCUTS.map((group) => (
+                  <div key={group.group} className="settings-block">
+                    <div className="settings-block-label">{group.group}</div>
+                    <ul className="shortcut-list">
+                      {group.entries.map((entry) => (
+                        <li key={entry.label}>
+                          <span>{entry.label}</span>
+                          <kbd>{entry.keys}</kbd>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <p className="settings-help settings-help--block">
+                  Press <kbd>?</kbd> anywhere in the app to bring up the full keyboard reference dialog.
+                </p>
+              </div>
+            )}
+
+            {section === "about" && (
+              <div className="settings-stack">
+                <div className="settings-about">
+                  <div className="settings-about-mark" aria-hidden>◐</div>
+                  <h4>{appName}</h4>
+                  {appVersion && <div className="settings-about-version">v{appVersion}</div>}
+                  <p className="settings-about-tag">A graph-native wiki for the filesystem.</p>
+                </div>
+                <div className="settings-block">
+                  <div className="settings-block-label">Resources</div>
+                  <ul className="settings-link-list">
+                    <li>
+                      <button
+                        type="button"
+                        className="settings-link"
+                        onClick={() => document.dispatchEvent(new CustomEvent("orbit:keyboard-help"))}
+                      >
+                        Keyboard help dialog
+                      </button>
+                    </li>
+                    <li>
+                      <button type="button" className="settings-link" onClick={onOpenThemesFolder}>
+                        Open themes folder
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </main>
         </div>
       </section>
     </div>
   );
 }
 
-function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="settings-section">
-      <h3>{title}</h3>
-      <div className="settings-section-body">{children}</div>
-    </section>
-  );
+function describePerfMode(mode: PerformanceMode): string {
+  if (mode === "eco") return "Lowest CPU and memory. Thumbnails throttled, animations minimal.";
+  if (mode === "balanced") return "Sensible defaults — graph stays responsive on most machines.";
+  return "All effects on. Best for fast machines and small workspaces.";
 }
 
-function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function ToggleRow({
+  label, description, checked, onChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
   return (
     <label className="settings-row">
-      <span>{label}</span>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <span className="settings-row-text">
+        <span className="settings-row-label">{label}</span>
+        {description && <span className="settings-row-desc">{description}</span>}
+      </span>
+      <span className={`settings-switch ${checked ? "on" : ""}`}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-label={label}
+        />
+        <span className="settings-switch-track" aria-hidden />
+        <span className="settings-switch-thumb" aria-hidden />
+      </span>
     </label>
   );
 }
 
 function NumberRow({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
+  label, description, value, min, max, step, unit, onChange,
 }: {
   label: string;
+  description?: string;
   value: number;
   min: number;
   max: number;
   step: number;
+  unit?: string;
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="settings-row number">
-      <span>{label}</span>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(event) => onChange(clamp(Number(event.target.value), min, max))}
-      />
+    <label className="settings-row">
+      <span className="settings-row-text">
+        <span className="settings-row-label">{label}</span>
+        {description && <span className="settings-row-desc">{description}</span>}
+      </span>
+      <span className="settings-row-control">
+        <input
+          className="settings-input settings-input--mono"
+          type="number"
+          value={value}
+          min={min} max={max} step={step}
+          onChange={(e) => onChange(clamp(Number(e.target.value), min, max))}
+        />
+        {unit && <span className="settings-input-unit">{unit}</span>}
+      </span>
     </label>
+  );
+}
+
+function ActionRow({
+  label, description, onClick, cta = "Open", disabled, icon: Icon,
+}: {
+  label: string;
+  description?: string;
+  onClick: () => void;
+  cta?: string;
+  disabled?: boolean;
+  icon?: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+}) {
+  return (
+    <div className="settings-row">
+      <span className="settings-row-text">
+        <span className="settings-row-label">
+          {Icon && <Icon size={12} strokeWidth={1.8} />}
+          {label}
+        </span>
+        {description && <span className="settings-row-desc">{description}</span>}
+      </span>
+      <button type="button" className="settings-cta" onClick={onClick} disabled={disabled}>
+        {cta}
+      </button>
+    </div>
   );
 }
 
@@ -239,3 +678,5 @@ function FlavorPicker() {
     </div>
   );
 }
+
+export default SettingsPanel;

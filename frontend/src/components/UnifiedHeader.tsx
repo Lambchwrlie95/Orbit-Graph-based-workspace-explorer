@@ -6,7 +6,6 @@ import type { Window } from "@tauri-apps/api/window";
 import {
   BookmarkPlus,
   ChevronRight,
-  Copy,
   FolderOpen,
   Home,
   Maximize2,
@@ -15,6 +14,7 @@ import {
   PanelRight,
   RefreshCcw,
   Search,
+  Settings,
   X,
 } from "lucide-react";
 
@@ -303,8 +303,8 @@ export function UnifiedHeader({
         <button type="button" onClick={onScan} title="Scan workspace">
           <RefreshCcw size={13} strokeWidth={1.8} />
         </button>
-        <button type="button" onClick={onCopySelected} title="Copy selected path" disabled={!hasSelection}>
-          <Copy size={13} strokeWidth={1.8} />
+        <button type="button" onClick={onOpenSettings} title="Settings">
+          <Settings size={13} strokeWidth={1.8} />
         </button>
 
         {win && (

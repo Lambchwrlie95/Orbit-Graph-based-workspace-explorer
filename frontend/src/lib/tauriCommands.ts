@@ -1,4 +1,4 @@
-import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc, type InvokeArgs } from "@tauri-apps/api/core";
 import type {
   CacheStatus,
   CodeAnalysis,
@@ -7,6 +7,7 @@ import type {
   FileRecord,
   GraphPayload,
   GraphRequest,
+  GraphWallpaper,
   ImageMetadataResult,
   IconThemeMeta,
   IconThemePayload,
@@ -78,6 +79,7 @@ export const TAURI_COMMANDS = [
   "create_folder",
   "rename",
   "get_omarchy_colors",
+  "list_graph_wallpapers",
 ] as const;
 
 export type TauriCommand = typeof TAURI_COMMANDS[number];
@@ -142,6 +144,7 @@ type CommandArgsMap = {
   create_folder: { parentDir: string; name: string };
   rename: { path: string; newName: string };
   get_omarchy_colors: undefined;
+  list_graph_wallpapers: undefined;
 };
 
 type CommandResultMap = {
@@ -199,6 +202,7 @@ type CommandResultMap = {
   create_folder: string;
   rename: string;
   get_omarchy_colors: OmarchyColors;
+  list_graph_wallpapers: GraphWallpaper[];
 };
 
 type CommandArgs<C extends TauriCommand> = CommandArgsMap[C];
@@ -208,4 +212,8 @@ export function tauriInvoke<C extends TauriCommand>(
   ...args: CommandArgs<C> extends undefined ? [] : [args: CommandArgs<C>]
 ): Promise<CommandResultMap[C]> {
   return invoke<CommandResultMap[C]>(command, args[0] as InvokeArgs | undefined);
+}
+
+export function fileToAssetUrl(path: string): string {
+  return convertFileSrc(path);
 }

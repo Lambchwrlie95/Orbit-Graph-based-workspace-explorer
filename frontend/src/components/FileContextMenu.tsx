@@ -51,11 +51,13 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
     // Defer so the click that opened the menu doesn't immediately close it.
     const t = setTimeout(() => {
       document.addEventListener("click", handleClick);
+      document.addEventListener("contextmenu", handleClick);
       document.addEventListener("keydown", handleKey);
     }, 0);
     return () => {
       clearTimeout(t);
       document.removeEventListener("click", handleClick);
+      document.removeEventListener("contextmenu", handleClick);
       document.removeEventListener("keydown", handleKey);
     };
   }, [position, onClose]);
@@ -121,7 +123,7 @@ export const FileContextMenu: React.FC<FileContextMenuProps> = ({
     <div
       className="file-context-menu"
       style={{ left, top }}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
     >
       {mode === "menu" && (
         <>

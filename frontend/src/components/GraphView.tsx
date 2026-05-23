@@ -1,8 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
-import ForceGraph3D, { type ForceGraph3DInstance, type LinkObject, type NodeObject } from "3d-force-graph";
-import * as THREE from "three";
 import {
   NodeCircleProgram,
   EdgeClampedProgram,
@@ -17,14 +15,40 @@ import { formatBytes } from "../utils";
 import { usePersistedState } from "../hooks/usePersistedState";
 import { iconRuleForPath } from "../lib/fileGlyphs";
 import { tauriInvoke } from "../lib/tauriCommands";
+import { computeEdgeRoute, type RoutingContext } from "../lib/edgeRouting";
 import type { IconThemePayload } from "../types";
+import {
+  type NodeType, type VisualState, type EdgeCategory,
+  type VisualGraphNode, type GraphDisplayNode,
+  NODE_TYPE_CONFIG, NODE_TYPE_FALLBACKS, EDGE_CATEGORY_CONFIG,
+  cssVar, graphThemeColor, withAlpha, adjustColorBrightness,
+  themeIsLight, getNodeType, getNodeColor,
+  clusterGlyphForNode, clusterGlyphForAttrs, edgeCategoryColor,
+  edgeCategoryForType, escapeHtml, seededAngle, shortNodePath, graphEdgePairKey,
+  nodeVisualState, visibleNodeLabel, getNodeSize, compareGraphChildren,
+  hierarchy, fallbackNode, vegaRadialTidyLayout,
+  orderedVegaChildren, vegaLeafSlots, subtreeMaxDepth, subtreeWeight,
+  placeVegaRadialNode, relaxRadialVisualFootprints, visualFootprintRadius,
+  orbitRadiusForDepth,
+  VEGA_RADIAL_LEAF_GAP, VEGA_RADIAL_DEPTH_GAP, VEGA_RADIAL_ROOT_GAP_LEAVES,
+  VEGA_RADIAL_MIN_RADIUS, VEGA_RADIAL_START_ANGLE,
+  lastFamilyWedges,
+  detectArchLayer,
+} from "../lib/graphStyle";
+import {
+  type Graph3DNode, type Graph3DLink,
+  buildGraph3DData, graph3dNodeLabel, graph3dNodeColor,
+  graph3dNodeObject, graph3dLinkColor, graph3dLinkWidth,
+  graph3dLinkDistance, graph3dLinkParticles, graph3dLinkParticleWidth,
+  graph3dLinkParticleSpeed, graph3dAddSceneEffects, graph3dApplyWallpaper,
+  createGraph3DCollisionForce, focusGraph3DNode, frameGraph3DScene,
+  configureGraph3DControls, setGraph3DAutoRotate, installGraph3DAtmosphere,
+  graph3dEdgeStyleForCategory, graph3dLayout,
+  type ForceGraph3DInstance,
+  ForceGraph3D,
+} from "./graph3d";
 
 type NodeView = "spheres" | "icons";
-type VisualState = "primary" | "context" | "ghost" | "proxy";
-type VisualGraphNode = GraphNode & {
-  visualState?: VisualState;
-  proxyKind?: string;
-};
 
 type GraphContextMenuState = {
   x: number;
@@ -44,28 +68,7 @@ const ALL_NODE_TYPES: NodeType[] = [
   "cluster",
 ];
 
-type EdgeCategory = "hierarchy" | "code" | "docs" | "symlink" | "semantic" | "tags" | "other";
-
 const ALL_EDGE_CATEGORIES: EdgeCategory[] = ["hierarchy", "code", "docs", "symlink", "semantic", "tags", "other"];
-
-// Per-category metadata for the legend + edge renderer. The `color` field
-// resolves at read time so a flavor switch (Catppuccin, Dracula, etc.) or a
-// live Omarchy palette change picks up new colors without re-rendering the
-// constants. `cssVar`/`fallback` are the source of truth.
-const EDGE_CATEGORY_CONFIG: Record<EdgeCategory, { label: string; cssVar: string; fallback: string; description: string }> = {
-  hierarchy: { label: "Hierarchy", cssVar: "--orbit-edge-hierarchy", fallback: "#6f9ad0", description: "folder containment" },
-  code:      { label: "Code refs", cssVar: "--orbit-edge-code",      fallback: "#a78bfa", description: "imports/dependencies" },
-  docs:      { label: "Doc links", cssVar: "--orbit-edge-docs",      fallback: "#5eead4", description: "markdown/wiki/web links" },
-  symlink:   { label: "Symlink",   cssVar: "--orbit-edge-symlink",   fallback: "#ed9a4a", description: "filesystem aliases" },
-  semantic:  { label: "Related",   cssVar: "--orbit-edge-semantic",  fallback: "#86efac", description: "semantic/similar edges" },
-  tags:      { label: "Tags",      cssVar: "--orbit-edge-tags",      fallback: "#f472b6", description: "tag relationships" },
-  other:     { label: "Other edges", cssVar: "--orbit-edge-other",   fallback: "#638fc3", description: "uncategorized relationships" },
-};
-
-function edgeCategoryColor(category: EdgeCategory): string {
-  const entry = EDGE_CATEGORY_CONFIG[category];
-  return graphThemeColor(entry.cssVar, entry.fallback);
-}
 
 const PREF = {
   layout: "orbit:graph:layoutMode",
@@ -76,13 +79,13 @@ const PREF = {
   types: "orbit:graph:visibleTypes",
   nodeView: "orbit:graph:nodeView:v5",
   minimap: "orbit:graph:showMinimap",
-  edges: "orbit:graph:visibleEdgeCategories:v1",
+  edges: "orbit:graph:visibleEdgeCategories:v2",
 };
 
 const VISUAL_FANOUT = {
-  root: 32,
-  folder: 14,
-  deep: 8,
+  root: 20,
+  folder: 10,
+  deep: 6,
   // Per-folder limit applied to any folder the user has explicitly expanded
   // (its path appears in `expandedFolders`). Matches the backend's
   // EXPANDED_FOLDER_CHILD_LIMIT in src-tauri/src/graph.rs so the frontend cap
@@ -92,16 +95,13 @@ const VISUAL_FANOUT = {
 
 const GRAPH_LAYOUT_VERSION = "vega-radial-tidy-airy-v3";
 
-// Golden angle in radians (~137.5°). Spacing children at this angle around a
-// parent maximizes the minimum angular gap between any two siblings, which is
-// why sunflower seeds and pinecones use it. We use it for organic spread.
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-
 const serializeTypeSet = (set: Set<NodeType>) => JSON.stringify(Array.from(set));
 const deserializeTypeSet = (raw: string): Set<NodeType> => {
   try {
     const parsed = JSON.parse(raw) as NodeType[];
-    return new Set(Array.isArray(parsed) ? parsed : ALL_NODE_TYPES);
+    const known = new Set<string>(ALL_NODE_TYPES);
+    const values = Array.isArray(parsed) ? parsed.filter(t => known.has(t)) : ALL_NODE_TYPES;
+    return new Set(values.length ? values : ALL_NODE_TYPES);
   } catch {
     return new Set(ALL_NODE_TYPES);
   }
@@ -119,93 +119,9 @@ const deserializeEdgeCategorySet = (raw: string): Set<EdgeCategory> => {
   }
 };
 
-function edgeCategoryForType(edgeType: string): EdgeCategory {
-  if (edgeType === "contains") return "hierarchy";
-  if (edgeType === "import" || edgeType === "dependency" || edgeType === "code_ref") return "code";
-  if (edgeType === "markdown_link" || edgeType === "wikilink" || edgeType === "link") return "docs";
-  if (edgeType === "symlink") return "symlink";
-  if (edgeType === "related" || edgeType === "similar" || edgeType === "similarity" || edgeType === "semantic") return "semantic";
-  if (edgeType === "tag" || edgeType === "hashtag") return "tags";
-  return "other";
-}
-
-function cssVar(name: string, fallback: string): string {
-  if (typeof window === "undefined") return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
-}
-
-function graphThemeColor(token: string, fallback: string): string {
-  return cssVar(token, fallback);
-}
-
-function clusterGlyphForNode(node: Pick<VisualGraphNode, "proxyKind" | "isCluster"> & { visualState?: VisualState }) {
-  if (node.proxyKind === "images") return "▧";
-  if (node.proxyKind === "folders") return "⌘";
-  if (node.proxyKind === "code") return "⌬";
-  if (node.proxyKind === "configs") return "⚙";
-  return node.isCluster || node.visualState === "proxy" ? "⬡" : "◇";
-}
-
-function clusterGlyphForAttrs(attrs: Record<string, unknown>) {
-  return clusterGlyphForNode({
-    isCluster: Boolean(attrs.isCluster),
-    proxyKind: typeof attrs.proxyKind === "string" ? attrs.proxyKind : undefined,
-    visualState: attrs.visualState as VisualState | undefined,
-  });
-}
 
 type LayoutMode = "constellation" | "tree" | "graph3d";
 
-type Graph3DNode = NodeObject & {
-  id: string;
-  name: string;
-  label: string;
-  path: string;
-  color: string;
-  val: number;
-  x?: number;
-  y?: number;
-  z?: number;
-  fx?: number;
-  fy?: number;
-  fz?: number;
-  isDir: boolean;
-  isCluster: boolean;
-  nodeType: NodeType;
-  extension?: string | null;
-  parentPath?: string | null;
-  clusterSummary?: VisualGraphNode["clusterSummary"];
-  childCount: number;
-  sizeBytes: number;
-  depth: number;
-  visualState?: VisualState;
-  glyphText?: string;
-};
-
-type Graph3DLink = LinkObject<Graph3DNode> & {
-  id: string;
-  source: string | Graph3DNode;
-  target: string | Graph3DNode;
-  edgeType: string;
-  category: EdgeCategory;
-  color: string;
-  width: number;
-  curvature: number;
-};
-type GraphDisplayNode = VisualGraphNode & {
-  x: number;
-  y: number;
-  depth: number;
-  childCount: number;
-  /** Vega-style radial tree angle in degrees, 0=right/east. */
-  angle?: number;
-  /** True when radial label should read on the left side of the circle. */
-  leftside?: boolean;
-  /** Source depth in the projected 3D mode; used for visual scale/z ordering. */
-  z3d?: number;
-  projectionScale?: number;
-};
 
 const deserializeLayoutMode = (raw: string): LayoutMode => {
   try {
@@ -223,6 +139,7 @@ const deserializeLayoutMode = (raw: string): LayoutMode => {
 interface GraphViewProps {
   payload: GraphPayload | null;
   selectedPath?: string | null;
+  wallpaper3d?: string | null;
   onSelectPath: (path: string) => void;
   onOpenPath?: (path: string) => void;
   editorCommand?: string;
@@ -238,6 +155,7 @@ interface GraphViewProps {
 function GraphViewComponent({
   payload,
   selectedPath,
+  wallpaper3d,
   onSelectPath,
   onOpenPath,
   editorCommand,
@@ -254,6 +172,20 @@ function GraphViewComponent({
   const graphRef = useRef<Graph | null>(null);
   const graph3dRef = useRef<ForceGraph3DInstance<Graph3DNode, Graph3DLink> | null>(null);
   const graph3dNodeRef = useRef<Map<string, Graph3DNode>>(new Map());
+  const wallpaper3dRef = useRef<string | null>(null);
+  wallpaper3dRef.current = wallpaper3d ?? null;
+  const [pathfinderMode, setPathfinderMode] = useState(false);
+  const [pathfinderFrom, setPathfinderFrom] = useState<string | null>(null);
+  const [pathfinderNodeIds, setPathfinderNodeIds] = useState<Set<string>>(new Set());
+  const [pathfinderEdgeIds, setPathfinderEdgeIds] = useState<Set<string>>(new Set());
+  const pathfinderModeRef = useRef(false);
+  const pathfinderFromRef = useRef<string | null>(null);
+  const pathfinderNodeIdsRef = useRef<Set<string>>(new Set());
+  const pathfinderEdgeIdsRef = useRef<Set<string>>(new Set());
+  pathfinderModeRef.current = pathfinderMode;
+  pathfinderFromRef.current = pathfinderFrom;
+  pathfinderNodeIdsRef.current = pathfinderNodeIds;
+  pathfinderEdgeIdsRef.current = pathfinderEdgeIds;
   const iconThemeRef = useRef<IconThemePayload | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
   const selectedNodeRef = useRef<string | null>(null);
@@ -280,10 +212,11 @@ function GraphViewComponent({
   const [graph3dPinDrag, setGraph3dPinDrag] = usePersistedState<boolean>("orbit:graph:3dPinDrag", true);
   const [visibleEdgeCategories, setVisibleEdgeCategories] = usePersistedState<Set<EdgeCategory>>(
     PREF.edges,
-    new Set(ALL_EDGE_CATEGORIES),
+    new Set<EdgeCategory>(["hierarchy", "docs"]),
     { serialize: serializeEdgeCategorySet, deserialize: deserializeEdgeCategorySet },
   );
   const [iconTheme, setIconTheme] = useState<IconThemePayload | null>(null);
+  const [themeVersion, setThemeVersion] = useState(0);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [expandingCluster, setExpandingCluster] = useState<string | null>(null);
@@ -377,10 +310,14 @@ function GraphViewComponent({
   // edgeStyleForGraph / reduceNode — we just need to nudge Sigma.
   useEffect(() => {
     const handler = () => {
-      rendererRef.current?.scheduleRefresh();
-      graph3dRef.current?.backgroundColor(graphThemeColor("--orbit-graph-canvas", "#101010"));
-      graph3dRef.current?.nodeColor(graph3dRef.current.nodeColor());
-      graph3dRef.current?.linkColor(graph3dRef.current.linkColor());
+      // Force a full Sigma rebuild so edge colors are recomputed with fresh CSS vars.
+      setThemeVersion(v => v + 1);
+      const api3d = graph3dRef.current;
+      if (api3d) {
+        graph3dApplyWallpaper(api3d, wallpaper3dRef.current, graphThemeColor("--orbit-graph-canvas", "#101010"));
+        api3d.nodeColor(api3d.nodeColor());
+        api3d.linkColor(api3d.linkColor());
+      }
     };
     window.addEventListener("orbit:flavor-changed", handler);
     window.addEventListener("orbit:omarchy-theme-changed", handler);
@@ -389,6 +326,17 @@ function GraphViewComponent({
       window.removeEventListener("orbit:omarchy-theme-changed", handler);
     };
   }, []);
+
+  useEffect(() => {
+    const api = graph3dRef.current;
+    if (!api || layoutMode !== "graph3d") return;
+    graph3dApplyWallpaper(api, wallpaper3dRef.current, graphThemeColor("--orbit-graph-canvas", "#101010"));
+  }, [wallpaper3d, layoutMode]);
+
+  useEffect(() => {
+    if (layoutMode === "graph3d") return;
+    rendererRef.current?.scheduleRefresh();
+  }, [pathfinderNodeIds, pathfinderEdgeIds, layoutMode]);
 
   const openNodeInEditor = useCallback(async (path: string) => {
     try {
@@ -401,16 +349,22 @@ function GraphViewComponent({
   useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
+    const handleOutside = (event: MouseEvent) => {
+      if ((event.target as HTMLElement | null)?.closest(".graph-context-menu")) return;
+      close();
+    };
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
     const id = window.setTimeout(() => {
-      document.addEventListener("click", close);
+      document.addEventListener("click", handleOutside);
+      document.addEventListener("contextmenu", handleOutside);
       document.addEventListener("keydown", handleKey);
     }, 0);
     return () => {
       window.clearTimeout(id);
-      document.removeEventListener("click", close);
+      document.removeEventListener("click", handleOutside);
+      document.removeEventListener("contextmenu", handleOutside);
       document.removeEventListener("keydown", handleKey);
     };
   }, [contextMenu]);
@@ -456,10 +410,21 @@ function GraphViewComponent({
     setVisibleEdgeCategories(categories);
   };
 
+  const togglePathfinder = useCallback(() => {
+    setPathfinderMode(prev => {
+      if (prev) {
+        setPathfinderFrom(null);
+        setPathfinderNodeIds(new Set());
+        setPathfinderEdgeIds(new Set());
+      }
+      return !prev;
+    });
+  }, []);
+
   const displayPayload = useMemo(() => {
     if (!payload) return null;
     const query = graphFilter.trim().toLowerCase();
-    const nodes = payload.nodes.filter((node) => {
+    const directNodes = payload.nodes.filter((node) => {
       if (!showFolders && node.isDir) return false;
       if (!showFiles && !node.isDir) return false;
       const nodeType = getNodeType(node);
@@ -467,6 +432,31 @@ function GraphViewComponent({
       if (!query) return true;
       return node.label.toLowerCase().includes(query) || node.path.toLowerCase().includes(query);
     });
+
+    // When the user filters to a subset of types, pull in ancestor folder nodes
+    // as ghost context so the layout has a skeleton and nodes aren't a ring.
+    let nodes: VisualGraphNode[] = directNodes;
+    const isTypeFiltered = visibleTypes.size < ALL_NODE_TYPES.length || !!query;
+    if (isTypeFiltered) {
+      const directIds = new Set(directNodes.map(n => n.id));
+      const parentOf = new Map<number, number>();
+      for (const edge of payload.edges) {
+        if (edge.edgeType === "contains") parentOf.set(edge.targetId, edge.sourceId);
+      }
+      const contextIds = new Set<number>();
+      for (const node of directNodes) {
+        let cursor = parentOf.get(node.id);
+        while (cursor !== undefined && !contextIds.has(cursor) && !directIds.has(cursor)) {
+          contextIds.add(cursor);
+          cursor = parentOf.get(cursor);
+        }
+      }
+      const contextNodes: VisualGraphNode[] = payload.nodes
+        .filter(n => contextIds.has(n.id))
+        .map(n => ({ ...n, visualState: "ghost" as VisualState }));
+      nodes = [...directNodes, ...contextNodes];
+    }
+
     // Merge breadcrumb nodes (parent folders from navigation history)
     const breadcrumbNodesFiltered = breadcrumbNodes.filter(bn => !nodes.some(n => n.path === bn.path));
     const shaped = layoutMode !== "tree" && visibleTypes.has("cluster")
@@ -521,9 +511,26 @@ function GraphViewComponent({
     if (selectedNodeRef.current !== key) {
       selectedNodeRef.current = key;
       setSelectedNode(prev => prev === key ? prev : key);
-      rendererRef.current?.scheduleRefresh();
+      const renderer = rendererRef.current;
+      renderer?.scheduleRefresh();
+      // Selection came from outside the graph (sidebar / search). Fly the camera
+      // to the node so the highlight is always visible to the user.
+      if (key && layoutMode === "graph3d") {
+        const node3d = graph3dNodeRef.current.get(key);
+        if (graph3dRef.current && node3d) focusGraph3DNode(graph3dRef.current, node3d, 600);
+      } else if (renderer && key) {
+        requestAnimationFrame(() => {
+          const display = renderer.getNodeDisplayData(key);
+          if (display) {
+            renderer.getCamera().animate(
+              { x: display.x, y: display.y, ratio: 0.45 },
+              { duration: 320 },
+            );
+          }
+        });
+      }
     }
-  }, [selectedPath, nodeByPath]);
+  }, [selectedPath, nodeByPath, layoutMode]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -547,7 +554,7 @@ function GraphViewComponent({
         // lock. TrackballControls gives free roll/pitch/yaw — the natural
         // expectation for a 3D galaxy view.
         controlType: "trackball",
-        rendererConfig: { antialias: true, alpha: false },
+        rendererConfig: { antialias: true, alpha: true },
       })
         .backgroundColor(graphThemeColor("--orbit-graph-canvas", "#101010"))
         .showNavInfo(false)
@@ -561,7 +568,7 @@ function GraphViewComponent({
         .nodeOpacity(1)
         .nodeResolution(nodeView === "icons" ? 12 : 16)
         .linkColor((link) => graph3dLinkColor(link, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated))
-        .linkOpacity(0.72)
+        .linkOpacity(0.52)
         .linkWidth((link) => graph3dLinkWidth(link, hoveredNodeRef.current, selectedNodeRef.current))
         .linkCurvature((link) => link.curvature)
         .linkDirectionalParticles((link) => graph3dLinkParticles(link, hoveredNodeRef.current, selectedNodeRef.current))
@@ -587,6 +594,19 @@ function GraphViewComponent({
           hoveredNodeRef.current = id;
           setHoveredNode((prev) => prev === id ? prev : id);
           setGraph3DAutoRotate(graphApi, false);
+          graphApi.nodeColor(graphApi.nodeColor());
+          graphApi.linkColor(graphApi.linkColor());
+          graphApi.linkWidth(graphApi.linkWidth());
+          graphApi.linkDirectionalParticles(graphApi.linkDirectionalParticles());
+        })
+        .onLinkHover((link) => {
+          // Treat the link's source as the hovered node so both endpoints and
+          // the link itself get the active highlight treatment.
+          const src = link?.source;
+          const id = src ? (typeof src === "object" ? (src as Graph3DNode).id : String(src)) : null;
+          if (hoveredNodeRef.current === id) return;
+          hoveredNodeRef.current = id;
+          setHoveredNode((prev) => prev === id ? prev : id);
           graphApi.nodeColor(graphApi.nodeColor());
           graphApi.linkColor(graphApi.linkColor());
           graphApi.linkWidth(graphApi.linkWidth());
@@ -649,7 +669,7 @@ function GraphViewComponent({
       const api = graphApi as unknown as { d3Force?: (name: string, force?: unknown) => any; d3ReheatSimulation?: () => void };
       const nodesById = new Map(graph3dData.nodes.map((node) => [node.id, node]));
       api.d3Force?.("link")?.distance?.((link: Graph3DLink) => graph3dLinkDistance(link, nodesById));
-      api.d3Force?.("charge")?.strength?.((node: Graph3DNode) => node.isDir ? -72 : node.isCluster ? -48 : -24);
+      api.d3Force?.("charge")?.strength?.((node: Graph3DNode) => node.isDir ? -160 : node.isCluster ? -90 : -42);
       const collide = api.d3Force?.("collide");
       collide?.radius?.((node: Graph3DNode) => Math.max(node.isDir ? 18 : node.isCluster ? 13 : 8, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 4.4 : 3.0)));
       api.d3Force?.("orbitCollide", createGraph3DCollisionForce());
@@ -658,6 +678,8 @@ function GraphViewComponent({
 
       graph3dRef.current = graphApi;
       graph3dNodeRef.current = new Map(graph3dData.nodes.map((node) => [node.id, node]));
+      const cleanupSceneEffects = graph3dAddSceneEffects(graphApi, container);
+      graph3dApplyWallpaper(graphApi, wallpaper3dRef.current, graphThemeColor("--orbit-graph-canvas", "#101010"));
       
       const onGraph3DKeyDown = (event: KeyboardEvent) => {
         if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
@@ -735,6 +757,7 @@ function GraphViewComponent({
       requestAnimationFrame(() => frameGraph3DScene(graphApi, graph3dNodeRef.current, 0));
 
       return () => {
+        cleanupSceneEffects();
         if (graph3dKeyHandlerRef.current) {
           window.removeEventListener("keydown", graph3dKeyHandlerRef.current);
           graph3dKeyHandlerRef.current = null;
@@ -744,14 +767,33 @@ function GraphViewComponent({
         graph3dRef.current = null;
         graph3dNodeRef.current = new Map();
       };
-      return;
     }
 
     const graph = new Graph();
     graphRef.current = graph;
 
+    const totalVisible = displayNodes.length;
+    // layoutScale mirrors the value computed inside vegaRadialTidyLayout for the
+    // same node count. densityScale is its reciprocal so that the two effects
+    // cancel: a 0.62× smaller bounding box → Sigma auto-fits at ~1/0.62 larger
+    // ratio → icons appear ~1/0.62 smaller. Multiplying baseSize by 1/0.62
+    // restores the expected screen size while still applying an aesthetic bonus
+    // for sparse graphs (the 0.9 factor keeps icons slightly larger than baseline).
+    const layoutScale = totalVisible < 15 ? 0.30 : totalVisible < 35 ? 0.45 : totalVisible < 120 ? 0.62 : totalVisible < 300 ? 0.78 : 1.0;
+    const densityScale = Math.max(1.5, 0.9 / layoutScale);
+    const isLightGraph = themeIsLight();
+
     for (const node of displayNodes) {
-      const baseSize = getNodeSize(node) * (node.projectionScale ?? 1);
+      // Depth-relative boost: nodes near the scope root are visually dominant;
+      // deep leaves are smaller, giving natural hierarchy at every zoom level.
+      // In tree mode the horizontal column already encodes depth, so size
+      // variation by depth is redundant — it just makes deep nodes look
+      // anaemic. Disable depthBoost in tree mode so every column reads at
+      // the same visual weight.
+      const depthBoost = layoutMode === "tree"
+        ? 1.0
+        : node.depth <= 0 ? 1.35 : node.depth === 1 ? 1.12 : node.depth === 2 ? 1.0 : Math.max(0.80, 1.0 - (node.depth - 2) * 0.06);
+      const baseSize = getNodeSize(node) * (node.projectionScale ?? 1) * densityScale * depthBoost;
       const startPosition = transitionStartPosition(node, previousNodePositionsRef.current, transitionAnchorRef.current);
       const visualState = node.visualState ?? nodeVisualState(node);
       // Resolve glyph + color ONCE per node (path-derived; never changes).
@@ -759,8 +801,20 @@ function GraphViewComponent({
       // glob/map pipeline per frame.
       const icon = iconRuleForPath(node.path, node.isDir, node.isCluster, iconThemeRef.current);
       const baseColor = getNodeColor(node);
+      // Top-level folders adopt their family color so each root subtree is
+      // visually distinct. Deeper dirs blend toward the base folder color.
+      const familyColor = groupColors.get(node.id);
+      // Light themes: darken the sphere so it contrasts with the bright bg.
+      // Dark themes: use the family color directly — darkening makes it black.
+      const folderSphereColor = node.isDir && !node.isCluster && familyColor
+        ? (isLightGraph ? adjustColorBrightness(familyColor, 0.52) : familyColor)
+        : null;
+      const sphereAlpha = visualState === "ghost" ? 0.35 : (isLightGraph ? 0.90 : 0.82);
+      const nodeColor = folderSphereColor
+        ? withAlpha(folderSphereColor, sphereAlpha)
+        : baseColor;
       const folderGlyphColor = node.isDir && !node.isCluster
-        ? withAlpha(groupColors.get(node.id) ?? baseColor, 0.96)
+        ? withAlpha(familyColor ?? baseColor, 0.96)
         : baseColor;
       graph.addNode(String(node.id), {
         label: visibleNodeLabel(node),
@@ -771,8 +825,8 @@ function GraphViewComponent({
         targetY: node.y,
         size: baseSize,
         baseSize,
-        color: baseColor,
-        baseColor,
+        color: nodeColor,
+        baseColor: nodeColor,
         path: node.path,
         parentPath: node.parentPath,
         isDir: node.isDir,
@@ -793,10 +847,20 @@ function GraphViewComponent({
         // of the sphere size. In icons mode the sphere is set to 1 graph unit
         // (a tiny invisible hit-target); glyphBaseSize carries the true visual scale.
         glyphBaseSize: baseSize,
-        forceLabel: (node.isDir && !node.isCluster) || (nodeView === "icons" && !node.isCluster && nodeVisualState(node) !== "proxy"),
+        forceLabel: (node.isDir && !node.isCluster) || (nodeView === "icons" && !node.isCluster && nodeVisualState(node) !== "proxy") || (visibleTypes.size < ALL_NODE_TYPES.length && showLabels && !node.isCluster && nodeVisualState(node) !== "proxy"),
         baseZIndex: Math.round(((node.z3d ?? 0) + 2000) * 10),
       });
     }
+
+    const routingParentOf = new Map<number, number>();
+    const routingPositionOf = new Map<number, { x: number; y: number }>();
+    for (const edge of displayPayload.edges) {
+      if (edge.edgeType === "contains") routingParentOf.set(edge.targetId, edge.sourceId);
+    }
+    for (const node of displayNodes) {
+      routingPositionOf.set(node.id, { x: node.x, y: node.y });
+    }
+    const routingCtx: RoutingContext = { strategy: "lca-biased", parentOf: routingParentOf, positionOf: routingPositionOf };
 
     const addedPairs = new Set<string>();
     for (const edge of displayPayload.edges) {
@@ -807,7 +871,7 @@ function GraphViewComponent({
       if (addedPairs.has(pairKey) || graph.hasEdge(source, target)) continue;
       if (graph.hasEdge(String(edge.id))) continue;
       const edgeVisualState = edgeVisualStateForGraph(graph, source, target);
-      const edgeStyle = edgeStyleForGraph(edge, groupColors, edgeVisualState);
+      const edgeStyle = edgeStyleForGraph(edge, groupColors, edgeVisualState, routingCtx, layoutMode);
       // Containment edges stay as clamped straight lines (they ARE the
       // hierarchy backbone). Everything else (imports, wikilinks, markdown
       // links, future semantic edges) renders as curved arcs so they read as
@@ -826,6 +890,7 @@ function GraphViewComponent({
         visualState: edgeVisualState,
         curvature,
         baseCurvature: curvature,
+        zIndex: edgeStyle.zIndex,
       });
       addedPairs.add(pairKey);
     }
@@ -860,7 +925,7 @@ function GraphViewComponent({
       // but in spheres mode this prevents the text storm at zoom-out.
       labelRenderedSizeThreshold: 3,
       defaultNodeColor: graphThemeColor("--omarchy-color7", "#94a3b8"),
-      defaultEdgeColor: withAlpha(graphThemeColor("--omarchy-border", "#335064"), 0.32),
+      defaultEdgeColor: withAlpha(graphThemeColor("--omarchy-fg", "#94a3b8"), 0.28),
       zIndex: true,
       minCameraRatio: 0.03,
       maxCameraRatio: 8,
@@ -868,11 +933,45 @@ function GraphViewComponent({
       // proportional to their screen spacing regardless of zoom level — they
       // neither "float" too large when zoomed out nor disappear when zoomed in.
       zoomToSizeRatioFunction: (ratio: number) => Math.max(ratio, 0.001),
-      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current, nodeView, cameraRatioRef),
-      edgeReducer: (edge, data) => reduceEdge(edge, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, cameraRatioRef),
+      nodeReducer: (node, data) => reduceNode(node, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, navHistoryRef.current, breadcrumbNodesRef.current, nodeView, cameraRatioRef, pathfinderNodeIdsRef.current, pathfinderFromRef.current),
+      edgeReducer: (edge, data) => reduceEdge(edge, data, graph, hoveredNodeRef.current, selectedNodeRef.current, dimUnrelated, cameraRatioRef, pathfinderEdgeIdsRef.current),
     });
 
     renderer.on("clickNode", ({ node }) => {
+      if (pathfinderModeRef.current) {
+        const g = graphRef.current!;
+        const from = pathfinderFromRef.current;
+        if (!from || from === node) {
+          const nodeSet = new Set([node]);
+          pathfinderFromRef.current = node;
+          pathfinderNodeIdsRef.current = nodeSet;
+          pathfinderEdgeIdsRef.current = new Set();
+          setPathfinderFrom(node);
+          setPathfinderNodeIds(nodeSet);
+          setPathfinderEdgeIds(new Set());
+        } else {
+          const bfsResult = findShortestPath(g, from, node);
+          const nodeSet = new Set(bfsResult ?? [from, node]);
+          const edgeSet = new Set<string>();
+          if (bfsResult && bfsResult.length > 1) {
+            for (let i = 0; i < bfsResult.length - 1; i++) {
+              [...g.edges(bfsResult[i], bfsResult[i + 1]), ...g.edges(bfsResult[i + 1], bfsResult[i])].forEach(e => edgeSet.add(e));
+            }
+          }
+          pathfinderNodeIdsRef.current = nodeSet;
+          pathfinderEdgeIdsRef.current = edgeSet;
+          setPathfinderNodeIds(nodeSet);
+          setPathfinderEdgeIds(edgeSet);
+          pathfinderFromRef.current = node;
+          setPathfinderFrom(node);
+        }
+        const nodePath = g.getNodeAttribute(node, "path") as string;
+        selectedNodeRef.current = node;
+        setSelectedNode(prev => prev === node ? prev : node);
+        renderer.scheduleRefresh();
+        if (nodePath) onSelectPath(nodePath);
+        return;
+      }
       const path = graph.getNodeAttribute(node, "path") as string;
       const isDir = graph.getNodeAttribute(node, "isDir") as boolean;
       const isCluster = graph.getNodeAttribute(node, "isCluster") as boolean;
@@ -957,14 +1056,200 @@ function GraphViewComponent({
 
     rendererRef.current = renderer;
 
-    // Hide edges during camera pan for smoother large-graph navigation.
-    // Iterate all edges ONLY at pan-start and pan-end — never inside the
-    // camera "updated" tick, which fires many times per gesture and on large
-    // graphs compounded into a UI freeze that read as a crash.
+    // ─── Keyboard navigation ─────────────────────────────────────────────────
+    // ArrowLeft/Right: cycle through visible siblings (same parentPath), sorted
+    // alphabetically — same model as standard file explorers.
+    const onSigmaKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === "Escape" && pathfinderModeRef.current) {
+        setPathfinderMode(false);
+        setPathfinderFrom(null);
+        setPathfinderNodeIds(new Set());
+        setPathfinderEdgeIds(new Set());
+        rendererRef.current?.scheduleRefresh();
+      }
+      const activeKey = selectedNodeRef.current;
+      if (!activeKey) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const parentPath = graph.getNodeAttribute(activeKey, "parentPath") as string | undefined;
+      const siblings: Array<{ key: string; label: string }> = [];
+      graph.forEachNode((key, attrs) => {
+        if ((attrs.parentPath as string | undefined) === parentPath && attrs.path) {
+          siblings.push({ key, label: String(attrs.fullLabel ?? attrs.label ?? "") });
+        }
+      });
+      siblings.sort((a, b) => a.label.localeCompare(b.label));
+      if (siblings.length < 2) return;
+      const idx = siblings.findIndex(s => s.key === activeKey);
+      if (idx < 0) return;
+      const delta = event.key === "ArrowRight" ? 1 : siblings.length - 1;
+      const next = siblings[(idx + delta) % siblings.length];
+      const nextPath = graph.getNodeAttribute(next.key, "path") as string;
+      if (!nextPath) return;
+      selectedNodeRef.current = next.key;
+      setSelectedNode(next.key);
+      onSelectPath(nextPath);
+      renderer.scheduleRefresh();
+      event.preventDefault();
+    };
+    document.addEventListener("keydown", onSigmaKeyDown);
+
+    const container = containerRef.current;
+
+    // ─── Rubber-band zoom ────────────────────────────────────────────────────
+    // Plain left-click-drag on the empty canvas draws a selection rect.
+    // On mouseup the camera zooms to frame the enclosed nodes (falling back to
+    // raw graph-coord corners when no nodes fall inside the rect).
+    // downStage only fires when no node/edge was hit, so this never conflicts
+    // with clickNode / doubleClickNode.
+    type RBState = {
+      originVP: { x: number; y: number };
+      savedCamera: { x: number; y: number; ratio: number; angle: number };
+      overlay: HTMLDivElement | null;
+      active: boolean;
+    };
+    let rubberBand: RBState | null = null;
+
+    renderer.on("downStage", (payload) => {
+      const orig = payload.event?.original as MouseEvent | undefined;
+      if (!orig || orig.button !== 0 || !orig.ctrlKey || orig.metaKey || orig.shiftKey) return;
+      const rect = container.getBoundingClientRect();
+      rubberBand = {
+        originVP: { x: orig.clientX - rect.left, y: orig.clientY - rect.top },
+        savedCamera: renderer.getCamera().getState(),
+        overlay: null,
+        active: false,
+      };
+    });
+
+    // Prevent Sigma's built-in pan during an active rubber-band drag.
+    // mousemovebody fires before the pan-check in MouseCaptor.handleMove, so
+    // calling preventSigmaDefault() here is enough to suppress the pan.
+    const mouseCaptor = (renderer as any).mouseCaptor as {
+      on: (event: string, handler: (c: { preventSigmaDefault: () => void }) => void) => void;
+      off: (event: string, handler: (c: { preventSigmaDefault: () => void }) => void) => void;
+    };
+    const captorPreventPan = (coords: { preventSigmaDefault: () => void }) => {
+      if (rubberBand?.active) coords.preventSigmaDefault();
+    };
+    mouseCaptor.on("mousemovebody", captorPreventPan);
+
+    const handleRubberMove = (e: MouseEvent) => {
+      if (!rubberBand) return;
+      const rect = container.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const dx = cx - rubberBand.originVP.x;
+      const dy = cy - rubberBand.originVP.y;
+      if (!rubberBand.active && Math.sqrt(dx * dx + dy * dy) < 5) return;
+      if (!rubberBand.active) {
+        rubberBand.active = true;
+        const ov = document.createElement("div");
+        ov.style.cssText =
+          "position:absolute;pointer-events:none;box-sizing:border-box;" +
+          "border:1px dashed rgba(77,163,255,0.65);" +
+          "background:rgba(77,163,255,0.08);z-index:5;";
+        container.appendChild(ov);
+        rubberBand.overlay = ov;
+      }
+      if (rubberBand.overlay) {
+        rubberBand.overlay.style.left   = `${Math.min(rubberBand.originVP.x, cx)}px`;
+        rubberBand.overlay.style.top    = `${Math.min(rubberBand.originVP.y, cy)}px`;
+        rubberBand.overlay.style.width  = `${Math.abs(dx)}px`;
+        rubberBand.overlay.style.height = `${Math.abs(dy)}px`;
+      }
+    };
+
+    const handleRubberUp = (e: MouseEvent) => {
+      if (!rubberBand) return;
+      const rb = rubberBand;
+      rubberBand = null;
+      rb.overlay?.remove();
+
+      if (!rb.active) {
+        // < 5 px movement → treat as background click (deselect)
+        selectedNodeRef.current = null;
+        setSelectedNode(null);
+        renderer.scheduleRefresh();
+        return;
+      }
+
+      const rect = container.getBoundingClientRect();
+      const cx     = Math.max(0, Math.min(e.clientX - rect.left, container.clientWidth));
+      const cy     = Math.max(0, Math.min(e.clientY - rect.top,  container.clientHeight));
+      const vLeft   = Math.min(rb.originVP.x, cx);
+      const vRight  = Math.max(rb.originVP.x, cx);
+      const vTop    = Math.min(rb.originVP.y, cy);
+      const vBottom = Math.max(rb.originVP.y, cy);
+      const vpW = container.clientWidth;
+      const vpH = container.clientHeight;
+
+      // Restore camera to pre-drag state (in case Sigma managed a partial pan
+      // before the first mousemove exceeded the 5 px threshold).
+      const camera = renderer.getCamera();
+      camera.setState(rb.savedCamera);
+
+      // Convert rubber-band corners to graph coords for node hit-testing.
+      const tl = renderer.viewportToGraph({ x: vLeft,  y: vTop });
+      const br = renderer.viewportToGraph({ x: vRight, y: vBottom });
+      const selMinX = Math.min(tl.x, br.x);
+      const selMaxX = Math.max(tl.x, br.x);
+      const selMinY = Math.min(tl.y, br.y);
+      const selMaxY = Math.max(tl.y, br.y);
+
+      let minGX = Infinity, maxGX = -Infinity, minGY = Infinity, maxGY = -Infinity;
+      let found = false;
+      graph.forEachNode((key) => {
+        const display = renderer.getNodeDisplayData(key);
+        if (!display || display.hidden) return;
+        if (display.x >= selMinX && display.x <= selMaxX &&
+            display.y >= selMinY && display.y <= selMaxY) {
+          found = true;
+          if (display.x < minGX) minGX = display.x;
+          if (display.x > maxGX) maxGX = display.x;
+          if (display.y < minGY) minGY = display.y;
+          if (display.y > maxGY) maxGY = display.y;
+        }
+      });
+
+      let centerX: number, centerY: number, newRatio: number;
+      const savedRatio = rb.savedCamera.ratio;
+
+      if (found) {
+        centerX = (minGX + maxGX) / 2;
+        centerY = (minGY + maxGY) / 2;
+        // Map node bounding box back to viewport to compute required zoom.
+        const bbTL = renderer.graphToViewport({ x: minGX, y: maxGY });
+        const bbBR = renderer.graphToViewport({ x: maxGX, y: minGY });
+        const scaleX = Math.max(Math.abs(bbBR.x - bbTL.x), 1) / vpW;
+        const scaleY = Math.max(Math.abs(bbBR.y - bbTL.y), 1) / vpH;
+        newRatio = savedRatio * Math.max(scaleX, scaleY) * 1.2;
+      } else {
+        const mid = renderer.viewportToGraph({ x: (vLeft + vRight) / 2, y: (vTop + vBottom) / 2 });
+        centerX = mid.x;
+        centerY = mid.y;
+        const scaleX = Math.max(vRight - vLeft, 1) / vpW;
+        const scaleY = Math.max(vBottom - vTop, 1) / vpH;
+        newRatio = savedRatio * Math.max(scaleX, scaleY) * 1.2;
+      }
+
+      camera.animate(
+        { x: centerX, y: centerY, ratio: Math.max(newRatio, 0.001) },
+        { duration: 250, easing: "quadraticOut" },
+      );
+    };
+
+    document.addEventListener("mousemove", handleRubberMove);
+    document.addEventListener("mouseup", handleRubberUp);
+
+    // ─── Pan edge-hiding ─────────────────────────────────────────────────────
+    // Hides edges while the camera is panning to keep large graphs smooth.
+    // startPan is skipped during rubber-band drags so the two interactions
+    // don't fight over the edge-visibility state.
     let isPanning = false;
     let edgesHidden = false;
-    const container = containerRef.current;
     const startPan = () => {
+      if (rubberBand) return;
       if (isPanning) return;
       isPanning = true;
     };
@@ -997,8 +1282,14 @@ function GraphViewComponent({
     }
 
     return () => {
+      document.removeEventListener("keydown", onSigmaKeyDown);
       container?.removeEventListener("mousedown", startPan);
       document.removeEventListener("mouseup", endPan);
+      document.removeEventListener("mousemove", handleRubberMove);
+      document.removeEventListener("mouseup", handleRubberUp);
+      mouseCaptor.off("mousemovebody", captorPreventPan);
+      rubberBand?.overlay?.remove();
+      rubberBand = null;
       if (cameraZoomTimeoutRef.current) {
         clearTimeout(cameraZoomTimeoutRef.current);
         cameraZoomTimeoutRef.current = null;
@@ -1007,7 +1298,7 @@ function GraphViewComponent({
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, graph3dPinDrag, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster, openNodeInEditor]);
+  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, graph3dPinDrag, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster, openNodeInEditor, themeVersion]);
 
   const focusSelected = () => {
     const selected = selectedNodeRef.current;
@@ -1208,6 +1499,13 @@ const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
           >
             Minimap
           </button>
+          <button
+            className={pathfinderMode ? "active" : ""}
+            onClick={togglePathfinder}
+            title="PathFinder: click two nodes to highlight the shortest path between them"
+          >
+            Path
+          </button>
         </div>
       </div>
 
@@ -1217,7 +1515,6 @@ const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
         </strong>
         <span>{graphStats.dirCount} folders</span>
         <span>{graphStats.fileCount} files</span>
-        <span>{graphStats.edgeCount} edges</span>
         {graphStats.totalSize > 0 && <span>{formatBytes(graphStats.totalSize)}</span>}
         {expandedFolders.length > 0 && <span className="expanded-badge">{expandedFolders.length} expanded</span>}
         {isLoading && <span className="loading-indicator">Loading...</span>}
@@ -1366,6 +1663,15 @@ const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
       />
 
       <div className="graph-canvas">
+        {pathfinderMode && layoutMode !== "graph3d" && (
+          <div className="pathfinder-status">
+            {!pathfinderFrom
+              ? "PathFinder: click a source node"
+              : pathfinderNodeIds.size <= 1
+                ? `PathFinder: click target node  ·  from: ${String(graphRef.current?.getNodeAttribute(pathfinderFrom, "label") ?? pathfinderFrom)}`
+                : `Path: ${pathfinderNodeIds.size} nodes  ·  click any node to start new path`}
+          </div>
+        )}
         {/*
           Sigma and ForceGraph3D mount their canvas children imperatively into
           this inner div. Keeping it free of any React children prevents the
@@ -1458,10 +1764,16 @@ function GraphNodeContextMenu({ menu, onClose, onSelect, onFocusFolder, onOpenEx
     }, 40);
   };
   const terminalPath = node.isDir ? node.path : node.parentPath || node.path.replace(/\/[^/]+$/, "");
+  const archLayer = detectArchLayer(node.path ?? "");
 
   return (
-    <div className="graph-context-menu file-context-menu" style={{ left, top }} onContextMenu={(event) => event.preventDefault()}>
+    <div className="graph-context-menu file-context-menu" style={{ left, top }} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>
       <div className="ctx-title" title={node.path}>{title}</div>
+      {archLayer && (
+        <div className="ctx-layer-badge" style={{ color: archLayer.color }}>
+          ⬡ {archLayer.label} layer
+        </div>
+      )}
       <button className="ctx-item" onClick={() => closeAfter(() => node.isDir ? onFocusFolder(node.path) : onSelect(node.path))}>
         <Target size={13} /> {node.isDir ? "Focus folder" : "Select in inspector"}
       </button>
@@ -1492,646 +1804,6 @@ function GraphNodeContextMenu({ menu, onClose, onSelect, onFocusFolder, onOpenEx
   );
 }
 
-function buildGraph3DData(
-  nodes: GraphDisplayNode[],
-  edges: GraphEdge[],
-  groupColors: Map<number, string>,
-  iconTheme: IconThemePayload | null,
-): { nodes: Graph3DNode[]; links: Graph3DLink[] } {
-  const byId = new Set(nodes.map((node) => String(node.id)));
-  const parentByChild = new Map<number, number>();
-  const siblingIndex = new Map<number, number>();
-  const siblingCount = new Map<number, number>();
-  for (const edge of edges) {
-    if (edge.edgeType !== "contains") continue;
-    parentByChild.set(edge.targetId, edge.sourceId);
-  }
-  const childrenByParent = new Map<number, number[]>();
-  for (const [child, parent] of parentByChild) {
-    const siblings = childrenByParent.get(parent) ?? [];
-    siblings.push(child);
-    childrenByParent.set(parent, siblings);
-  }
-  for (const siblings of childrenByParent.values()) {
-    siblings.forEach((child, index) => {
-      siblingIndex.set(child, index);
-      siblingCount.set(child, siblings.length);
-    });
-  }
-  const scale = 0.14;
-  const graphNodes = nodes.map((node) => {
-    const visualState = node.visualState ?? nodeVisualState(node);
-    const icon = iconRuleForPath(node.path, node.isDir, node.isCluster, iconTheme);
-    const baseColor = graph3dNodeBaseColor(node, groupColors);
-    const glyphText = node.isCluster || visualState === "proxy" ? clusterGlyphForNode(node) : icon.text;
-    const native3d = node.projectionScale === 1 && Number.isFinite(node.z3d);
-    const seedScale = native3d ? 1 : scale;
-    const depthZ = native3d ? Number(node.z3d) : (node.depth - 1.5) * 14;
-    const index = siblingIndex.get(node.id) ?? node.id;
-    const total = Math.max(1, siblingCount.get(node.id) ?? 1);
-    const orbitAngle = index * GOLDEN_ANGLE;
-    const orbitRadius = native3d ? 0 : parentByChild.has(node.id) ? Math.min(34, 10 + Math.sqrt(total) * 3.2 + node.depth * 1.4) : 0;
-    const localLift = parentByChild.has(node.id) ? ((index % 5) - 2) * (native3d ? 1.8 : 5.5) : 0;
-    const x = Number.isFinite(node.x) ? node.x * seedScale + Math.cos(orbitAngle) * orbitRadius : undefined;
-    const y = Number.isFinite(node.y) ? node.y * seedScale + Math.sin(orbitAngle) * orbitRadius : undefined;
-    const z = Number.isFinite(depthZ) ? depthZ + localLift : undefined;
-    const anchorNode = native3d && x !== undefined && y !== undefined && z !== undefined;
-    return {
-      id: String(node.id),
-      name: node.label,
-      label: visibleNodeLabel(node),
-      path: node.path,
-      parentPath: node.parentPath,
-      color: baseColor,
-      val: graph3dNodeValue(node, visualState),
-      x,
-      y,
-      z,
-      fx: anchorNode ? x : undefined,
-      fy: anchorNode ? y : undefined,
-      fz: anchorNode ? z : undefined,
-      isDir: node.isDir,
-      isCluster: node.isCluster,
-      nodeType: getNodeType(node),
-      extension: node.extension,
-      clusterSummary: node.clusterSummary,
-      childCount: node.childCount,
-      sizeBytes: node.sizeBytes,
-      depth: node.depth,
-      visualState,
-      glyphText,
-    } satisfies Graph3DNode;
-  });
-
-  const seen = new Set<string>();
-  const links: Graph3DLink[] = [];
-  for (const edge of edges) {
-    const source = String(edge.sourceId);
-    const target = String(edge.targetId);
-    if (!byId.has(source) || !byId.has(target)) continue;
-    const pairKey = graphEdgePairKey(source, target);
-    if (seen.has(pairKey)) continue;
-    seen.add(pairKey);
-    const category = edgeCategoryForType(edge.edgeType);
-    const style = graph3dEdgeStyleForCategory(category);
-    links.push({
-      id: String(edge.id),
-      source,
-      target,
-      edgeType: edge.edgeType,
-      category,
-      color: style.color,
-      width: style.size,
-      curvature: style.curvature === 0 ? 0 : style.curvature + Math.sin(Number(edge.id) * 12.9898) * 0.045,
-    });
-  }
-  return { nodes: graphNodes, links };
-}
-
-function graph3dNodeLabel(node: Graph3DNode): string {
-  const kind = node.isCluster ? "Cluster" : node.isDir ? "Folder" : node.extension || "File";
-  const glyph = node.glyphText ? `${node.glyphText} ` : "";
-  return `<div class="graph-3d-label"><strong>${escapeHtml(`${glyph}${node.name}`)}</strong><br/><span>${escapeHtml(kind)}</span><br/><small>${escapeHtml(shortNodePath(node.path))}</small></div>`;
-}
-
-function graph3dNodeBaseColor(node: GraphDisplayNode, groupColors: Map<number, string>): string {
-  if (node.isDir && !node.isCluster) return graph3dBrighten(graph3dSolidColor(groupColors.get(node.id) ?? graphThemeColor("--omarchy-color2", "#8bd17c"), "#8bd17c"), 1.45);
-  const color = getNodeColor(node);
-  return graph3dBrighten(graph3dSolidColor(color, NODE_TYPE_FALLBACKS[getNodeType(node)] ?? "#d8dee9"), 1.25);
-}
-
-function graph3dNodeValue(node: GraphDisplayNode, visualState: VisualState): number {
-  const clusterTotal = node.clusterSummary?.totalChildren ?? node.childCount ?? 0;
-  const contentWeight = node.isCluster || visualState === "proxy"
-    ? Math.log2(Math.max(1, clusterTotal) + 1)
-    : node.isDir
-      ? Math.log2(Math.max(1, node.childCount) + 1)
-      : Math.log10(Math.max(1, node.sizeBytes) + 1);
-
-  if (node.isCluster || visualState === "proxy") {
-    return Math.min(20, 6.2 + contentWeight * 1.15);
-  }
-  if (node.isDir) {
-    // Folders are the skill-tree hubs: visibly larger by default, then grow
-    // smoothly with visible children. Log scaling avoids giant outliers.
-    return Math.min(24, 8.4 + contentWeight * 1.35);
-  }
-  return Math.min(9.2, 3.1 + contentWeight * 0.42);
-}
-
-function graph3dNodeObject(
-  node: Graph3DNode,
-  hoveredId: string | null,
-  selectedId: string | null,
-  dimUnrelated: boolean,
-  links: Graph3DLink[],
-  showText: boolean,
-): THREE.Object3D {
-  // INVARIANT — do not regress: 3D nodes are ICONS ONLY. No mesh shape behind
-  // the icon, no plate/card background, no halo. The user has flagged
-  // multiple times that "shapes behind icons" and "cards" are not what they
-  // want. Render exactly one transparent sprite carrying the glyph.
-  const focus = hoveredId || selectedId;
-  const isActive = node.id === hoveredId || node.id === selectedId;
-  const isRelated = Boolean(focus) && links.some((link) => {
-    const source = graph3dEndpointId(link.source);
-    const target = graph3dEndpointId(link.target);
-    return (source === focus && target === node.id) || (target === focus && source === node.id);
-  });
-  const dimmed = dimUnrelated && Boolean(focus) && !isActive && !isRelated;
-  const radius = Math.max(node.isDir ? 4.8 : node.isCluster ? 3.6 : 2.35, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 1.9 : node.isCluster ? 1.48 : 1.08));
-  const tint = graph3dSolidColor(graph3dNodeColor(node, hoveredId, selectedId, dimUnrelated, links), node.color);
-
-  const group = new THREE.Group();
-  const badge = graph3dBadgeSprite(node, isActive, radius, tint);
-  group.add(badge);
-
-  const shouldShowBillboard = showText && (node.isDir || node.isCluster || isActive || isRelated);
-  if (shouldShowBillboard && !dimmed) {
-    const sprite = graph3dBillboard(node, isActive, radius);
-    sprite.position.y = radius * 1.9;
-    group.add(sprite);
-  }
-
-  return group;
-}
-
-function graph3dNodeGeometry(node: Graph3DNode, radius: number): THREE.BufferGeometry {
-  if (node.isDir && !node.isCluster) return new THREE.BoxGeometry(radius * 1.72, radius * 1.2, radius * 0.92, 2, 2, 1);
-  if (node.isCluster || node.visualState === "proxy") return new THREE.DodecahedronGeometry(radius * 0.98, 0);
-  return new THREE.IcosahedronGeometry(radius * 0.86, 1);
-}
-
-// Draw the node's actual icon (the same Nerd-Font / Unicode glyph the 2D mode
-// uses) on a translucent plate. The earlier version of this rendered IBM Plex
-// Sans TEXT badges like "TSX" / "MD" / "FILE" / "DIR" — that is NOT an icon
-// and is the regression the user keeps flagging. Always draw `node.glyphText`
-// in the Nerd Font stack here.
-function graph3dBadgeSprite(node: Graph3DNode, active: boolean, radius: number, accent: string): THREE.Sprite {
-  const canvas = document.createElement("canvas");
-  const size = 192;
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.clearRect(0, 0, size, size);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    const center = size / 2;
-    const plateRadius = active ? size * 0.42 : size * 0.38;
-    const bg = graph3dBlend(graph3dSolidColor(accent, "#e5e7eb"), "#05070b", active ? 0.22 : 0.42);
-
-    ctx.save();
-    ctx.shadowColor = "rgba(0, 0, 0, 0.72)";
-    ctx.shadowBlur = 14;
-    ctx.beginPath();
-    if (node.isDir && !node.isCluster) {
-      const w = plateRadius * 2.05;
-      const h = plateRadius * 1.55;
-      ctx.roundRect(center - w / 2, center - h / 2, w, h, 18);
-    } else if (node.isCluster || node.visualState === "proxy") {
-      for (let i = 0; i < 6; i += 1) {
-        const angle = -Math.PI / 2 + (i * Math.PI * 2) / 6;
-        const px = center + Math.cos(angle) * plateRadius;
-        const py = center + Math.sin(angle) * plateRadius;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-    } else {
-      ctx.arc(center, center, plateRadius, 0, Math.PI * 2);
-    }
-    ctx.fillStyle = bg;
-    ctx.fill();
-    ctx.lineWidth = active ? 8 : 5;
-    ctx.strokeStyle = active ? "#f5c542" : graph3dBrighten(accent, 1.32);
-    ctx.stroke();
-    ctx.restore();
-
-    const glyph = node.glyphText && node.glyphText.length > 0
-      ? node.glyphText
-      : (node.isDir ? "" : "");
-    const glyphPx = Math.round(size * (active ? 0.58 : 0.5));
-    // Nerd Font stack mirrors getGlyphBitmap (the 2D atlas) so 3D icons match.
-    ctx.font = `normal ${glyphPx}px "JetBrainsMono Nerd Font", "JetBrains Mono NF", "Symbols Nerd Font", "SymbolsNerdFont", "Hack Nerd Font", "FiraCode Nerd Font", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = active ? "#fff4a8" : "#f8fafc";
-    ctx.fillText(glyph, center, center + size * 0.02);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: false }));
-  const badgeScale = radius * (active ? 3.4 : 2.85);
-  sprite.scale.set(badgeScale, badgeScale, 1);
-  return sprite;
-}
-
-function graph3dBillboard(node: Graph3DNode, active: boolean, radius: number): THREE.Sprite {
-  const canvas = document.createElement("canvas");
-  const width = active ? 420 : 340;
-  const height = active ? 124 : 96;
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.clearRect(0, 0, width, height);
-    ctx.font = `${active ? 42 : 34}px Lilex, IBM Plex Sans, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = graph3dSolidColor(active ? "#f5c542" : node.color, "#e5e7eb");
-    const glyph = node.glyphText || (node.isDir ? "" : "•");
-    ctx.fillText(glyph, width / 2, height * 0.34);
-    ctx.font = `${active ? 24 : 19}px IBM Plex Sans, sans-serif`;
-    ctx.fillStyle = active ? "#f8f1bf" : "#e5e7eb";
-    const label = node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label;
-    ctx.fillText(label, width / 2, height * 0.72);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  const scale = active ? radius * 2.2 : radius * 1.7;
-  sprite.scale.set(scale * (width / height), scale, 1);
-  return sprite;
-}
-
-function graph3dSolidColor(value: string, fallback = "#d8dee9"): string {
-  const token = value.trim().match(/^var\((--[^),\s]+)(?:,\s*([^)]*))?\)$/);
-  if (token) return graph3dSolidColor(graphThemeColor(token[1], token[2]?.trim() || fallback), fallback);
-  const rgb = value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-  if (rgb) return graph3dRgbToHex(Number(rgb[1]), Number(rgb[2]), Number(rgb[3]));
-  const hex = value.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (!hex) return fallback;
-  if (hex[1].length === 6) return `#${hex[1]}`;
-  return `#${hex[1].split("").map((char) => char + char).join("")}`;
-}
-
-function graph3dBrighten(value: string, factor: number): string {
-  const color = graph3dSolidColor(value);
-  const raw = color.slice(1);
-  const parsed = Number.parseInt(raw, 16);
-  const r = Math.min(255, Math.round(((parsed >> 16) & 255) * factor));
-  const g = Math.min(255, Math.round(((parsed >> 8) & 255) * factor));
-  const b = Math.min(255, Math.round((parsed & 255) * factor));
-  return graph3dRgbToHex(r, g, b);
-}
-
-function graph3dBlend(foreground: string, background: string, amount: number): string {
-  const fg = graph3dSolidColor(foreground).slice(1);
-  const bg = graph3dSolidColor(background, "#101010").slice(1);
-  const f = Number.parseInt(fg, 16);
-  const b = Number.parseInt(bg, 16);
-  const mix = (a: number, z: number) => Math.round(a * (1 - amount) + z * amount);
-  return graph3dRgbToHex(
-    mix((f >> 16) & 255, (b >> 16) & 255),
-    mix((f >> 8) & 255, (b >> 8) & 255),
-    mix(f & 255, b & 255),
-  );
-}
-
-function graph3dRgbToHex(r: number, g: number, b: number): string {
-  return `#${[r, g, b].map((part) => Math.max(0, Math.min(255, part)).toString(16).padStart(2, "0")).join("")}`;
-}
-
-function graph3dNodeColor(
-  node: Graph3DNode,
-  hoveredId: string | null,
-  selectedId: string | null,
-  dimUnrelated: boolean,
-  links: Graph3DLink[],
-): string {
-  if (node.id === selectedId) return "#f5c542";
-  if (node.id === hoveredId) return "#fff4a8";
-  if (!dimUnrelated || (!hoveredId && !selectedId)) return node.color;
-  const focus = hoveredId || selectedId;
-  const related = links.some((link) => {
-    const source = graph3dEndpointId(link.source);
-    const target = graph3dEndpointId(link.target);
-    return (source === focus && target === node.id) || (target === focus && source === node.id);
-  });
-  return related ? node.color : withAlpha(node.color, 0.22);
-}
-
-function graph3dLinkColor(link: Graph3DLink, hoveredId: string | null, selectedId: string | null, dimUnrelated: boolean): string {
-  const source = graph3dEndpointId(link.source);
-  const target = graph3dEndpointId(link.target);
-  const focus = hoveredId || selectedId;
-  const base = graph3dSolidColor(link.color, edgeCategoryColor(link.category));
-  if (focus && (source === focus || target === focus)) return graph3dBrighten(base, 1.28);
-  if (dimUnrelated && focus) return graph3dBlend(base, graphThemeColor("--orbit-graph-canvas", "#101010"), 0.72);
-  if (link.category !== "hierarchy") return graph3dBrighten(base, 1.12);
-  return base;
-}
-
-function graph3dLinkWidth(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
-  const source = graph3dEndpointId(link.source);
-  const target = graph3dEndpointId(link.target);
-  const focus = hoveredId || selectedId;
-  if (focus && (source === focus || target === focus)) return Math.max(2.4, link.width * 1.85);
-  if (link.category === "hierarchy") return Math.max(0.85, link.width);
-  return Math.max(1.05, link.width);
-}
-
-function graph3dLinkDistance(link: Graph3DLink, nodesById: Map<string, Graph3DNode>): number {
-  const source = nodesById.get(graph3dEndpointId(link.source));
-  const target = nodesById.get(graph3dEndpointId(link.target));
-  if (link.category !== "hierarchy") return 96;
-  if (source?.isDir && target?.isDir) return 134;
-  if (source?.isDir || target?.isDir) return 66;
-  return 38;
-}
-
-function graph3dLinkParticles(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
-  if (link.category === "hierarchy") return 0;
-  const source = graph3dEndpointId(link.source);
-  const target = graph3dEndpointId(link.target);
-  const focus = hoveredId || selectedId;
-  if (focus && (source === focus || target === focus)) return link.category === "code" || link.category === "symlink" ? 3 : 2;
-  return link.category === "code" || link.category === "docs" || link.category === "symlink" ? 1 : 0;
-}
-
-function graph3dLinkParticleWidth(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
-  const source = graph3dEndpointId(link.source);
-  const target = graph3dEndpointId(link.target);
-  const focus = hoveredId || selectedId;
-  const active = Boolean(focus && (source === focus || target === focus));
-  return active ? Math.max(1.7, link.width * 0.9) : Math.max(1.05, link.width * 0.62);
-}
-
-function graph3dLinkParticleSpeed(link: Graph3DLink): number {
-  if (link.category === "code") return 0.006;
-  if (link.category === "docs") return 0.0048;
-  if (link.category === "symlink") return 0.0072;
-  if (link.category === "semantic" || link.category === "tags") return 0.0036;
-  return 0.004;
-}
-
-function graph3dEndpointId(endpoint: string | number | Graph3DNode): string {
-  return typeof endpoint === "object" ? String(endpoint.id) : String(endpoint);
-}
-
-function graph3dCollisionRadius(node: Graph3DNode): number {
-  if (node.isDir && !node.isCluster) return Math.max(20, Math.sqrt(Math.max(1, node.val)) * 4.6);
-  if (node.isCluster || node.visualState === "proxy") return Math.max(14, Math.sqrt(Math.max(1, node.val)) * 3.1);
-  return Math.max(8, Math.sqrt(Math.max(1, node.val)) * 2.25);
-}
-
-function createGraph3DCollisionForce() {
-  let nodes: Graph3DNode[] = [];
-  const force = ((alpha: number) => {
-    const strength = Math.min(0.24, Math.max(0.04, alpha * 0.32));
-    const limit = Math.min(nodes.length, 350);
-    for (let i = 0; i < limit; i += 1) {
-      const a = nodes[i];
-      const ax = a.x ?? 0;
-      const ay = a.y ?? 0;
-      const az = a.z ?? 0;
-      const ar = graph3dCollisionRadius(a);
-      for (let j = i + 1; j < limit; j += 1) {
-        const b = nodes[j];
-        let dx = (b.x ?? 0) - ax;
-        let dy = (b.y ?? 0) - ay;
-        let dz = (b.z ?? 0) - az;
-        let distance = Math.hypot(dx, dy, dz);
-        if (!Number.isFinite(distance) || distance < 0.001) {
-          const angle = seededAngle(Number(a.id) + Number(b.id));
-          dx = Math.cos(angle);
-          dy = Math.sin(angle);
-          dz = Math.sin(angle * 0.7);
-          distance = Math.hypot(dx, dy, dz);
-        }
-        const minDistance = ar + graph3dCollisionRadius(b);
-        if (distance >= minDistance) continue;
-        const overlap = minDistance - distance;
-        const nx = dx / distance;
-        const ny = dy / distance;
-        const nz = dz / distance;
-        const pinnedA = a.fx !== undefined || a.fy !== undefined || a.fz !== undefined;
-        const pinnedB = b.fx !== undefined || b.fy !== undefined || b.fz !== undefined;
-        if (!pinnedA) {
-          a.vx = (a.vx ?? 0) - nx * overlap * strength * (pinnedB ? 1 : 0.5);
-          a.vy = (a.vy ?? 0) - ny * overlap * strength * (pinnedB ? 1 : 0.5);
-          a.vz = (a.vz ?? 0) - nz * overlap * strength * (pinnedB ? 1 : 0.5);
-        }
-        if (!pinnedB) {
-          b.vx = (b.vx ?? 0) + nx * overlap * strength * (pinnedA ? 1 : 0.5);
-          b.vy = (b.vy ?? 0) + ny * overlap * strength * (pinnedA ? 1 : 0.5);
-          b.vz = (b.vz ?? 0) + nz * overlap * strength * (pinnedA ? 1 : 0.5);
-        }
-      }
-    }
-  }) as ((alpha: number) => void) & { initialize?: (nextNodes: Graph3DNode[]) => void };
-  force.initialize = (nextNodes: Graph3DNode[]) => {
-    nodes = nextNodes;
-  };
-  return force;
-}
-
-function focusGraph3DNode(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>, node: Graph3DNode, duration = 700) {
-  const x = node.x ?? 0;
-  const y = node.y ?? 0;
-  const z = node.z ?? 0;
-  const distance = Math.max(72, Math.sqrt(Math.max(1, node.val)) * 16);
-  const length = Math.hypot(x, y, z);
-  const ratio = length > 0 ? 1 + distance / length : 1;
-  graph.cameraPosition(
-    length > 0 ? { x: x * ratio, y: y * ratio, z: z * ratio + distance * 0.28 } : { x: 0, y: -distance, z: distance },
-    { x, y, z },
-    duration,
-  );
-}
-
-function frameGraph3DScene(
-  graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>,
-  nodes: Map<string, Graph3DNode>,
-  duration = 360,
-) {
-  const list = [...nodes.values()].filter((node) => Number.isFinite(node.x) && Number.isFinite(node.y) && Number.isFinite(node.z));
-  if (!list.length) {
-    graph.cameraPosition({ x: 0, y: -520, z: 360 }, { x: 0, y: 0, z: 0 }, duration);
-    return;
-  }
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
-  for (const node of list) {
-    const x = node.x ?? 0;
-    const y = node.y ?? 0;
-    const z = node.z ?? 0;
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
-    minZ = Math.min(minZ, z);
-    maxZ = Math.max(maxZ, z);
-  }
-  const center = {
-    x: (minX + maxX) / 2,
-    y: (minY + maxY) / 2,
-    z: (minZ + maxZ) / 2,
-  };
-  const radius = Math.max(120, Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) / 2);
-  const distance = Math.min(2400, Math.max(620, radius * 1.24));
-  graph.cameraPosition(
-    { x: center.x, y: center.y - distance * 0.78, z: center.z + distance * 0.46 },
-    center,
-    duration,
-  );
-}
-
-type OrbitGraph3DControls = {
-  autoRotate?: boolean;
-  autoRotateSpeed?: number;
-  enableDamping?: boolean;
-  dampingFactor?: number;
-  enableZoom?: boolean;
-  enablePan?: boolean;
-  zoomSpeed?: number;
-  rotateSpeed?: number;
-  panSpeed?: number;
-  minDistance?: number;
-  maxDistance?: number;
-  screenSpacePanning?: boolean;
-  mouseButtons?: Record<string, unknown>;
-  // TrackballControls-specific knobs (free rotation, no up-axis lock):
-  staticMoving?: boolean;
-  dynamicDampingFactor?: number;
-  noRotate?: boolean;
-  noZoom?: boolean;
-  noPan?: boolean;
-};
-
-function configureGraph3DControls(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>) {
-  const controls = graph3dControls(graph);
-  if (!controls) return;
-  // TrackballControls knobs (active path):
-  controls.staticMoving = false;
-  controls.dynamicDampingFactor = 0.18;
-  controls.rotateSpeed = 2.4;
-  controls.zoomSpeed = 1.1;
-  controls.panSpeed = 0.65;
-  controls.noRotate = false;
-  controls.noZoom = false;
-  controls.noPan = false;
-  controls.minDistance = 36;
-  controls.maxDistance = 4200;
-  // OrbitControls knobs (harmless on Trackball — kept for safety if the
-  // controlType ever flips back during debugging):
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.16;
-  controls.enableZoom = true;
-  controls.enablePan = true;
-  controls.screenSpacePanning = true;
-  controls.autoRotate = false;
-  controls.autoRotateSpeed = 0.12;
-}
-
-function setGraph3DAutoRotate(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>, enabled: boolean) {
-  const controls = graph3dControls(graph);
-  if (controls) controls.autoRotate = enabled;
-}
-
-function installGraph3DAtmosphere(
-  graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>,
-  backgroundColor: string,
-) {
-  const sceneApi = graph as unknown as { scene?: () => THREE.Scene };
-  const scene = sceneApi.scene?.();
-  if (!scene) return;
-  const bgHex = graph3dSolidColor(backgroundColor, "#0b0d12");
-  const fogColor = new THREE.Color(bgHex);
-  scene.fog = new THREE.Fog(fogColor, 380, 2600);
-  scene.traverse((obj) => {
-    if ((obj as { userData?: { orbitStarfield?: boolean; orbitAtmosphereLight?: boolean } }).userData?.orbitStarfield
-      || (obj as { userData?: { orbitAtmosphereLight?: boolean } }).userData?.orbitAtmosphereLight) {
-      scene.remove(obj);
-    }
-  });
-  const ambient = new THREE.AmbientLight(0xffffff, 1.15);
-  ambient.userData.orbitAtmosphereLight = true;
-  scene.add(ambient);
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.55);
-  keyLight.position.set(-420, -620, 780);
-  keyLight.userData.orbitAtmosphereLight = true;
-  scene.add(keyLight);
-  const rimLight = new THREE.DirectionalLight(new THREE.Color(bgHex).lerp(new THREE.Color("#8bd17c"), 0.72), 0.82);
-  rimLight.position.set(560, 420, -360);
-  rimLight.userData.orbitAtmosphereLight = true;
-  scene.add(rimLight);
-  const positions = new Float32Array(STARFIELD_COUNT * 3);
-  for (let i = 0; i < STARFIELD_COUNT; i += 1) {
-    const r = STARFIELD_RADIUS_MIN + Math.random() * (STARFIELD_RADIUS_MAX - STARFIELD_RADIUS_MIN);
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    positions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta);
-    positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-    positions[i * 3 + 2] = r * Math.cos(phi);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({
-    color: new THREE.Color(bgHex).lerp(new THREE.Color("#ffffff"), 0.42),
-    size: 1.4,
-    sizeAttenuation: true,
-    transparent: true,
-    opacity: 0.55,
-    depthWrite: false,
-  });
-  const points = new THREE.Points(geometry, material);
-  points.userData.orbitStarfield = true;
-  points.frustumCulled = false;
-  scene.add(points);
-}
-
-const STARFIELD_COUNT = 720;
-const STARFIELD_RADIUS_MIN = 1800;
-const STARFIELD_RADIUS_MAX = 3400;
-
-function graph3dControls(graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>) {
-  return (graph as unknown as { controls?: () => OrbitGraph3DControls }).controls?.();
-}
-
-function graph3dEdgeStyleForCategory(category: EdgeCategory): { color: string; size: number; curvature: number } {
-  const color = graph3dSolidColor(edgeCategoryColor(category), EDGE_CATEGORY_CONFIG[category].fallback);
-  switch (category) {
-    case "hierarchy":
-      return { color, size: 0.95, curvature: 0 };
-    case "code":
-      return { color, size: 1.85, curvature: 0.18 };
-    case "docs":
-      return { color, size: 1.55, curvature: 0.14 };
-    case "symlink":
-      return { color, size: 2.05, curvature: 0.22 };
-    case "semantic":
-      return { color, size: 1.25, curvature: 0.28 };
-    case "tags":
-      return { color, size: 1.25, curvature: 0.32 };
-    default:
-      return { color, size: 1.0, curvature: 0.12 };
-  }
-}
-
-function edgeStyleForGraphEdge(edge: GraphEdge, groupColors: Map<number, string>) {
-  const category = edgeCategoryForType(edge.edgeType);
-  const base = category === "hierarchy" ? (groupColors.get(edge.sourceId) ?? edgeCategoryColor(category)) : edgeCategoryColor(category);
-  return {
-    color: withAlpha(base, category === "hierarchy" ? 0.82 : 0.9),
-    size: category === "hierarchy" ? 1.35 : 1.9,
-    curvature: category === "hierarchy" ? 0 : Math.sin(Number(edge.id) * 12.9898) * 0.22,
-  };
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 function layoutModeLabel(mode: LayoutMode): string {
   if (mode === "constellation") return "Atlas";
@@ -2184,6 +1856,21 @@ function transitionStartPosition(
   return { x: node.x, y: node.y };
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
+}
+
+// Deterministic per-edge curvature so neighboring arcs bend in different
+// directions instead of stacking. Range is approximately ±0.45, biased away
+// from 0 so every curve actually shows as a curve (Sigma's EdgeCurveProgram
+// renders a straight line at curvature 0).
+function edgeCurvatureForId(id: number): number {
+  const hash = Math.sin(Math.abs(id) * 78.233) * 43758.5453;
+  const signedUnit = hash - Math.floor(hash) - 0.5; // -0.5 to +0.5
+  const magnitude = 0.18 + Math.abs(signedUnit) * 0.6; // 0.18 to 0.48
+  return signedUnit < 0 ? -magnitude : magnitude;
+}
+
 function animateGraphIntoPlace(graph: Graph, renderer: Sigma, duration = 420) {
   const starts = new Map<string, { x: number; y: number; tx: number; ty: number }>();
   graph.forEachNode((node, attrs) => {
@@ -2223,9 +1910,6 @@ function dedupeGraphEdges(edges: GraphEdge[]): GraphEdge[] {
   return [...byPair.values()];
 }
 
-function graphEdgePairKey(source: string, target: string) {
-  return source < target ? `${source}:${target}` : `${target}:${source}`;
-}
 
 function edgePriority(edge: GraphEdge) {
   if (edge.edgeType === "contains") return 3;
@@ -2323,12 +2007,6 @@ function capVisualFanout(nodes: GraphNode[], edges: GraphEdge[], expandedFolders
   return { nodes: nextNodes, edges: nextEdges };
 }
 
-function compareGraphChildren(a?: GraphNode, b?: GraphNode) {
-  if (!a || !b) return 0;
-  if (a.isCluster !== b.isCluster) return a.isCluster ? -1 : 1;
-  if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-  return a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true });
-}
 
 type HiddenProxyGroup = {
   kind: string;
@@ -2413,89 +2091,6 @@ function syntheticEdgeId(parentId: number, index = 0) {
   return -60_000_000 - Math.abs(parentId) * 10 - index;
 }
 
-// Orbit-native 3D seed layout: compact parent-local shells instead of the 2D
-// Atlas map flattened into Three.js. The force simulation can still breathe,
-// but folders begin as large local anchors and files/clusters as close
-// satellites, which avoids the distant "ants on strings" look.
-function graph3dLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
-  if (nodes.length === 0) return [];
-  const tree = hierarchy(nodes, edges);
-  const roots = tree.roots.length ? tree.roots : [nodes[0].id];
-  const radial = vegaRadialTidyLayout(nodes, roots, tree);
-  const siblingInfo = graph3dSiblingInfo(edges);
-  const maxRadius = Math.max(1, ...radial.map((node) => Math.hypot(node.x, node.y)));
-  // Keep the 2D Atlas organization, but fold it into a shallower 3D world.
-  // The previous native 3D shell independently fanned every parent, so the
-  // same hierarchy that looked tidy in 2D became a tangled curtain in 3D.
-  // This preserves radial order/depth and only uses Z for readable separation.
-  const worldScale = Math.min(0.38, Math.max(0.035, 760 / maxRadius));
-
-  return radial.map((node) => {
-    const sibling = siblingInfo.get(node.id);
-    const siblingIndex = sibling?.index ?? 0;
-    const siblingCount = Math.max(1, sibling?.count ?? 1);
-    const normalizedSibling = siblingCount <= 1 ? 0 : (siblingIndex / (siblingCount - 1)) * 2 - 1;
-    const nodeAngle = ((node.angle ?? 0) * Math.PI) / 180;
-    const familyWave = Math.sin(nodeAngle * 2.1 + node.depth * 0.8) * 34;
-    const localShelf = normalizedSibling * (node.isDir ? 42 : 26);
-    const depthShelf = (node.depth - 1) * 30;
-    const aggregateLift = node.isCluster || node.visualState === "proxy" ? -28 : 0;
-    return {
-      ...node,
-      x: node.x * worldScale,
-      y: node.y * worldScale,
-      z3d: familyWave + localShelf + depthShelf + aggregateLift,
-      projectionScale: 1,
-    };
-  });
-}
-
-function graph3dSiblingInfo(edges: GraphEdge[]) {
-  const childrenByParent = new Map<number, number[]>();
-  for (const edge of edges) {
-    if (edge.edgeType !== "contains") continue;
-    const children = childrenByParent.get(edge.sourceId) ?? [];
-    children.push(edge.targetId);
-    childrenByParent.set(edge.sourceId, children);
-  }
-  const info = new Map<number, { index: number; count: number }>();
-  for (const children of childrenByParent.values()) {
-    children.sort((a, b) => a - b);
-    children.forEach((child, index) => info.set(child, { index, count: children.length }));
-  }
-  return info;
-}
-
-function graph3dChildPosition(
-  parent: GraphDisplayNode,
-  heading: number,
-  yaw: number,
-  index: number,
-  siblingCount: number,
-  radius: number,
-  depth: number,
-  kind: "branch" | "preview",
-) {
-  const forward = new THREE.Vector3(Math.cos(heading), Math.sin(heading), 0).normalize();
-  const right = new THREE.Vector3(-Math.sin(heading), Math.cos(heading), 0).normalize();
-  const up = new THREE.Vector3(0, 0, 1);
-  const golden = (index * 0.61803398875) % 1;
-  const normalized = siblingCount <= 1 ? 0.5 : index / Math.max(1, siblingCount - 1);
-  const pitchSpan = kind === "branch" ? 0.74 : 0.48;
-  const pitch = (normalized - 0.5) * pitchSpan + (golden - 0.5) * (kind === "branch" ? 0.24 : 0.34);
-  const fan = forward.clone().multiplyScalar(Math.cos(yaw));
-  fan.add(right.clone().multiplyScalar(Math.sin(yaw)));
-  fan.multiplyScalar(Math.cos(pitch));
-  fan.add(up.clone().multiplyScalar(Math.sin(pitch)));
-  fan.normalize();
-  const zCompression = kind === "branch" ? 0.86 : 0.58;
-  const parentZ = parent.z3d ?? 0;
-  return {
-    x: parent.x + fan.x * radius,
-    y: parent.y + fan.y * radius,
-    z: parentZ + fan.z * radius * zCompression + (depth % 2 === 0 ? 18 : -12),
-  };
-}
 
 // Vega radial tidy layout: mirrors the Vega `stratify -> tree -> polar`
 // example the user referenced. The hierarchy decides position first: leaves get
@@ -2506,273 +2101,18 @@ function constellationLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): Grap
   if (nodes.length === 0) return [];
   const tree = hierarchy(nodes, edges);
   const roots = tree.roots.length ? tree.roots : [nodes[0].id];
-  return vegaRadialTidyLayout(nodes, roots, tree);
+  return vegaRadialTidyLayout(nodes, roots, tree, nodes.length);
 }
 
-// Per-leaf arc allocation. Bumped from 180 → 230 so sibling files no longer
-// crush into the same arc segment at default zoom.
-const VEGA_RADIAL_LEAF_GAP = 230;
-// Per-depth radial spacing. Bumped from 520 → 760 so deep single-child folder
-// chains (home → lamb → Library → lab → …) separate radially instead of
-// stacking on top of each other along the same angle.
-const VEGA_RADIAL_DEPTH_GAP = 760;
-const VEGA_RADIAL_ROOT_GAP_LEAVES = 10;
-const VEGA_RADIAL_MIN_RADIUS = 1600;
-const VEGA_RADIAL_START_ANGLE = 270; // Same visual start as Vega sample: root fan begins at top.
-
-function vegaRadialTidyLayout(
-  nodes: VisualGraphNode[],
-  roots: number[],
-  tree: ReturnType<typeof hierarchy>,
-): GraphDisplayNode[] {
-  const placed = new Map<number, GraphDisplayNode>();
-  const orderedRoots = [...roots].sort((a, b) => compareGraphChildren(tree.byId.get(a), tree.byId.get(b)));
-  const maxDepth = Math.max(1, ...orderedRoots.map((id) => subtreeMaxDepth(id, tree.children)));
-  const totalLeafSlots = orderedRoots.reduce((sum, id) => sum + vegaLeafSlots(id, tree), 0)
-    + Math.max(0, orderedRoots.length - 1) * VEGA_RADIAL_ROOT_GAP_LEAVES;
-
-  // Vega's sample exposes this as a radius signal. Orbit derives it from graph
-  // density so crowded folders expand outward instead of stacking icons.
-  const circumferenceRadius = (Math.max(8, totalLeafSlots) * VEGA_RADIAL_LEAF_GAP) / (Math.PI * 2);
-  const depthRadius = (maxDepth + 0.5) * VEGA_RADIAL_DEPTH_GAP;
-  const radius = Math.max(VEGA_RADIAL_MIN_RADIUS, circumferenceRadius, depthRadius);
-  const depthGap = radius / Math.max(1, maxDepth + 0.35);
-
-  let cursor = 0;
-  const rootDepth = orderedRoots.length === 1 ? 0 : 1;
-  for (const root of orderedRoots) {
-    const slots = vegaLeafSlots(root, tree);
-    // Multiple filesystem roots behave like children of an implicit center root,
-    // matching Vega's stratified hierarchy without drawing a fake node.
-    placeVegaRadialNode(root, rootDepth, cursor, slots, totalLeafSlots, depthGap, tree, placed);
-    cursor += slots + VEGA_RADIAL_ROOT_GAP_LEAVES;
-  }
-
-  lastFamilyWedges = orderedRoots.map((id) => {
-    const node = placed.get(id);
-    const angle = ((node?.angle ?? VEGA_RADIAL_START_ANGLE) * Math.PI) / 180;
-    const spread = Math.max(0.08, (vegaLeafSlots(id, tree) / Math.max(1, totalLeafSlots)) * Math.PI * 2 * 0.5);
-    return {
-      id,
-      startAngle: angle - spread,
-      endAngle: angle + spread,
-      maxDepth: subtreeMaxDepth(id, tree.children),
-    };
-  });
-
-  const resolved = nodes.map((node, index) => placed.get(node.id) ?? fallbackNode(node, index, 0, 0));
-  return relaxRadialVisualFootprints(resolved);
-}
-
-function placeVegaRadialNode(
-  id: number,
-  depth: number,
-  startSlot: number,
-  slotSpan: number,
-  totalSlots: number,
-  depthGap: number,
-  tree: ReturnType<typeof hierarchy>,
-  placed: Map<number, GraphDisplayNode>,
-): number {
-  const node = tree.byId.get(id);
-  if (!node || placed.has(id)) return startSlot + slotSpan / 2;
-
-  const kids = orderedVegaChildren(id, tree);
-  let alpha: number;
-  if (!kids.length) {
-    alpha = startSlot + slotSpan / 2;
-  } else {
-    let cursor = startSlot;
-    const childAlphas: number[] = [];
-    for (const child of kids) {
-      const childSlots = vegaLeafSlots(child, tree);
-      childAlphas.push(placeVegaRadialNode(child, depth + 1, cursor, childSlots, totalSlots, depthGap, tree, placed));
-      cursor += childSlots;
-    }
-    alpha = childAlphas.reduce((sum, value) => sum + value, 0) / Math.max(1, childAlphas.length);
-  }
-
-  const normalized = totalSlots <= 0 ? 0 : alpha / totalSlots;
-  const angle = (VEGA_RADIAL_START_ANGLE + normalized * 360) % 360;
-  const radians = (Math.PI * angle) / 180;
-  const childCount = kids.length;
-  const radialDepth = depth === 0 && tree.roots.length === 1 ? 0 : depth;
-  const nodeRadius = radialDepth * depthGap;
-  const leftside = angle >= 90 && angle <= 270;
-
-  placed.set(id, {
-    ...node,
-    x: Math.cos(radians) * nodeRadius,
-    y: Math.sin(radians) * nodeRadius,
-    depth,
-    childCount,
-    angle,
-    leftside,
-  });
-
-  return alpha;
-}
-
-function orderedVegaChildren(id: number, tree: ReturnType<typeof hierarchy>) {
-  const kids = [...(tree.children.get(id) ?? [])];
-  return kids.sort((a, b) => {
-    const nodeA = tree.byId.get(a);
-    const nodeB = tree.byId.get(b);
-    // Keep folders first so the radial tree reads as structural branches, but
-    // otherwise preserve name ordering for deterministic inspectability.
-    return compareGraphChildren(nodeA, nodeB);
-  });
-}
-
-function visualFootprintRadius(node: GraphDisplayNode): number {
-  const base = getNodeSize(node);
-  if (node.visualState === "proxy" || node.isCluster) return base * 5.4 + 24;
-  if (node.isDir) return base * 5.8 + (node.depth <= 2 ? 34 : 18);
-  return base * 4.6 + 12;
-}
-
-function relaxRadialVisualFootprints(nodes: GraphDisplayNode[]): GraphDisplayNode[] {
-  if (nodes.length < 2) return nodes;
-  const placed = nodes.map((node) => ({ ...node }));
-  const maxNodes = Math.min(placed.length, 900);
-  // Iterate until no overlap is detected, capped to avoid pathological cases.
-  // Empirically a tight 5-stack of files needs ~12 passes at high push factor
-  // to fully fan out. Stop early once a pass made no corrections.
-  const maxIterations = placed.length > 500 ? 18 : 32;
-  const pushFactor = 0.88;
-
-  for (let pass = 0; pass < maxIterations; pass += 1) {
-    let movedAny = false;
-    for (let i = 0; i < maxNodes; i += 1) {
-      const a = placed[i];
-      const aPinned = a.depth <= 0;
-      for (let j = i + 1; j < maxNodes; j += 1) {
-        const b = placed[j];
-        const bPinned = b.depth <= 0;
-        if (aPinned && bPinned) continue;
-        let dx = b.x - a.x;
-        let dy = b.y - a.y;
-        let distance = Math.hypot(dx, dy);
-        if (!Number.isFinite(distance) || distance < 0.001) {
-          const angle = seededAngle(a.id + b.id + pass);
-          dx = Math.cos(angle);
-          dy = Math.sin(angle);
-          distance = 1;
-        }
-        const minDistance = visualFootprintRadius(a) + visualFootprintRadius(b) + 26;
-        if (distance >= minDistance) continue;
-        const push = (minDistance - distance) * pushFactor;
-        const nx = dx / distance;
-        const ny = dy / distance;
-        if (!aPinned) {
-          a.x -= nx * push * (bPinned ? 1 : 0.5);
-          a.y -= ny * push * (bPinned ? 1 : 0.5);
-        }
-        if (!bPinned) {
-          b.x += nx * push * (aPinned ? 1 : 0.5);
-          b.y += ny * push * (aPinned ? 1 : 0.5);
-        }
-        movedAny = true;
-      }
-    }
-    if (!movedAny) break;
-  }
-
-  return placed;
-}
-
-function vegaLeafSlots(id: number, tree: ReturnType<typeof hierarchy>, seen = new Set<number>()): number {
-  if (seen.has(id)) return 1;
-  seen.add(id);
-  const node = tree.byId.get(id);
-  if (!node) return 1;
-  const kids = orderedVegaChildren(id, tree);
-  if (!kids.length) {
-    if (node.visualState === "proxy" || node.isCluster) return 6.4;
-    if (node.isDir) return 4.2;
-    return 2.1;
-  }
-  const childSlots = kids.reduce((sum, child) => sum + vegaLeafSlots(child, tree, new Set(seen)), 0);
-  // Parents with many direct children reserve a little extra arc, matching the
-  // Vega mental model while avoiding the old shelf pile-ups.
-  return Math.max(childSlots, Math.min(14, 1.6 + kids.length * 0.42));
-}
-
-function orbitRadiusForDepth(depth: number): number {
-  if (depth <= 0) return 0;
-  return depth * VEGA_RADIAL_DEPTH_GAP;
-}
-
-function subtreeMaxDepth(id: number, children: Map<number, number[]>, seen = new Set<number>()): number {
-  if (seen.has(id)) return 0;
-  seen.add(id);
-  const kids = children.get(id) ?? [];
-  if (!kids.length) return 0;
-  let best = 0;
-  for (const k of kids) {
-    const d = subtreeMaxDepth(k, children, new Set(seen));
-    if (d > best) best = d;
-  }
-  return 1 + best;
-}
-
-// Module-level handoff so the JSX-side halo layer can read the most recent
-// family wedge geometry without us needing to thread it through every render.
-// The layout writes; the renderer reads.
-type FamilyWedge = {
-  id: number;
-  startAngle: number;
-  endAngle: number;
-  maxDepth: number;
-};
-let lastFamilyWedges: FamilyWedge[] = [];
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
-}
-
-// Convert "rgba(r,g,b,a)" or hex to "rgba(r,g,b,alpha)" with a custom alpha.
-function withAlpha(rgba: string, alpha: number): string {
-  const match = rgba.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (!match) {
-    const hex = rgba.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-    if (!hex) return rgba;
-    const raw = hex[1].length === 3
-      ? hex[1].split("").map((char) => char + char).join("")
-      : hex[1];
-    const value = Number.parseInt(raw, 16);
-    const r = (value >> 16) & 255;
-    const g = (value >> 8) & 255;
-    const b = value & 255;
-    return `rgba(${r},${g},${b},${alpha})`;
-  }
-  return `rgba(${match[1]},${match[2]},${match[3]},${alpha})`;
-}
-
-// Deterministic per-edge curvature so neighboring arcs bend in different
-// directions instead of stacking. Range is approximately ±0.45, biased away
-// from 0 so every curve actually shows as a curve (Sigma's EdgeCurveProgram
-// renders a straight line at curvature 0).
-function edgeCurvatureForId(id: number): number {
-  const hash = Math.sin(Math.abs(id) * 78.233) * 43758.5453;
-  const signedUnit = hash - Math.floor(hash) - 0.5; // -0.5 to +0.5
-  const magnitude = 0.18 + Math.abs(signedUnit) * 0.6; // 0.18 to 0.48
-  return signedUnit < 0 ? -magnitude : magnitude;
-}
-
-function subtreeWeight(id: number, children: Map<number, number[]>, seen = new Set<number>()): number {
-  if (seen.has(id)) return 1;
-  seen.add(id);
-  const kids = children.get(id) ?? [];
-  if (kids.length === 0) return 1;
-  return Math.max(1, Math.min(48, kids.reduce((sum, child) => sum + subtreeWeight(child, children, seen), 0)));
-}
 
 function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
   // Vega-like Cartesian tidy tree: root on the left, depth grows left → right,
   // leaves get stable vertical slots, and parents sit centered over children.
-  const LEAF_GAP = 122;
-  const DEPTH_GAP = 240;
+  // Spacing bumped from 180/240 → 320/420 — at the previous spacing, sibling
+  // labels overran each other and the depth columns felt cramped relative to
+  // the icon sizes used in icons mode.
+  const LEAF_GAP = 320;
+  const DEPTH_GAP = 420;
   const ROOT_GAP_LEAVES = 4;
   const tree = hierarchy(nodes, edges);
   const roots = tree.roots.length ? tree.roots : [nodes[0].id];
@@ -2782,7 +2122,13 @@ function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayN
 
   const place = (id: number, depth: number): number => {
     const node = tree.byId.get(id);
-    if (!node || placed.has(id)) return leafCursor;
+    if (!node) return leafCursor * LEAF_GAP;
+    // Cycle / re-entry: return the already-assigned y so parent averages
+    // remain valid. Previously this returned `leafCursor` (a small integer
+    // counter), which collapsed the parent's averaged y toward zero and
+    // stacked everything in a vertical line.
+    const existing = placed.get(id);
+    if (existing) return existing.y;
     const kids = orderedVegaChildren(id, tree);
     let y: number;
     if (!kids.length) {
@@ -2822,48 +2168,22 @@ function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayN
   });
 }
 
-function hierarchy(nodes: VisualGraphNode[], edges: GraphEdge[]) {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const children = new Map<number, number[]>();
-  const parent = new Map<number, number>();
-  for (const node of nodes) children.set(node.id, []);
-  for (const edge of edges) {
-    if (edge.edgeType !== "contains") continue;
-    if (!byId.has(edge.sourceId) || !byId.has(edge.targetId)) continue;
-    children.get(edge.sourceId)?.push(edge.targetId);
-    parent.set(edge.targetId, edge.sourceId);
+
+function findShortestPath(graph: Graph, source: string, target: string): string[] | null {
+  if (source === target) return [source];
+  const visited = new Set<string>([source]);
+  const queue: Array<{ id: string; path: string[] }> = [{ id: source, path: [source] }];
+  while (queue.length > 0) {
+    const { id, path } = queue.shift()!;
+    for (const neighbor of graph.neighbors(id)) {
+      if (neighbor === target) return [...path, target];
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push({ id: neighbor, path: [...path, neighbor] });
+      }
+    }
   }
-  for (const ids of children.values()) {
-    ids.sort((a, b) => {
-      const nodeA = byId.get(a)!;
-      const nodeB = byId.get(b)!;
-      if (nodeA.isDir !== nodeB.isDir) return nodeA.isDir ? -1 : 1;
-      return nodeA.label.localeCompare(nodeB.label, undefined, { sensitivity: "base" });
-    });
-  }
-  const roots = nodes.filter((node) => !parent.has(node.id)).map((node) => node.id);
-  return { byId, children, parent, roots };
-}
-
-function fallbackNode(node: VisualGraphNode, index: number, depth: number, childCount: number): GraphDisplayNode {
-  const angle = seededAngle(node.id);
-  const radius = 120 + (index % 18) * 18;
-  return { ...node, x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, depth, childCount };
-}
-
-function visibleNodeLabel(node: GraphDisplayNode) {
-  if (nodeVisualState(node) === "proxy") return "";
-  if (nodeVisualState(node) === "ghost") return "";
-  if (node.isCluster) return node.label;
-  if (node.isDir && node.depth <= 2) return node.label;
-  return "";
-}
-
-function nodeVisualState(node: GraphDisplayNode): VisualState {
-  if (node.visualState) return node.visualState;
-  if (node.depth <= 1) return "primary";
-  if (node.isDir || node.isCluster) return "context";
-  return "ghost";
+  return null;
 }
 
 function reduceNode(
@@ -2877,6 +2197,8 @@ function reduceNode(
   breadcrumbNodes: GraphNode[] = [],
   nodeView: NodeView = "spheres",
   cameraRatioRef?: { current: number },
+  pathfinderNodes?: Set<string>,
+  pathfinderFrom?: string | null,
 ) {
   const isHovered = hovered === node;
   const isSelected = selected === node;
@@ -2903,11 +2225,33 @@ function reduceNode(
   // clicked the icon's edge. Match the sphere's graph-space size to the
   // rendered icon so the hit zone tracks what the user sees.
   let effectiveBase = rawBase;
+  const isDir = Boolean(data.isDir);
+  // iconMinPx / iconMaxPx clamp the screen-pixel size in the label renderer.
+  // We use natural Sigma scaling (closer = bigger, farther = smaller) and
+  // just enforce a min/max range — that gives the user the spatial intuition
+  // they expect while preventing icons from becoming microscopic at zoom-out
+  // or massive at zoom-in. The window is also density-aware per node type.
+  let iconMinPx = 0;
+  let iconMaxPx = 0;
   if (iconsMode) {
-    const ratio = Math.max(0.001, cameraRatioRef?.current ?? 1);
-    const minScreenRadius = isClusterNode ? 7 : 6;
-    const sphereGraphSize = minScreenRadius * ratio;
-    effectiveBase = Math.max(rawBase, sphereGraphSize);
+    const N = Math.max(1, graph.order);
+    // Density-aware center: dense graphs target a smaller working size so
+    // dense subtrees breathe; sparse graphs allow bigger icons. iconMaxPx
+    // tightened (max≈28 vs previous 36) so zoom-in doesn't blow icons up
+    // beyond the visual footprint reserved by the relax pass.
+    if (isClusterNode) {
+      iconMinPx = Math.max(11, Math.min(17, Math.round(115 / Math.sqrt(N))));
+      iconMaxPx = Math.max(18, Math.min(28, Math.round(180 / Math.sqrt(N))));
+    } else if (isDir) {
+      iconMinPx = Math.max(10, Math.min(15, Math.round(100 / Math.sqrt(N))));
+      iconMaxPx = Math.max(16, Math.min(24, Math.round(155 / Math.sqrt(N))));
+    } else {
+      iconMinPx = Math.max(7, Math.min(11, Math.round(75 / Math.sqrt(N))));
+      iconMaxPx = Math.max(13, Math.min(19, Math.round(125 / Math.sqrt(N))));
+    }
+    // Keep effectiveBase = rawBase so the sphere (hit detection + edge
+    // termination) scales naturally with Sigma. The visible glyph is sized
+    // from data.size in the label renderer with the min/max clamp applied.
   }
 
   // INVARIANT — do not regress: in icons mode, BOTH files/folders AND
@@ -2948,26 +2292,47 @@ function reduceNode(
     targetZIndex = 0;
   }
 
-  // Style breadcrumb nodes (in nav history but not selected)
+  // Style breadcrumb nodes (parent/back folders from nav history) — make
+  // them large and accent-colored so they're easy to spot as navigation anchors.
   if (isBreadcrumb && !dimUnrelated) {
     if (!iconsMode) {
-      targetColor = adjustColorBrightness(targetColor, 0.6);
-      targetSize = effectiveBase * 0.85;
+      targetColor = graphThemeColor("--omarchy-accent", "#6f9ad0");
+      targetSize = effectiveBase * 1.9;
+    } else {
+      targetGlyphScale = 1.65;
     }
-    targetZIndex = 5;
+    targetLabel = fullLabel;
+    targetZIndex = 15;
   }
 
   if (connectedToActive) {
-    if (!iconsMode) targetSize = effectiveBase * 1.08;
+    if (!iconsMode) {
+      targetSize = effectiveBase * 1.08;
+    } else {
+      // Stronger connected-node indication — 1.18× glyph and a guaranteed
+      // full-opacity override (in case dimUnrelated would have faded the
+      // node). This makes "what's connected to what" tractable visually
+      // without needing labels or arrows.
+      targetGlyphScale = 1.18;
+      targetGlyphOpacity = 1;
+    }
     targetZIndex = 40;
   }
 
+  // Hover/select scales — per node type. Each role has its own emphasis:
+  // clusters need to "pop" without inflating to absurd sizes (they're already
+  // big at rest); folders are hierarchy anchors that grow noticeably; files
+  // grow the most because they start the smallest and need to surface.
   if (isHovered) {
     if (!iconsMode) {
-      targetColor = graphThemeColor("--omarchy-color3", "#f5c542");
-      targetSize = Math.max(8, effectiveBase * 1.35);
+      // White highlight (not yellow color3) — yellow collides with the amber
+      // family/edge colors and made hovered nodes blend into the edges.
+      // 1.25× scale is the previous 1.6 dialled down: hovered spheres were
+      // visually overwhelming, especially for already-big root folders.
+      targetColor = graphThemeColor("--omarchy-fg", "#ffffff");
+      targetSize = Math.max(8, effectiveBase * 1.25);
     } else {
-      targetGlyphScale = isClusterNode ? 1.14 : 1.2;
+      targetGlyphScale = isClusterNode ? 1.28 : isDir ? 1.42 : 1.6;
     }
     targetLabel = fullLabel;
     targetZIndex = 90;
@@ -2975,10 +2340,13 @@ function reduceNode(
 
   if (isSelected) {
     if (!iconsMode) {
-      targetColor = graphThemeColor("--omarchy-fg", "#ffffff");
-      targetSize = Math.max(9, effectiveBase * 1.45);
+      // Selected uses the accent (cyan/blue typically) — distinct from hover
+      // (white) and from family edge colors. Slightly smaller scale than
+      // before so it doesn't dominate the layout.
+      targetColor = graphThemeColor("--omarchy-accent", "#6f9ad0");
+      targetSize = Math.max(9, effectiveBase * 1.2);
     } else {
-      targetGlyphScale = isClusterNode ? 1.22 : 1.35;
+      targetGlyphScale = isClusterNode ? 1.38 : isDir ? 1.52 : 1.45;
     }
     targetLabel = fullLabel;
     targetZIndex = 100;
@@ -2989,6 +2357,39 @@ function reduceNode(
   // node center. The sphere is invisible because targetColor is transparent;
   // glyphBaseSize drives the visible icon scale in the label renderer.
 
+  // PathFinder overlay — highest priority, overrides all other visual state.
+  if (pathfinderNodes && pathfinderNodes.size > 0) {
+    const onPath = pathfinderNodes.has(node);
+    const isFrom = node === pathfinderFrom;
+    if (!onPath) {
+      return {
+        ...data,
+        color: iconsMode ? "rgba(0,0,0,0)" : "rgba(40,50,60,0.18)",
+        size: iconsMode ? effectiveBase : effectiveBase * 0.35,
+        zIndex: 0,
+        forceLabel: false,
+        label: "",
+        glyphOpacity: 0.1,
+        glyphScale: 0.7,
+        iconMinPx,
+        iconMaxPx,
+      };
+    }
+    const pathColor = isFrom ? "#f5c542" : "#fbbf24";
+    return {
+      ...data,
+      color: iconsMode ? "rgba(0,0,0,0)" : pathColor,
+      size: iconsMode ? effectiveBase : effectiveBase * (isFrom ? 2.0 : 1.6),
+      zIndex: 100,
+      forceLabel: true,
+      label: fullLabel,
+      glyphOpacity: 1,
+      glyphScale: isFrom ? 1.7 : 1.35,
+      iconMinPx,
+      iconMaxPx,
+    };
+  }
+
   // Only return new object if something actually changed
   if (
     data.color === targetColor &&
@@ -2997,7 +2398,9 @@ function reduceNode(
     data.label === targetLabel &&
     data.glyphOpacity === targetGlyphOpacity &&
     data.glyphScale === targetGlyphScale &&
-    data.forceLabel === targetForceLabel
+    data.forceLabel === targetForceLabel &&
+    (data.iconMinPx ?? 0) === iconMinPx &&
+    (data.iconMaxPx ?? 0) === iconMaxPx
   ) {
     return data; // Return same reference - no change
   }
@@ -3011,6 +2414,8 @@ function reduceNode(
     glyphOpacity: targetGlyphOpacity,
     glyphScale: targetGlyphScale,
     forceLabel: targetForceLabel,
+    iconMinPx,
+    iconMaxPx,
   };
 }
 
@@ -3022,16 +2427,26 @@ function reduceEdge(
   selected: string | null,
   dimUnrelated: boolean,
   cameraRatioRef?: { current: number },
+  pathfinderEdges?: Set<string>,
 ) {
-  // Zoom-aware thickness: raising ratio to the power 1.5 means screen-pixel width
-  // shrinks when zooming in (ratio < 1) and grows when zooming out (ratio > 1).
-  // This keeps edges legible at zoom-out while staying crisp and thin at zoom-in.
-  const ratio = cameraRatioRef?.current ?? 1.0;
-  const zoomScale = Math.max(0.1, Math.min(2.5, Math.pow(ratio, 1.5)));
+  // Zoom-invariant edge thickness: Sigma's scaleSize divides by sqrt(ratio),
+  // so multiplying by sqrt(ratio) here cancels it out. baseSize then maps
+  // directly to screen pixels at every zoom level. Previously this was
+  // pow(ratio, 1.2) which gave net ratio^0.7 → edges shrank below 1px on
+  // zoom-in, manifesting as "no edge colors".
+  const ratio = Math.max(0.001, cameraRatioRef?.current ?? 1);
+  const zoomScale = Math.sqrt(ratio);
   const baseSize = (data.baseSize ?? data.size ?? 1) as number;
-  const edgeType = String(data.edgeType ?? "");
-  const baseColor = String(data.baseColor ?? data.color ?? "rgba(99,143,195,0.12)");
+  const baseColor = String(data.baseColor ?? data.color ?? "rgba(99,143,195,0.18)");
   const visualState = String(data.visualState ?? "primary");
+
+  // PathFinder: path edges glow gold; everything else nearly invisible.
+  if (pathfinderEdges && pathfinderEdges.size > 0) {
+    if (pathfinderEdges.has(edge)) {
+      return { ...data, hidden: false, color: "#f5c542", size: 3.2 * zoomScale, zIndex: 100 };
+    }
+    return { ...data, hidden: false, color: "rgba(40,50,60,0.08)", size: 0.4 * zoomScale, zIndex: 0 };
+  }
 
   const active = hovered ?? selected;
 
@@ -3045,13 +2460,17 @@ function reduceEdge(
   const target = graph.target(edge);
   const related = source === active || target === active;
 
+  // Related edges: brighten to ~92% alpha while preserving family color.
+  // Unrelated edges: keep family color but drop to 12% alpha — fade without
+  // losing identity. Previously unrelated edges went to a hardcoded gray which
+  // erased the family color entirely.
   const mutedUnrelated = visualState === "proxy" || visualState === "ghost";
   const targetColor = related
-    ? (edgeType === "contains" ? (mutedUnrelated ? "rgba(116,171,216,0.28)" : "rgba(116,171,216,0.42)") : "#7dbbff")
-    : (edgeType === "contains" ? (mutedUnrelated ? "rgba(74,106,138,0.08)" : "rgba(74,106,138,0.16)") : "rgba(74,85,99,0.05)");
+    ? brightenForActive(baseColor, mutedUnrelated ? 0.62 : 0.92)
+    : recolorWithAlpha(baseColor, mutedUnrelated ? 0.06 : 0.12);
   const targetSize = related
-    ? (edgeType === "contains" ? (mutedUnrelated ? 0.82 : 1.15) : 2.2) * zoomScale
-    : (edgeType === "contains" ? (mutedUnrelated ? 0.25 : 0.45) : 0.4) * zoomScale;
+    ? Math.max(baseSize * 1.9, 1.8) * zoomScale
+    : Math.max(baseSize * 0.55, 0.3) * zoomScale;
   const targetZIndex = related ? 50 : 0;
   const targetHidden = false;
 
@@ -3067,6 +2486,32 @@ function reduceEdge(
   return { ...data, hidden: targetHidden, color: targetColor, size: targetSize, zIndex: targetZIndex };
 }
 
+// Replace the alpha of an existing rgba/rgb/hex color while preserving the hue.
+// Falls back to the input if parse fails (avoids stomping unrecognized formats).
+function recolorWithAlpha(color: string, alpha: number): string {
+  const rgbaMatch = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(color);
+  if (rgbaMatch) {
+    const [, r, g, b] = rgbaMatch;
+    return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+  }
+  const hexMatch = /^#([0-9a-f]{6})$/i.exec(color);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+  }
+  return color;
+}
+
+function brightenForActive(color: string, alpha: number): string {
+  // Pull color toward a saturated version of itself for the "active" highlight,
+  // then apply the target alpha. Preserves family hue (vs. forcing a single
+  // accent color across all edge types).
+  return recolorWithAlpha(color, alpha);
+}
+
 function isConnected(graph: Graph, node: string, active: string) {
   if (node === active) return true;
   try {
@@ -3076,44 +2521,55 @@ function isConnected(graph: Graph, node: string, active: string) {
   }
 }
 
-// Helper to darken/lighten a hex color
-function adjustColorBrightness(hex: string, factor: number): string {
-  // Remove # if present
-  hex = hex.replace(/^#/, '');
-
-  // Parse RGB
-  let r = parseInt(hex.substring(0, 2), 16);
-  let g = parseInt(hex.substring(2, 4), 16);
-  let b = parseInt(hex.substring(4, 6), 16);
-
-  // Adjust brightness
-  r = Math.floor(r * factor);
-  g = Math.floor(g * factor);
-  b = Math.floor(b * factor);
-
-  // Clamp to 0-255
-  r = Math.min(255, Math.max(0, r));
-  g = Math.min(255, Math.max(0, g));
-  b = Math.min(255, Math.max(0, b));
-
-  // Convert back to hex
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+// Normalize a hex color to neutral mid-tones using HSL:
+// S clamped to 44–64% (not pastel, not neon), L clamped to 40–50%.
+// Hue is preserved so each family color stays recognizably distinct.
+function normalizeGroupColor(hex: string): string {
+  const clean = hex.replace(/^#/, "");
+  if (clean.length !== 6 || !/^[0-9a-f]+$/i.test(clean)) return hex;
+  const r = parseInt(clean.slice(0, 2), 16) / 255;
+  const g = parseInt(clean.slice(2, 4), 16) / 255;
+  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (delta > 0.001) {
+    s = delta / (l > 0.5 ? 2 - max - min : max + min);
+    if (max === r) h = ((g - b) / delta + 6) % 6;
+    else if (max === g) h = (b - r) / delta + 2;
+    else h = (r - g) / delta + 4;
+    h /= 6;
+  }
+  const tS = Math.min(0.64, Math.max(0.44, s > 0.05 ? s : 0.52));
+  const tL = Math.min(0.50, Math.max(0.40, l));
+  const c = (1 - Math.abs(2 * tL - 1)) * tS;
+  const x = c * (1 - Math.abs((h * 6) % 2 - 1));
+  const m = tL - c / 2;
+  const sect = Math.floor(h * 6) % 6;
+  const segs: [number, number, number][] = [[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]];
+  const [r2, g2, b2] = segs[sect];
+  const hex2 = (v: number) => Math.round(Math.max(0, Math.min(255, (v + m) * 255))).toString(16).padStart(2, "0");
+  return `#${hex2(r2)}${hex2(g2)}${hex2(b2)}`;
 }
 
+
+// Use --omarchy-color* tokens so family colors automatically adapt to the
+// active theme (every theme defines its own palette for color2/4/5/6/…).
 const GROUP_COLOR_TOKENS: Array<{ cssVar: string; fallback: string }> = [
-  { cssVar: "--orbit-family-1", fallback: "#63b3ed" },
-  { cssVar: "--orbit-family-2", fallback: "#9a75f3" },
-  { cssVar: "--orbit-family-3", fallback: "#48bb78" },
-  { cssVar: "--orbit-family-4", fallback: "#ed8936" },
-  { cssVar: "--orbit-family-5", fallback: "#ed64a6" },
-  { cssVar: "--orbit-family-6", fallback: "#38bdf8" },
-  { cssVar: "--orbit-family-7", fallback: "#fbbf24" },
-  { cssVar: "--orbit-family-8", fallback: "#f87171" },
+  { cssVar: "--omarchy-color2",  fallback: "#73c991" }, // green
+  { cssVar: "--omarchy-color4",  fallback: "#a78bfa" }, // purple / blue
+  { cssVar: "--omarchy-color6",  fallback: "#38bdf8" }, // cyan
+  { cssVar: "--omarchy-color3",  fallback: "#f5c542" }, // yellow
+  { cssVar: "--omarchy-color10", fallback: "#4ade80" }, // bright green
+  { cssVar: "--omarchy-color12", fallback: "#c084fc" }, // bright purple
+  { cssVar: "--omarchy-color14", fallback: "#5eead4" }, // teal
+  { cssVar: "--omarchy-color11", fallback: "#fbbf24" }, // amber
 ];
 
 function groupColorAt(index: number): string {
   const token = GROUP_COLOR_TOKENS[index % GROUP_COLOR_TOKENS.length];
-  return withAlpha(graphThemeColor(token.cssVar, token.fallback), 0.30);
+  const raw = graphThemeColor(token.cssVar, token.fallback);
+  return normalizeGroupColor(raw); // adjust to neutral mid-tone; callers apply alpha
 }
 
 function buildGroupColors(
@@ -3125,58 +2581,44 @@ function buildGroupColors(
     colorMap.set(id, color);
     for (const child of tree.children.get(id) ?? []) assign(child, color);
   }
-  roots.forEach((rootId, i) => assign(rootId, groupColorAt(i)));
+  if (roots.length === 1) {
+    // Single workspace root: seed colors from its direct children so each
+    // top-level folder (Projects, .config, Downloads, …) gets a distinct hue.
+    const root = roots[0];
+    colorMap.set(root, groupColorAt(0));
+    const depth1 = tree.children.get(root) ?? [];
+    const seeds = depth1.length > 1 ? depth1 : [root];
+    seeds.forEach((id, i) => assign(id, groupColorAt(i)));
+  } else {
+    roots.forEach((rootId, i) => assign(rootId, groupColorAt(i)));
+  }
   return colorMap;
 }
 
-function getNodeSize(node: GraphDisplayNode): number {
-  const visualState = nodeVisualState(node);
-  if (visualState === "proxy") {
-    return Math.min(18, 8 + Math.log2(Math.max(1, node.childCount) + 2) * 1.7);
-  }
-  if (node.isCluster) return 14;
-  if (node.isDir) {
-    const baseSize = 5;
-    const maxSize = 9.5;
-    const growth = Math.log2(Math.min(node.childCount, 50) + 2) * 0.55;
-    const size = Math.min(maxSize, baseSize + growth);
-    return visualState === "ghost" ? Math.max(4, size * 0.82) : size;
-  }
-  const sizeBoost = node.sizeBytes > 0 ? Math.min(2.5, Math.log10(node.sizeBytes + 1) * 0.35) : 0;
-  const size = 4 + sizeBoost;
-  return visualState === "ghost" ? Math.max(2.6, size * 0.72) : size;
-}
-
-function getNodeColor(node: VisualGraphNode): string {
-  // Drive node fill from the legend bucket so a swatch in the legend always
-  // matches the corresponding sphere on the canvas.
-  const color = NODE_TYPE_CONFIG[getNodeType(node)].color;
-  if (node.visualState === "proxy") {
-    if (node.proxyKind === "images") return "#688796";
-    if (node.proxyKind === "folders") return "#738477";
-    if (node.proxyKind === "code") return "#77728a";
-    if (node.proxyKind === "configs") return "#827b68";
-    return "#737f87";
-  }
-  if (node.visualState === "ghost") return adjustColorBrightness(color, 0.52);
-  return color;
-}
 
 type EdgeVisualStyle = {
   program: "line" | "curve";
   size: number;
   color: string;
   curvature: number;
+  zIndex: number;
 };
 
 function edgeStyleForGraph(
   edge: GraphEdge,
   groupColors?: Map<number, string>,
   visualState: VisualState = "primary",
+  routingCtx?: RoutingContext,
+  layoutMode?: LayoutMode,
 ): EdgeVisualStyle {
   const edgeType = edge.edgeType;
   const muted = visualState === "proxy" || visualState === "ghost";
-  const curve = edgeCurvatureForId(edge.id);
+  // Tree mode reads better with near-straight edges (the orthogonal column
+  // structure does the visual hierarchy work; curves just add noise). Atlas
+  // and other layouts keep the full curvature for organic flow.
+  const layoutCurveScale = layoutMode === "tree" ? 0.22 : 1.0;
+  const rawCurve = routingCtx ? computeEdgeRoute(edge, routingCtx).curvature : edgeCurvatureForId(edge.id);
+  const curve = rawCurve * layoutCurveScale;
 
   // Visual vocabulary:
   // contains      = Vega-like radial branch links, family-colored
@@ -3188,36 +2630,44 @@ function edgeStyleForGraph(
   // WebGL Sigma doesn't do dashed/dotted strokes with the stock programs, so
   // size + color + curvature are the cheap/fast stand-ins for "---", "==",
   // etc. A real dashed program can be added later if this vocabulary works.
+  // Sizes here are SCREEN PIXELS — reduceEdge multiplies by sqrt(ratio) so
+  // baseSize from edgeStyleForGraph maps directly to rendered pixel width.
   if (edgeType === "contains") {
-    const baseColor = groupColors?.get(edge.sourceId) ?? groupColors?.get(edge.targetId) ?? "rgba(99,143,195,0.24)";
+    // Hierarchy edges use the family color, hue-matched to their subtree.
+    // Previous alphas (0.38 dark / 0.62 light) were too pale on dark themes,
+    // which is what made the graph look "edgeless".
+    const familyBase = groupColors?.get(edge.sourceId) ?? edgeCategoryColor("hierarchy");
+    const isLight = themeIsLight();
+    const edgeColor = isLight ? adjustColorBrightness(familyBase, 0.45) : familyBase;
+    const alpha = muted ? (isLight ? 0.42 : 0.32) : (isLight ? 0.78 : 0.62);
     return {
       program: "curve",
-      size: muted ? 0.34 : 0.54,
-      color: withAlpha(baseColor, muted ? 0.14 : 0.30),
-      // Vega radial linkpath with shape=curve/diagonal bends hierarchy links
-      // instead of drawing rigid spokes. Keep this deterministic and modest so
-      // parent-child structure stays readable.
-      curvature: 0.22,
+      size: muted ? 0.7 : 1.1,
+      color: withAlpha(edgeColor, alpha),
+      // Tree mode wants near-straight hierarchy edges so columns read clean.
+      curvature: 0.22 * layoutCurveScale,
+      zIndex: 8,
     };
   }
 
+  // All non-hierarchy edges render behind hierarchy (zIndex < 8).
   if (edgeType === "import" || edgeType === "dependency" || edgeType === "code_ref") {
-    return { program: "curve", size: muted ? 0.46 : 0.9, color: withAlpha(edgeCategoryColor("code"), muted ? 0.16 : 0.42), curvature: curve * 1.15 };
+    return { program: "curve", size: muted ? 0.85 : 1.5, color: withAlpha(edgeCategoryColor("code"), muted ? 0.30 : 0.68), curvature: curve * 0.7, zIndex: 3 };
   }
   if (edgeType === "markdown_link" || edgeType === "wikilink" || edgeType === "link") {
-    return { program: "curve", size: muted ? 0.42 : 0.72, color: withAlpha(edgeCategoryColor("docs"), muted ? 0.15 : 0.38), curvature: curve * 0.95 };
+    return { program: "curve", size: muted ? 0.78 : 1.3, color: withAlpha(edgeCategoryColor("docs"), muted ? 0.28 : 0.62), curvature: curve * 0.95, zIndex: 3 };
   }
   if (edgeType === "symlink") {
-    return { program: "curve", size: muted ? 0.55 : 1.1, color: withAlpha(edgeCategoryColor("symlink"), muted ? 0.18 : 0.48), curvature: curve * 1.3 };
+    return { program: "curve", size: muted ? 1.0 : 1.7, color: withAlpha(edgeCategoryColor("symlink"), muted ? 0.34 : 0.72), curvature: curve * 1.3, zIndex: 4 };
   }
   if (edgeType === "related" || edgeType === "similar" || edgeType === "similarity" || edgeType === "semantic") {
-    return { program: "curve", size: muted ? 0.36 : 0.62, color: withAlpha(edgeCategoryColor("semantic"), muted ? 0.12 : 0.30), curvature: curve * 1.45 };
+    return { program: "curve", size: muted ? 0.68 : 1.15, color: withAlpha(edgeCategoryColor("semantic"), muted ? 0.22 : 0.52), curvature: curve * 1.45, zIndex: 2 };
   }
   if (edgeType === "tag" || edgeType === "hashtag") {
-    return { program: "curve", size: muted ? 0.36 : 0.62, color: withAlpha(edgeCategoryColor("tags"), muted ? 0.12 : 0.30), curvature: curve * 1.45 };
+    return { program: "curve", size: muted ? 0.68 : 1.15, color: withAlpha(edgeCategoryColor("tags"), muted ? 0.22 : 0.52), curvature: curve * 1.45, zIndex: 2 };
   }
 
-  return { program: "curve", size: muted ? 0.34 : 0.58, color: withAlpha(edgeCategoryColor("other"), muted ? 0.10 : 0.24), curvature: curve };
+  return { program: "curve", size: muted ? 0.62 : 1.0, color: withAlpha(edgeCategoryColor("other"), muted ? 0.18 : 0.42), curvature: curve, zIndex: 2 };
 }
 
 
@@ -3229,49 +2679,6 @@ function edgeVisualStateForGraph(graph: Graph, source: string, target: string): 
   if (sourceState === "context" || targetState === "context") return "context";
   return "primary";
 }
-
-type NodeType = 'folder' | 'code' | 'image' | 'text' | 'config' | 'web' | 'document' | 'other' | 'cluster';
-
-function getNodeType(node: GraphNode): NodeType {
-  if (node.isCluster) return 'cluster';
-  if (node.isDir) return 'folder';
-  const ext = node.extension?.toLowerCase() || '';
-  if (["png", "jpg", "jpeg", "svg", "webp", "gif", "bmp", "ico", "tiff", "xcf"].includes(ext)) return 'image';
-  if (["rs", "ts", "tsx", "js", "jsx", "mjs", "py", "go", "java", "kt", "cpp", "c", "h", "hpp",
-       "rb", "lua", "zig", "nim", "ex", "exs", "dart", "swift", "cs", "php", "r"].includes(ext)) return 'code';
-  if (["sh", "bash", "zsh", "fish", "nu", "ps1", "bat", "cmd"].includes(ext)) return 'code';
-  if (["md", "mdx", "txt", "rtf", "rst", "adoc"].includes(ext)) return 'text';
-  if (["json", "json5", "jsonc", "toml", "yaml", "yml", "xml", "ini", "conf", "env", "cfg"].includes(ext)) return 'config';
-  if (["css", "scss", "sass", "less", "html", "htm", "vue", "svelte", "astro"].includes(ext)) return 'web';
-  if (["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt"].includes(ext)) return 'document';
-  // Executables in bin directories (no extension) are typically code/tools
-  if (!ext && /\/(bin|sbin|\.bin|libexec)\//i.test(node.path)) return 'code';
-  return 'other';
-}
-
-const NODE_TYPE_CONFIG: Record<NodeType, { label: string; color: string }> = {
-  folder: { label: 'Folder', color: 'var(--omarchy-color2)' },
-  code: { label: 'Code', color: 'var(--omarchy-color4)' },
-  image: { label: 'Image', color: 'var(--omarchy-color6)' },
-  text: { label: 'Text', color: 'var(--omarchy-fg)' },
-  config: { label: 'Config', color: 'var(--omarchy-color3)' },
-  web: { label: 'Web', color: 'var(--omarchy-color5)' },
-  document: { label: 'Doc', color: 'var(--omarchy-color11)' },
-  other: { label: 'Other', color: 'var(--omarchy-color7)' },
-  cluster: { label: 'Cluster', color: 'var(--omarchy-accent)' },
-};
-
-const NODE_TYPE_FALLBACKS: Record<NodeType, string> = {
-  folder: '#8bd17c',
-  code: '#a78bfa',
-  image: '#5eead4',
-  text: '#e5e7eb',
-  config: '#f6c177',
-  web: '#f472b6',
-  document: '#93c5fd',
-  other: '#94a3b8',
-  cluster: '#f5c542',
-};
 
 interface GraphLegendProps {
   visibleTypes: Set<NodeType>;
@@ -3481,17 +2888,6 @@ function minimapPoints(nodes: GraphDisplayNode[]) {
   }));
 }
 
-function shortNodePath(path: string) {
-  const parts = path.split("/").filter(Boolean);
-  if (parts.length <= 3) return path;
-  return `.../${parts.slice(-3).join("/")}`;
-}
-
-function seededAngle(id: number) {
-  const x = Math.sin(Math.abs(id) * 999.13) * 10000;
-  return (x - Math.floor(x)) * Math.PI * 2;
-}
-
 function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabelDrawingFunction {
   return (context, data, settings) => {
     const attrs = data as Record<string, unknown>;
@@ -3506,15 +2902,16 @@ function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabe
     const glyphColor = String(attrs.glyphColor ?? data.color ?? graphThemeColor("--omarchy-color7", "#a8bbc8"));
     const opacity = Number(attrs.glyphOpacity ?? 1);
     const glyphScale = Number(attrs.glyphScale ?? 1);
-    // Glyph size scales with zoom (data.size is the camera-adjusted pixel
-    // size of the invisible sphere). A soft floor keeps icons legible at
-    // zoom-out without making them so large that the graph-space layout
-    // appears stacked: when the floor is much bigger than the rendered slot,
-    // siblings end up visually overlapping even though the layout spaced them
-    // correctly. Keep the floor close to typical zoomed-in sizes.
-    const minFontSize = isAggregate ? 12 : 9;
-    const rawFontSize = data.size * (isAggregate ? 1.28 : 1.42);
-    const fontSize = Math.min(96, Math.max(minFontSize, rawFontSize)) * glyphScale;
+    // Natural Sigma scaling (closer = bigger, farther = smaller). data.size
+    // is the camera-adjusted screen pixel size, recomputed every frame.
+    // Only the FLOOR is enforced — without a min, icons disappear at zoom-out;
+    // with a ceiling, icons hit the cap quickly under the linear zoom function
+    // configured on the renderer and then look "smaller" relative to the
+    // expanding layout, which is exactly the bug Charlie keeps catching.
+    const iconMinPx = Number(attrs.iconMinPx ?? 0);
+    const sizeSource = iconMinPx > 0 ? Math.max(iconMinPx, data.size) : data.size;
+    const rawFontSize = sizeSource * (isAggregate ? 1.28 : 1.6);
+    const fontSize = Math.min(120, rawFontSize) * glyphScale;
 
     context.save();
     context.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
@@ -3535,10 +2932,10 @@ function makeNodeLabelRenderer(nodeView: NodeView, showNames: boolean): NodeLabe
     context.shadowOffsetX = 0;
     context.shadowOffsetY = 0;
 
-    // Draw the filename once the icon is reasonably readable. The previous
-    // threshold (28px) meant labels only appeared when zoomed in close;
-    // 16px lets them surface at a typical default-zoom view.
-    if (!isAggregate && showNames && data.label && fontSize >= 16) {
+    // Draw the filename once the icon is reasonably readable. Threshold of
+    // 13px surfaces filenames at default-zoom for typical folders/files
+    // without crowding the canvas when zoomed all the way out.
+    if (!isAggregate && showNames && data.label && fontSize >= 13) {
       context.globalAlpha = Math.min(0.92, context.globalAlpha);
       context.fillStyle = graphThemeColor("--omarchy-fg", "#d4d4d4");
       context.font = '600 13px IBM Plex Sans, Inter, system-ui, sans-serif';
@@ -3569,7 +2966,7 @@ function getGlyphBitmap(text: string, color: string): HTMLCanvasElement {
     // High-quality smoothing for when the bitmap is drawn at non-native sizes.
     ctx2.imageSmoothingEnabled = true;
     ctx2.imageSmoothingQuality = "high";
-    const fs = GLYPH_ATLAS_SIZE * 0.72;
+    const fs = GLYPH_ATLAS_SIZE * 0.62;
     // Font stack: Nerd Font (Omarchy/Linux standard) → Unicode block shapes → system fallbacks.
     // JetBrainsMono Nerd Font ships with Omarchy; Symbols Nerd Font is the standalone PUA font.
     ctx2.font = `normal ${fs}px "JetBrainsMono Nerd Font", "JetBrains Mono NF", "Symbols Nerd Font", "SymbolsNerdFont", "Hack Nerd Font", "FiraCode Nerd Font", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif`;
