@@ -148,6 +148,7 @@ function App() {
   const graphRequestSeqRef = useRef(0);
   const graphInFlightKeyRef = useRef<string | null>(null);
   const lastLoadedGraphKeyRef = useRef<string | null>(null);
+  const hasGraphRef = useRef(false);
   const lastFocusRescanRef = useRef(0);
 
   const debouncedQuery = useDebounce(query, 300);
@@ -251,13 +252,22 @@ function App() {
     const requestSeq = graphRequestSeqRef.current + 1;
     graphRequestSeqRef.current = requestSeq;
     graphInFlightKeyRef.current = requestKey;
-    setIsGraphLoading(true);
     const startTime = performance.now();
     let slowTimer: ReturnType<typeof setTimeout> | null = null;
+    let loadingTimer: ReturnType<typeof setTimeout> | null = null;
     try {
       slowTimer = setTimeout(() => {
         if (graphRequestSeqRef.current === requestSeq) setStatus("Loading graph...");
       }, 120);
+      // Show loading overlay immediately if no graph is visible (first load).
+      // Defer 300ms if an old graph is still showing — avoids flash on fast loads.
+      if (!hasGraphRef.current) {
+        setIsGraphLoading(true);
+      } else {
+        loadingTimer = setTimeout(() => {
+          if (graphRequestSeqRef.current === requestSeq) setIsGraphLoading(true);
+        }, 300);
+      }
       const payload = await tauriInvoke("load_graph", {
         request: {
           rootPath: requestRoot,
@@ -270,6 +280,7 @@ function App() {
       if (graphRequestSeqRef.current !== requestSeq) return;
       console.log("[Main] loadGraph received payload:", payload?.nodes?.length, "nodes");
       setGraphPayload(payload);
+      hasGraphRef.current = true;
       lastLoadedGraphKeyRef.current = requestKey;
       const duration = Math.round(performance.now() - startTime);
       setStatus(
@@ -284,6 +295,7 @@ function App() {
       setStatus("Error loading graph");
     } finally {
       if (slowTimer) clearTimeout(slowTimer);
+      if (loadingTimer) clearTimeout(loadingTimer);
       if (graphInFlightKeyRef.current === requestKey) {
         graphInFlightKeyRef.current = null;
       }
@@ -389,6 +401,7 @@ function App() {
     graphRequestSeqRef.current += 1;
     graphInFlightKeyRef.current = null;
     lastLoadedGraphKeyRef.current = null;
+    hasGraphRef.current = false;
     // Any wikilink resolutions cached from a previous workspace are now
     // suspect: paths may not even exist in the new workspace, and a
     // returning-to-the-same-workspace flow may have stale results if files
@@ -551,6 +564,15 @@ function App() {
   const openThemesFolder = useCallback(async () => {
     try {
       const dir = await tauriInvoke("open_icon_themes_dir");
+      await tauriInvoke("open_path", { path: dir });
+    } catch (err) {
+      setError(String(err));
+    }
+  }, []);
+
+  const openOrbitConfigDir = useCallback(async () => {
+    try {
+      const dir = await tauriInvoke("get_orbit_config_dir");
       await tauriInvoke("open_path", { path: dir });
     } catch (err) {
       setError(String(err));
@@ -1148,6 +1170,7 @@ function App() {
         editorCommand={editorCommand}
         onEditorCommandChange={setEditorCommand}
         onOpenThemesFolder={() => void openThemesFolder()}
+        onOpenOrbitConfigDir={() => void openOrbitConfigDir()}
         onClearSelectedThumbnailCache={() => void clearSelectedThumbnailCache()}
         canClearSelectedThumbnailCache={Boolean(selected && !selected.isDir)}
         wallpapers={graphWallpapers}

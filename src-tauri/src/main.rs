@@ -652,6 +652,42 @@ struct GraphWallpaper {
     path: String,
 }
 
+fn collect_backgrounds_from_dir(dir: &std::path::Path, theme: &str, out: &mut Vec<GraphWallpaper>) {
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = read.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let fname = entry.file_name().to_string_lossy().to_string();
+        let lower = fname.to_lowercase();
+        if lower.ends_with(".png")
+            || lower.ends_with(".jpg")
+            || lower.ends_with(".jpeg")
+            || lower.ends_with(".webp")
+        {
+            let stem = fname
+                .rsplit_once('.')
+                .map(|(s, _)| s)
+                .unwrap_or(&fname)
+                .to_string();
+            out.push(GraphWallpaper {
+                theme: theme.to_string(),
+                name: stem,
+                path: entry.path().to_string_lossy().to_string(),
+            });
+        }
+    }
+}
+
+#[tauri::command]
+fn get_orbit_config_dir() -> String {
+    let home = dirs::home_dir().unwrap_or_default();
+    let dir = home.join(".config/orbit");
+    std::fs::create_dir_all(dir.join("backgrounds")).ok();
+    dir.to_string_lossy().to_string()
+}
+
 #[tauri::command]
 fn list_graph_wallpapers() -> Vec<GraphWallpaper> {
     let mut wallpapers = Vec::new();
@@ -659,7 +695,12 @@ fn list_graph_wallpapers() -> Vec<GraphWallpaper> {
         return wallpapers;
     };
 
-    // Current active Omarchy wallpaper (symlink or file)
+    // Orbit-native backgrounds — first so they appear at the top of the picker.
+    let orbit_bg = home.join(".config/orbit/backgrounds");
+    std::fs::create_dir_all(&orbit_bg).ok();
+    collect_backgrounds_from_dir(&orbit_bg, "orbit", &mut wallpapers);
+
+    // Current active Omarchy wallpaper (symlink or file), if Omarchy is present.
     let current_bg = home.join(".config/omarchy/current/background");
     if current_bg.is_file() {
         wallpapers.push(GraphWallpaper {
@@ -671,40 +712,19 @@ fn list_graph_wallpapers() -> Vec<GraphWallpaper> {
 
     // Per-theme backgrounds from ~/.config/omarchy/themes/*/backgrounds/
     let themes_dir = home.join(".config/omarchy/themes");
-    let Ok(read_dir) = std::fs::read_dir(&themes_dir) else {
-        return wallpapers;
-    };
-    let mut theme_entries: Vec<_> = read_dir.flatten().filter(|e| e.path().is_dir()).collect();
-    theme_entries.sort_by_key(|e| e.file_name());
-    for theme_entry in theme_entries {
-        let theme_name = theme_entry.file_name().to_string_lossy().to_string();
-        let bg_dir = theme_entry.path().join("backgrounds");
-        let Ok(bg_read) = std::fs::read_dir(&bg_dir) else {
-            continue;
-        };
-        let mut bg_entries: Vec<_> = bg_read.flatten().collect();
-        bg_entries.sort_by_key(|e| e.file_name());
-        for bg_entry in bg_entries {
-            let fname = bg_entry.file_name().to_string_lossy().to_string();
-            let lower = fname.to_lowercase();
-            if lower.ends_with(".png")
-                || lower.ends_with(".jpg")
-                || lower.ends_with(".jpeg")
-                || lower.ends_with(".webp")
-            {
-                let stem = fname
-                    .rsplit_once('.')
-                    .map(|(s, _)| s)
-                    .unwrap_or(&fname)
-                    .to_string();
-                wallpapers.push(GraphWallpaper {
-                    theme: theme_name.clone(),
-                    name: stem,
-                    path: bg_entry.path().to_string_lossy().to_string(),
-                });
-            }
+    if let Ok(read_dir) = std::fs::read_dir(&themes_dir) {
+        let mut theme_entries: Vec<_> = read_dir.flatten().filter(|e| e.path().is_dir()).collect();
+        theme_entries.sort_by_key(|e| e.file_name());
+        for theme_entry in theme_entries {
+            let theme_name = theme_entry.file_name().to_string_lossy().to_string();
+            collect_backgrounds_from_dir(
+                &theme_entry.path().join("backgrounds"),
+                &theme_name,
+                &mut wallpapers,
+            );
         }
     }
+
     wallpapers
 }
 
@@ -785,6 +805,7 @@ fn main() {
             save_user_icon_theme,
             delete_user_icon_theme,
             get_omarchy_colors,
+            get_orbit_config_dir,
             list_graph_wallpapers,
             open_in_terminal_editor,
             open_terminal_at_path,

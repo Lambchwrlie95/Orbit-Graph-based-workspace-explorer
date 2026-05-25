@@ -369,10 +369,12 @@ export function visualFootprintRadius(node: GraphDisplayNode, layoutScale = 1): 
   // The additive constants are multiplied by layoutScale so they stay
   // proportional to the coordinate space — without this, compacted layouts
   // (layoutScale < 1) get over-pushed and partially undo the compaction.
-  const s = layoutScale;
-  if (node.visualState === "proxy" || node.isCluster) return base * 8.0 * s + 32 * s;
-  if (node.isDir) return base * 10.0 * s + (node.depth <= 2 ? 60 : 34) * s;
-  return base * 7.5 * s + 20 * s;
+  // Floor the layoutScale contribution at 0.55 so small graphs don't collapse
+  // padding to 10-15px (which is less than the rendered icon).
+  const s = Math.max(0.55, layoutScale);
+  if (node.visualState === "proxy" || node.isCluster) return base * 8.0 * s + 48 * s;
+  if (node.isDir) return base * 10.0 * s + (node.depth <= 2 ? 60 : 52) * s;
+  return base * 7.5 * s + 28 * s;
 }
 
 export function relaxRadialVisualFootprints(nodes: GraphDisplayNode[], layoutScale = 1): GraphDisplayNode[] {
@@ -389,11 +391,8 @@ export function relaxRadialVisualFootprints(nodes: GraphDisplayNode[], layoutSca
     let movedAny = false;
     for (let i = 0; i < maxNodes; i += 1) {
       const a = placed[i];
-      const aPinned = a.depth <= 0;
       for (let j = i + 1; j < maxNodes; j += 1) {
         const b = placed[j];
-        const bPinned = b.depth <= 0;
-        if (aPinned && bPinned) continue;
         let dx = b.x - a.x;
         let dy = b.y - a.y;
         let distance = Math.hypot(dx, dy);
@@ -403,19 +402,15 @@ export function relaxRadialVisualFootprints(nodes: GraphDisplayNode[], layoutSca
           dy = Math.sin(angle);
           distance = 1;
         }
-        const minDistance = visualFootprintRadius(a, layoutScale) + visualFootprintRadius(b, layoutScale) + 14 * layoutScale;
+        const minDistance = visualFootprintRadius(a, layoutScale) + visualFootprintRadius(b, layoutScale) + Math.max(20, 14 * layoutScale);
         if (distance >= minDistance) continue;
         const push = (minDistance - distance) * pushFactor;
         const nx = dx / distance;
         const ny = dy / distance;
-        if (!aPinned) {
-          a.x -= nx * push * (bPinned ? 1 : 0.5);
-          a.y -= ny * push * (bPinned ? 1 : 0.5);
-        }
-        if (!bPinned) {
-          b.x += nx * push * (aPinned ? 1 : 0.5);
-          b.y += ny * push * (aPinned ? 1 : 0.5);
-        }
+        a.x -= nx * push * 0.5;
+        a.y -= ny * push * 0.5;
+        b.x += nx * push * 0.5;
+        b.y += ny * push * 0.5;
         movedAny = true;
       }
     }

@@ -79,6 +79,7 @@ export const TAURI_COMMANDS = [
   "create_folder",
   "rename",
   "get_omarchy_colors",
+  "get_orbit_config_dir",
   "list_graph_wallpapers",
 ] as const;
 
@@ -144,6 +145,7 @@ type CommandArgsMap = {
   create_folder: { parentDir: string; name: string };
   rename: { path: string; newName: string };
   get_omarchy_colors: undefined;
+  get_orbit_config_dir: undefined;
   list_graph_wallpapers: undefined;
 };
 
@@ -202,6 +204,7 @@ type CommandResultMap = {
   create_folder: string;
   rename: string;
   get_omarchy_colors: OmarchyColors;
+  get_orbit_config_dir: string;
   list_graph_wallpapers: GraphWallpaper[];
 };
 
@@ -211,7 +214,27 @@ export function tauriInvoke<C extends TauriCommand>(
   command: C,
   ...args: CommandArgs<C> extends undefined ? [] : [args: CommandArgs<C>]
 ): Promise<CommandResultMap[C]> {
-  return invoke<CommandResultMap[C]>(command, args[0] as InvokeArgs | undefined);
+  return tauriReady().then(() =>
+    invoke<CommandResultMap[C]>(command, args[0] as InvokeArgs | undefined),
+  );
+}
+
+let tauriReadyPromise: Promise<void> | null = null;
+
+function tauriReady(): Promise<void> {
+  if (tauriReadyPromise) return tauriReadyPromise;
+  tauriReadyPromise = new Promise<void>((resolve) => {
+    const check = () => {
+      // @ts-expect-error — runtime-only Tauri internals
+      if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+        resolve();
+      } else {
+        setTimeout(check, 16);
+      }
+    };
+    check();
+  });
+  return tauriReadyPromise;
 }
 
 export function fileToAssetUrl(path: string): string {

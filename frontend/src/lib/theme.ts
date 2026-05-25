@@ -36,7 +36,7 @@ export interface FlavorMeta {
 }
 
 export const FLAVORS: FlavorMeta[] = [
-  { id: "omarchy", label: "Follow Omarchy", hint: "uses ~/.config/omarchy", light: false },
+  { id: "omarchy", label: "Follow Omarchy", hint: "syncs with ~/.config/omarchy", light: false },
   { id: "catppuccin-mocha", label: "Catppuccin Mocha", light: false },
   { id: "catppuccin-macchiato", label: "Catppuccin Macchiato", light: false },
   { id: "catppuccin-frappe", label: "Catppuccin Frappé", light: false },
