@@ -95,6 +95,22 @@ export const STARFIELD_COUNT = 720;
 export const STARFIELD_RADIUS_MIN = 1800;
 export const STARFIELD_RADIUS_MAX = 3400;
 
+// ── 3D node object registry & texture cache ─────────────────────────────────
+// three-force-graph replaces THREE.Object3D instances on every nodeThreeObject
+// call without disposing them. We track the previous object per node so we can
+// dispose its SpriteMaterials (freeing JS descriptors), while the texture cache
+// keeps the actual GPU texture alive across rebuilds and reuses it when the
+// node's visual state hasn't changed. clearGraph3DNodeRegistry() flushes both
+// when the 3D graph is torn down, releasing all GPU texture memory at once.
+const _3dObjRegistry = new Map<string, THREE.Object3D>();
+const _3dTexCache = new Map<string, THREE.CanvasTexture>();
+
+export function clearGraph3DNodeRegistry(): void {
+  for (const tex of _3dTexCache.values()) tex.dispose();
+  _3dTexCache.clear();
+  _3dObjRegistry.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Functions
 // ---------------------------------------------------------------------------
@@ -251,17 +267,34 @@ export function graph3dNodeObject(
   // want. Render exactly one transparent sprite carrying the glyph.
   const focus = hoveredId || selectedId;
   const isActive = node.id === hoveredId || node.id === selectedId;
-  const isRelated = Boolean(focus) && links.some((link) => {
-    const source = graph3dEndpointId(link.source);
-    const target = graph3dEndpointId(link.target);
-    return (source === focus && target === node.id) || (target === focus && source === node.id);
-  });
+  // Use pre-computed neighbor set for O(1) lookup; fall back to link scan only
+  // when the set is absent (shouldn't happen after buildGraph3DData runs).
+  const isRelated = Boolean(focus) && (
+    node.neighborSet
+      ? node.neighborSet.has(focus!)
+      : links.some((link) => {
+          const source = graph3dEndpointId(link.source);
+          const target = graph3dEndpointId(link.target);
+          return (source === focus && target === node.id) || (target === focus && source === node.id);
+        })
+  );
   const dimmed = dimUnrelated && Boolean(focus) && !isActive && !isRelated;
-  const radius = Math.max(node.isDir ? 4.8 : node.isCluster ? 3.6 : 2.35, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 1.9 : node.isCluster ? 1.48 : 1.08));
+  const radius = Math.max(node.isDir ? 5.5 : node.isCluster ? 4.2 : 3.2, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 1.9 : node.isCluster ? 1.48 : 1.08));
   const tint = graph3dSolidColor(graph3dNodeColor(node, hoveredId, selectedId, dimUnrelated, links), node.color);
 
+  // Dispose SpriteMaterials on the previous object for this node. The underlying
+  // texture stays alive in _3dTexCache — only the material wrapper is freed.
+  const oldObj = _3dObjRegistry.get(node.id);
+  if (oldObj) {
+    oldObj.traverse((child) => {
+      if (child instanceof THREE.Sprite && child.material instanceof THREE.SpriteMaterial) {
+        child.material.dispose();
+      }
+    });
+  }
+
   const group = new THREE.Group();
-  const badge = graph3dBadgeSprite(node, isActive, radius, tint);
+  const badge = graph3dBadgeSprite(node, isActive, dimmed, radius, tint);
   group.add(badge);
 
   const shouldShowBillboard = showText && (node.isDir || node.isCluster || isActive || isRelated);
@@ -271,6 +304,7 @@ export function graph3dNodeObject(
     group.add(sprite);
   }
 
+  _3dObjRegistry.set(node.id, group);
   return group;
 }
 
@@ -283,94 +317,116 @@ function graph3dNodeGeometry(node: Graph3DNode, radius: number): THREE.BufferGeo
 // Glowing neuron orb sprite. No plates, no borders — just a soft radial glow
 // with the icon glyph floating in the bright core. AdditiveBlending lets
 // overlapping orbs accumulate light naturally, triggering the bloom pass.
-function graph3dBadgeSprite(node: Graph3DNode, active: boolean, radius: number, accent: string): THREE.Sprite {
-  const canvas = document.createElement("canvas");
-  const size = 256;
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.clearRect(0, 0, size, size);
-    const center = size / 2;
-    const solid = graph3dSolidColor(accent, "#88bbdd");
-    const bright = graph3dBrighten(solid, 2.2);
+function graph3dBadgeSprite(node: Graph3DNode, active: boolean, dimmed: boolean, radius: number, accent: string): THREE.Sprite {
+  // Cache key encodes the visual state that determines pixel output. Including
+  // accent captures the difference between hovered (#fff4a8) and selected
+  // (#f5c542) active states without separate flags.
+  const state = active ? "a" : dimmed ? "d" : "n";
+  const cacheKey = `b:${node.id}:${state}:${accent}`;
+  let texture = _3dTexCache.get(cacheKey);
+  if (!texture) {
+    const canvas = document.createElement("canvas");
+    const size = 256;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, size, size);
+      const center = size / 2;
+      const solid = graph3dSolidColor(accent, "#88bbdd");
+      const bright = graph3dBrighten(solid, 2.2);
 
-    // Layer 1 — wide outer haze (deepest glow, most transparent)
-    const outerR = size * (node.isDir ? 0.50 : 0.44);
-    const outer = ctx.createRadialGradient(center, center, 0, center, center, outerR);
-    outer.addColorStop(0,   withAlpha(solid, active ? 0.30 : 0.14));
-    outer.addColorStop(0.55, withAlpha(solid, active ? 0.10 : 0.04));
-    outer.addColorStop(1,   withAlpha(solid, 0));
-    ctx.fillStyle = outer;
-    ctx.fillRect(0, 0, size, size);
+      // Layer 1 — wide outer haze (deepest glow, most transparent)
+      const outerR = size * (node.isDir ? 0.50 : 0.44);
+      const outer = ctx.createRadialGradient(center, center, 0, center, center, outerR);
+      outer.addColorStop(0,   withAlpha(solid, active ? 0.30 : 0.14));
+      outer.addColorStop(0.55, withAlpha(solid, active ? 0.10 : 0.04));
+      outer.addColorStop(1,   withAlpha(solid, 0));
+      ctx.fillStyle = outer;
+      ctx.fillRect(0, 0, size, size);
 
-    // Layer 2 — core glow (the "soma" of the neuron)
-    const coreR = size * (active ? 0.30 : node.isDir ? 0.26 : 0.22);
-    const core = ctx.createRadialGradient(center, center, 0, center, center, coreR);
-    core.addColorStop(0,   withAlpha(bright, active ? 0.90 : 0.68));
-    core.addColorStop(0.42, withAlpha(solid,  active ? 0.52 : 0.34));
-    core.addColorStop(1,   withAlpha(solid,  0));
-    ctx.fillStyle = core;
-    ctx.fillRect(0, 0, size, size);
+      // Layer 2 — core glow (the "soma" of the neuron)
+      const coreR = size * (active ? 0.30 : node.isDir ? 0.26 : 0.22);
+      const core = ctx.createRadialGradient(center, center, 0, center, center, coreR);
+      core.addColorStop(0,   withAlpha(bright, active ? 0.90 : 0.68));
+      core.addColorStop(0.42, withAlpha(solid,  active ? 0.52 : 0.34));
+      core.addColorStop(1,   withAlpha(solid,  0));
+      ctx.fillStyle = core;
+      ctx.fillRect(0, 0, size, size);
 
-    // Layer 3 — hot center point to trigger bloom threshold
-    const hotR = size * (active ? 0.09 : 0.055);
-    const hot = ctx.createRadialGradient(center, center, 0, center, center, hotR);
-    hot.addColorStop(0, active ? withAlpha("#ffffff", 0.82) : withAlpha(bright, 0.78));
-    hot.addColorStop(1, withAlpha(bright, 0));
-    ctx.fillStyle = hot;
-    ctx.fillRect(0, 0, size, size);
+      // Layer 3 — hot center point to trigger bloom threshold
+      const hotR = size * (active ? 0.09 : 0.055);
+      const hot = ctx.createRadialGradient(center, center, 0, center, center, hotR);
+      hot.addColorStop(0, active ? withAlpha("#ffffff", 0.82) : withAlpha(bright, 0.78));
+      hot.addColorStop(1, withAlpha(bright, 0));
+      ctx.fillStyle = hot;
+      ctx.fillRect(0, 0, size, size);
 
-    // Glyph — bright against the glow, same Nerd Font stack as 2D atlas
-    const glyph = node.glyphText && node.glyphText.length > 0
-      ? node.glyphText
-      : (node.isDir ? "" : "•");
-    const glyphPx = Math.round(size * (active ? 0.44 : 0.36));
-    ctx.font = `normal ${glyphPx}px "JetBrainsMono Nerd Font", "JetBrains Mono NF", "Symbols Nerd Font", "SymbolsNerdFont", "Hack Nerd Font", "FiraCode Nerd Font", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.globalAlpha = active ? 1.0 : 0.88;
-    ctx.fillStyle = active ? "#ffffff" : graph3dBrighten(solid, 3.8);
-    ctx.fillText(glyph, center, center + size * 0.02);
-    ctx.globalAlpha = 1.0;
+      // Glyph — bright against the glow, same Nerd Font stack as 2D atlas
+      const glyph = node.glyphText && node.glyphText.length > 0
+        ? node.glyphText
+        : (node.isDir ? "" : "•");
+      const glyphPx = Math.round(size * (active ? 0.44 : 0.36));
+      ctx.font = `normal ${glyphPx}px "JetBrainsMono Nerd Font", "JetBrains Mono NF", "Symbols Nerd Font", "SymbolsNerdFont", "Hack Nerd Font", "FiraCode Nerd Font", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.globalAlpha = active ? 1.0 : 0.88;
+      ctx.fillStyle = active ? "#ffffff" : graph3dBrighten(solid, 3.8);
+      ctx.fillText(glyph, center, center + size * 0.02);
+      ctx.globalAlpha = 1.0;
+    }
+    texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    _3dTexCache.set(cacheKey, texture);
   }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
-  // AdditiveBlending: overlapping orbs add their light together — natural bloom
+  // NormalBlending is deliberate here. Additive transparent sprites look good
+  // on some GPUs, but on WebKitGTK/Intel they can collapse into a wire-only
+  // scene when the renderer/compositor alpha path is active: links render, the
+  // node sprites effectively disappear. The canvas already contains the glow;
+  // render it as a regular translucent sprite so every node remains visible.
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
+    alphaTest: 0.015,
     depthWrite: false,
     depthTest: false,
   }));
-  const badgeScale = radius * (active ? 5.8 : 4.8);
+  const badgeScale = radius * (active ? 11.0 : 9.0);
   sprite.scale.set(badgeScale, badgeScale, 1);
   return sprite;
 }
 
 function graph3dBillboard(node: Graph3DNode, active: boolean, radius: number): THREE.Sprite {
-  const canvas = document.createElement("canvas");
+  const cacheKey = `l:${node.id}:${active ? "a" : "n"}`;
+  let texture = _3dTexCache.get(cacheKey);
+  if (!texture) {
+    const canvas = document.createElement("canvas");
+    const width = active ? 420 : 340;
+    const height = active ? 124 : 96;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, width, height);
+      ctx.font = `${active ? 42 : 34}px Lilex, IBM Plex Sans, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = graph3dSolidColor(active ? "#f5c542" : node.color, "#e5e7eb");
+      const glyph = node.glyphText || (node.isDir ? "" : "•");
+      ctx.fillText(glyph, width / 2, height * 0.34);
+      ctx.font = `${active ? 24 : 19}px IBM Plex Sans, sans-serif`;
+      ctx.fillStyle = active ? "#f8f1bf" : "#e5e7eb";
+      const label = node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label;
+      ctx.fillText(label, width / 2, height * 0.72);
+    }
+    texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    _3dTexCache.set(cacheKey, texture);
+  }
   const width = active ? 420 : 340;
   const height = active ? 124 : 96;
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.clearRect(0, 0, width, height);
-    ctx.font = `${active ? 42 : 34}px Lilex, IBM Plex Sans, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = graph3dSolidColor(active ? "#f5c542" : node.color, "#e5e7eb");
-    const glyph = node.glyphText || (node.isDir ? "" : "•");
-    ctx.fillText(glyph, width / 2, height * 0.34);
-    ctx.font = `${active ? 24 : 19}px IBM Plex Sans, sans-serif`;
-    ctx.fillStyle = active ? "#f8f1bf" : "#e5e7eb";
-    const label = node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label;
-    ctx.fillText(label, width / 2, height * 0.72);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
   const scale = active ? radius * 2.2 : radius * 1.7;
   sprite.scale.set(scale * (width / height), scale, 1);
@@ -453,12 +509,9 @@ export function graph3dLinkWidth(link: Graph3DLink, hoveredId: string | null, se
   const source = graph3dEndpointId(link.source);
   const target = graph3dEndpointId(link.target);
   const focus = hoveredId || selectedId;
-  // Floors raised to match the chunkier base sizes (was 0.85 / 1.05 — too
-  // thin to actually see). On-focus links scale up ~2× from the base for
-  // clear emphasis without warping the simulation's perceived weight.
-  if (focus && (source === focus || target === focus)) return Math.max(10, link.width * 2.0);
-  if (link.category === "hierarchy") return Math.max(4.5, link.width);
-  return Math.max(5.5, link.width);
+  if (focus && (source === focus || target === focus)) return Math.max(4.5, link.width * 2.0);
+  if (link.category === "hierarchy") return Math.max(1.8, link.width);
+  return Math.max(2.0, link.width);
 }
 
 export function graph3dLinkDistance(link: Graph3DLink, nodesById: Map<string, Graph3DNode>): number {
@@ -471,13 +524,12 @@ export function graph3dLinkDistance(link: Graph3DLink, nodesById: Map<string, Gr
 }
 
 export function graph3dLinkParticles(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
+  const focus = hoveredId || selectedId;
+  if (!focus) return 0;
   const source = graph3dEndpointId(link.source);
   const target = graph3dEndpointId(link.target);
-  const focus = hoveredId || selectedId;
-  const active = Boolean(focus && (source === focus || target === focus));
-  if (link.category === "hierarchy") return active ? 2 : 1; // faint pulse on all containment edges
-  if (active) return link.category === "code" || link.category === "symlink" ? 4 : 3;
-  return link.category === "code" || link.category === "docs" || link.category === "symlink" ? 1 : 0;
+  if (source !== focus && target !== focus) return 0;
+  return link.category === "code" || link.category === "symlink" ? 4 : 3;
 }
 
 export function graph3dLinkParticleWidth(link: Graph3DLink, hoveredId: string | null, selectedId: string | null): number {
@@ -577,8 +629,9 @@ export function graph3dApplyWallpaper(
       scene.background = texture;
     });
   } else {
-    scene.background = null;
-    api.backgroundColor(fallbackColor);
+    const color = graph3dSolidColor(fallbackColor, "#101010");
+    scene.background = new THREE.Color(color);
+    api.backgroundColor(color);
   }
 }
 
@@ -699,15 +752,15 @@ export function configureGraph3DControls(graph: ForceGraph3DInstance<Graph3DNode
   if (!controls) return;
   // TrackballControls knobs (active path):
   controls.staticMoving = false;
-  controls.dynamicDampingFactor = 0.18;
-  controls.rotateSpeed = 2.4;
-  controls.zoomSpeed = 1.1;
-  controls.panSpeed = 0.65;
+  controls.dynamicDampingFactor = 0.30;
+  controls.rotateSpeed = 1.4;
+  controls.zoomSpeed = 1.2;
+  controls.panSpeed = 0.28;
   controls.noRotate = false;
   controls.noZoom = false;
   controls.noPan = false;
   controls.minDistance = 36;
-  controls.maxDistance = 4200;
+  controls.maxDistance = 22000;
   // OrbitControls knobs (harmless on Trackball — kept for safety if the
   // controlType ever flips back during debugging):
   controls.enableDamping = true;
@@ -733,7 +786,17 @@ export function installGraph3DAtmosphere(
   if (!scene) return;
   const bgHex = graph3dSolidColor(backgroundColor, "#0b0d12");
   const fogColor = new THREE.Color(bgHex);
-  scene.fog = new THREE.Fog(fogColor, 380, 2600);
+  // Wide fog range so the graph stays visible when zoomed far out.
+  // near=800 keeps close nodes crisp; far=28000 matches the camera far plane.
+  scene.fog = new THREE.Fog(fogColor, 800, 28000);
+  // Push the camera far clipping plane out to match so distant nodes are not
+  // frustum-culled before the fog takes effect.
+  const camApi2 = graph as unknown as { camera?: () => THREE.PerspectiveCamera };
+  const perspectiveCam = camApi2.camera?.();
+  if (perspectiveCam && "far" in perspectiveCam) {
+    perspectiveCam.far = 50000;
+    perspectiveCam.updateProjectionMatrix();
+  }
   scene.traverse((obj) => {
     if ((obj as { userData?: { orbitStarfield?: boolean; orbitAtmosphereLight?: boolean } }).userData?.orbitStarfield
       || (obj as { userData?: { orbitAtmosphereLight?: boolean } }).userData?.orbitAtmosphereLight) {
@@ -782,25 +845,21 @@ export function graph3dControls(graph: ForceGraph3DInstance<Graph3DNode, Graph3D
 
 export function graph3dEdgeStyleForCategory(category: EdgeCategory): { color: string; size: number; curvature: number } {
   const color = graph3dSolidColor(edgeCategoryColor(category), EDGE_CATEGORY_CONFIG[category].fallback);
-  // 3d-force-graph renders edges as cylinder geometry — width is in SCENE
-  // units. Typical link distances are 38-134 units, so widths under ~3 look
-  // like the hairlines Charlie keeps reporting. Values below were 1-4 (and
-  // earlier 0.95-2.05); now scaled to 5-10 so edges read as actual ropes.
   switch (category) {
     case "hierarchy":
-      return { color, size: 5.0, curvature: 0 };
+      return { color, size: 2.0, curvature: 0 };
     case "code":
-      return { color, size: 8.5, curvature: 0.18 };
+      return { color, size: 3.5, curvature: 0.18 };
     case "docs":
-      return { color, size: 7.5, curvature: 0.14 };
+      return { color, size: 3.0, curvature: 0.14 };
     case "symlink":
-      return { color, size: 10.0, curvature: 0.22 };
+      return { color, size: 4.5, curvature: 0.22 };
     case "semantic":
-      return { color, size: 6.5, curvature: 0.28 };
+      return { color, size: 2.5, curvature: 0.28 };
     case "tags":
-      return { color, size: 6.5, curvature: 0.32 };
+      return { color, size: 2.5, curvature: 0.32 };
     default:
-      return { color, size: 5.5, curvature: 0.12 };
+      return { color, size: 2.2, curvature: 0.12 };
   }
 }
 
@@ -841,6 +900,86 @@ export function graph3dLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): Gra
   });
 }
 
+// Ego-centric 3D layout: distribute nodes on concentric spheres by BFS depth.
+// Uses the Fibonacci sphere algorithm (golden angle ≈ 2.399 rad) so each shell
+// gets near-uniform point spacing without any overlap. Returned nodes have
+// projectionScale=1 so buildGraph3DData pins them via fx/fy/fz before the
+// physics simulation starts, giving an instant readable scaffold.
+export function graph3dSphericalLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
+  if (nodes.length === 0) return [];
+
+  const DEPTH_STEP = 150;
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+  // BFS depth assignment via containment edges
+  const containsMap = new Map<number, number[]>();
+  const parentOf = new Map<number, number>();
+  for (const edge of edges) {
+    if (edge.edgeType !== "contains") continue;
+    const arr = containsMap.get(edge.sourceId) ?? [];
+    arr.push(edge.targetId);
+    containsMap.set(edge.sourceId, arr);
+    parentOf.set(edge.targetId, edge.sourceId);
+  }
+
+  const nodeSet = new Set(nodes.map((n) => n.id));
+  const bfsRoots = nodes.filter((n) => !parentOf.has(n.id) || !nodeSet.has(parentOf.get(n.id)!));
+  const depth = new Map<number, number>();
+  const queue: Array<{ id: number; d: number }> = bfsRoots.map((r) => ({ id: r.id, d: 0 }));
+  while (queue.length) {
+    const { id, d } = queue.shift()!;
+    if (depth.has(id)) continue;
+    depth.set(id, d);
+    for (const child of containsMap.get(id) ?? []) {
+      if (nodeSet.has(child) && !depth.has(child)) queue.push({ id: child, d: d + 1 });
+    }
+  }
+  for (const node of nodes) {
+    if (!depth.has(node.id)) depth.set(node.id, 1);
+  }
+
+  // Group node ids by depth
+  const byDepth = new Map<number, number[]>();
+  for (const node of nodes) {
+    const d = depth.get(node.id) ?? 1;
+    const arr = byDepth.get(d) ?? [];
+    arr.push(node.id);
+    byDepth.set(d, arr);
+  }
+
+  // Fibonacci sphere positions per shell
+  const positions = new Map<number, { x: number; y: number; z: number }>();
+  for (const [d, ids] of byDepth) {
+    const shellRadius = d === 0 ? 0 : d * DEPTH_STEP;
+    const n = ids.length;
+    ids.forEach((id, i) => {
+      if (shellRadius === 0 || n === 1) {
+        positions.set(id, { x: 0, y: 0, z: 0 });
+        return;
+      }
+      const cosTheta = 1 - (2 * i + 1) / n;
+      const sinTheta = Math.sqrt(Math.max(0, 1 - cosTheta * cosTheta));
+      const phi = GOLDEN_ANGLE * i;
+      positions.set(id, {
+        x: Math.cos(phi) * sinTheta * shellRadius,
+        y: cosTheta * shellRadius,
+        z: Math.sin(phi) * sinTheta * shellRadius,
+      });
+    });
+  }
+
+  // Run through vegaRadialTidyLayout to get depth/childCount/angle fields that
+  // GraphDisplayNode requires, then override x/y/z3d with spherical positions.
+  const tree = hierarchy(nodes, edges);
+  const roots = tree.roots.length ? tree.roots : [nodes[0].id];
+  const base = vegaRadialTidyLayout(nodes, roots, tree);
+
+  return base.map((node) => {
+    const pos = positions.get(node.id) ?? { x: 0, y: 0, z: 0 };
+    return { ...node, x: pos.x, y: pos.y, z3d: pos.z, projectionScale: 1 };
+  });
+}
+
 export function graph3dSiblingInfo(edges: GraphEdge[]) {
   const childrenByParent = new Map<number, number[]>();
   for (const edge of edges) {
@@ -855,6 +994,244 @@ export function graph3dSiblingInfo(edges: GraphEdge[]) {
     children.forEach((child, index) => info.set(child, { index, count: children.length }));
   }
   return info;
+}
+
+// Navigation gizmo: an 88×88 canvas overlay that shows the camera orientation
+// as a colored 6-face cube. Clicking a face snaps the camera to that axis.
+export function installOrientationCube(
+  graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>,
+  container: HTMLElement,
+): () => void {
+  const SIZE = 88;
+  const canvas = document.createElement("canvas");
+  canvas.width = SIZE;
+  canvas.height = SIZE;
+  Object.assign(canvas.style, {
+    position: "absolute",
+    top: "12px",
+    right: "12px",
+    width: `${SIZE}px`,
+    height: `${SIZE}px`,
+    borderRadius: "50%",
+    cursor: "pointer",
+    zIndex: "10",
+    pointerEvents: "auto",
+  });
+  container.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d")!;
+  const HALF = SIZE / 2;
+  const CUBE_R = 27;
+
+  const VERTS: [number, number, number][] = [
+    [ 1, 1, 1], [ 1, 1,-1], [ 1,-1, 1], [ 1,-1,-1],
+    [-1, 1, 1], [-1, 1,-1], [-1,-1, 1], [-1,-1,-1],
+  ];
+  const FACES = [
+    { v: [0,2,3,1], normal: new THREE.Vector3( 1, 0, 0), label: "+X", token: "--omarchy-color9" },
+    { v: [4,5,7,6], normal: new THREE.Vector3(-1, 0, 0), label: "-X", token: "--omarchy-color1" },
+    { v: [0,4,6,2], normal: new THREE.Vector3( 0, 0, 1), label: "+Z", token: "--omarchy-color14" },
+    { v: [1,3,7,5], normal: new THREE.Vector3( 0, 0,-1), label: "-Z", token: "--omarchy-color6" },
+    { v: [0,1,5,4], normal: new THREE.Vector3( 0, 1, 0), label: "+Y", token: "--omarchy-color10" },
+    { v: [2,6,7,3], normal: new THREE.Vector3( 0,-1, 0), label: "-Y", token: "--omarchy-color2" },
+  ];
+
+  const camApi = graph as unknown as { camera?: () => THREE.Camera };
+  let animFrameId = 0;
+
+  // Build a stable Y-up camera basis from the view direction alone, ignoring
+  // any roll that TrackballControls may have accumulated. This keeps the gizmo
+  // visually upright even when the camera has rolled.
+  function getCameraBasis(camera: THREE.Camera) {
+    const fwd = new THREE.Vector3();
+    (camera as THREE.PerspectiveCamera).getWorldDirection(fwd);
+    const wUp = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(fwd, wUp).normalize();
+    if (right.lengthSq() < 0.0001) right.set(1, 0, 0); // camera pointing straight up/down
+    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+    return { fwd, right, up };
+  }
+
+  function projectToScreen(worldDir: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3): [number, number] {
+    return [
+      HALF + worldDir.dot(right) * CUBE_R,
+      HALF - worldDir.dot(up) * CUBE_R,
+    ];
+  }
+
+  function cubeTheme() {
+    const canvas = graph3dSolidColor(graphThemeColor("--orbit-graph-canvas", "#101010"), "#101010");
+    const accent = graph3dSolidColor(graphThemeColor("--omarchy-accent", "#20b8a5"), "#20b8a5");
+    const fg = graph3dSolidColor(graphThemeColor("--omarchy-fg", "#e5edf4"), "#e5edf4");
+    return {
+      shell: withAlpha(graph3dBlend(canvas, accent, 0.14), 0.72),
+      stroke: withAlpha(graph3dBlend(fg, accent, 0.20), 0.26),
+      label: graph3dBlend(fg, accent, 0.08),
+      face: (token: string, backFace: boolean) => {
+        const base = graph3dSolidColor(graphThemeColor(token, accent), accent);
+        return backFace
+          ? graph3dBlend(base, canvas, 0.54)
+          : graph3dBlend(base, fg, 0.08);
+      },
+    };
+  }
+
+  function draw() {
+    const camera = camApi.camera?.();
+    if (!camera) return;
+    const { fwd, right, up } = getCameraBasis(camera);
+
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    const theme = cubeTheme();
+
+    ctx.beginPath();
+    ctx.arc(HALF, HALF, HALF - 1, 0, Math.PI * 2);
+    ctx.fillStyle = theme.shell;
+    ctx.fill();
+    ctx.restore();
+
+    const projected = FACES.map((face) => {
+      const depth = -face.normal.dot(fwd); // positive = facing camera
+      const pts = face.v.map((i) => {
+        const v = new THREE.Vector3(VERTS[i][0], VERTS[i][1], VERTS[i][2]);
+        return projectToScreen(v, right, up);
+      });
+      return { pts, depth, label: face.label, color: theme.face(face.token, depth <= -0.05) };
+    });
+    projected.sort((a, b) => a.depth - b.depth); // back to front
+
+    for (const { pts, depth, label, color } of projected) {
+      const visible = depth > -0.05;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.globalAlpha = visible ? 0.88 : 0.26;
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = theme.stroke;
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+      if (visible) {
+        const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+        const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = theme.label;
+        ctx.font = "bold 9px IBM Plex Sans, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, cx, cy);
+      }
+      ctx.restore();
+    }
+  }
+
+  function loop() {
+    draw();
+    animFrameId = requestAnimationFrame(loop);
+  }
+  animFrameId = requestAnimationFrame(loop);
+
+  function onClick(e: MouseEvent) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left - HALF;
+    const my = e.clientY - rect.top - HALF;
+    if (Math.hypot(mx, my) > HALF) return;
+
+    const camera = camApi.camera?.();
+    if (!camera) return;
+    const { fwd, right, up } = getCameraBasis(camera);
+
+    let best: (typeof FACES)[0] | null = null;
+    let bestScore = -Infinity;
+    for (const face of FACES) {
+      const depth = -face.normal.dot(fwd);
+      if (depth < 0) continue;
+      const sx = face.normal.dot(right) * CUBE_R;
+      const sy = -face.normal.dot(up) * CUBE_R;
+      const score = depth - Math.hypot(mx - sx, my - sy) * 0.018;
+      if (score > bestScore) { bestScore = score; best = face; }
+    }
+    if (!best) return;
+
+    const controls = graph3dControls(graph) as (OrbitGraph3DControls & { target?: THREE.Vector3 }) | undefined;
+    const target = controls?.target
+      ? { x: controls.target.x, y: controls.target.y, z: controls.target.z }
+      : { x: 0, y: 0, z: 0 };
+    const dist = camera.position.distanceTo(new THREE.Vector3(target.x, target.y, target.z));
+    const n = best.normal;
+    graph.cameraPosition(
+      { x: target.x + n.x * dist, y: target.y + n.y * dist, z: target.z + n.z * dist },
+      target,
+      480,
+    );
+  }
+
+  // Drag-to-rotate: dragging the cube rotates the main 3D graph the same way
+  // real 3D apps (Blender, Maya) do. We convert the 2D drag delta into
+  // spherical-coordinate offsets applied to the camera position.
+  let dragStart: { x: number; y: number } | null = null;
+  const DRAG_SPEED = 0.007;
+
+  function onPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    dragStart = { x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = "grabbing";
+    e.stopPropagation();
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!dragStart) return;
+    e.stopPropagation();
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    dragStart = { x: e.clientX, y: e.clientY };
+
+    const camera = camApi.camera?.();
+    if (!camera) return;
+    const controls = graph3dControls(graph) as (OrbitGraph3DControls & { target?: THREE.Vector3 }) | undefined;
+    const target = controls?.target ?? new THREE.Vector3(0, 0, 0);
+
+    const offset = camera.position.clone().sub(target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    spherical.theta -= dx * DRAG_SPEED;
+    spherical.phi -= dy * DRAG_SPEED;
+    spherical.phi = Math.max(0.01, Math.min(Math.PI - 0.01, spherical.phi));
+    const newOffset = new THREE.Vector3().setFromSpherical(spherical);
+    graph.cameraPosition(
+      { x: target.x + newOffset.x, y: target.y + newOffset.y, z: target.z + newOffset.z },
+      { x: target.x, y: target.y, z: target.z },
+      0,
+    );
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    if (!dragStart) return;
+    dragStart = null;
+    canvas.style.cursor = "grab";
+    canvas.releasePointerCapture(e.pointerId);
+    e.stopPropagation();
+  }
+
+  canvas.style.cursor = "grab";
+  canvas.addEventListener("click", onClick);
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
+
+  return () => {
+    cancelAnimationFrame(animFrameId);
+    canvas.removeEventListener("click", onClick);
+    canvas.removeEventListener("pointerdown", onPointerDown);
+    canvas.removeEventListener("pointermove", onPointerMove);
+    canvas.removeEventListener("pointerup", onPointerUp);
+    canvas.removeEventListener("pointercancel", onPointerUp);
+    if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+  };
 }
 
 export function graph3dChildPosition(

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X, Save, Trash2, RefreshCw } from "lucide-react";
 import { tauriInvoke } from "../lib/tauriCommands";
+import { THEME_TOKENS, resolveIconFg } from "../lib/fileGlyphs";
 import type { IconThemePayload } from "../types";
 
 // Curated palette: Nerd Font Private-Use-Area glyphs plus Unicode shapes that
@@ -47,7 +48,7 @@ interface IconEditorProps {
 }
 
 type Row = {
-  kind: "ext" | "file";
+  kind: "ext" | "file" | "dir";
   key: string;
   text: string;
   fg: string;
@@ -56,6 +57,26 @@ type Row = {
 };
 
 const USER_THEME_ID = "user-overrides";
+
+function seedRows(activeTheme: IconThemePayload): Row[] {
+  const next: Row[] = [];
+  for (const [name, rule] of Object.entries(activeTheme.byDirname)) {
+    next.push({ kind: "dir", key: name, text: rule.text, fg: rule.fg ?? "#73c991", inherited: true });
+  }
+  for (const [name, rule] of Object.entries(activeTheme.byFilename)) {
+    next.push({ kind: "file", key: name, text: rule.text, fg: rule.fg ?? "#cbd5e1", inherited: true });
+  }
+  for (const [name, rule] of Object.entries(activeTheme.byExt)) {
+    next.push({ kind: "ext", key: name, text: rule.text, fg: rule.fg ?? "#cbd5e1", inherited: true });
+  }
+  // Sort: dirs first, then files, then exts — all alphabetical within group
+  next.sort((a, b) => {
+    const kindOrder = { dir: 0, file: 1, ext: 2 };
+    if (a.kind !== b.kind) return kindOrder[a.kind] - kindOrder[b.kind];
+    return a.key.localeCompare(b.key);
+  });
+  return next;
+}
 
 export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeTheme, onSaved }) => {
   const [rows, setRows] = useState<Row[]>([]);
@@ -67,18 +88,7 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
   // Seed rows from the active theme each time the modal opens.
   useEffect(() => {
     if (!open || !activeTheme) return;
-    const next: Row[] = [];
-    for (const [name, rule] of Object.entries(activeTheme.byExt)) {
-      next.push({ kind: "ext", key: name, text: rule.text, fg: rule.fg ?? "#cbd5e1", inherited: true });
-    }
-    for (const [name, rule] of Object.entries(activeTheme.byFilename)) {
-      next.push({ kind: "file", key: name, text: rule.text, fg: rule.fg ?? "#cbd5e1", inherited: true });
-    }
-    next.sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === "file" ? -1 : 1;
-      return a.key.localeCompare(b.key);
-    });
-    setRows(next);
+    setRows(seedRows(activeTheme));
     setFilter("");
     setError(null);
   }, [open, activeTheme]);
@@ -99,7 +109,7 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
 
   const addRow = () => {
     setRows((prev) => [
-      { kind: "ext", key: "", text: "", fg: "#cbd5e1", inherited: false },
+      { kind: "dir", key: "", text: "", fg: "#73c991", inherited: false },
       ...prev,
     ]);
   };
@@ -132,7 +142,7 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
     lines.push("");
     for (const row of rows) {
       if (!row.key.trim() || !row.text.trim()) continue;
-      const tableName = row.kind === "ext" ? "icon.exts" : "icon.files";
+      const tableName = row.kind === "ext" ? "icon.exts" : row.kind === "dir" ? "icon.dirs" : "icon.files";
       lines.push(`[[${tableName}]]`);
       lines.push(`name = ${JSON.stringify(row.key.trim())}`);
       lines.push(`text = ${JSON.stringify(row.text)}`);
@@ -161,15 +171,7 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
   const onResetActive = () => {
     if (!activeTheme) return;
     if (!window.confirm(`Discard your edits and reload from "${activeTheme.meta.name}"?`)) return;
-    const next: Row[] = [];
-    for (const [name, rule] of Object.entries(activeTheme.byExt)) {
-      next.push({ kind: "ext", key: name, text: rule.text, fg: rule.fg ?? "#cbd5e1", inherited: true });
-    }
-    for (const [name, rule] of Object.entries(activeTheme.byFilename)) {
-      next.push({ kind: "file", key: name, text: rule.text, fg: rule.fg ?? "#cbd5e1", inherited: true });
-    }
-    next.sort((a, b) => (a.kind === b.kind ? a.key.localeCompare(b.key) : a.kind === "file" ? -1 : 1));
-    setRows(next);
+    setRows(seedRows(activeTheme));
   };
 
   if (!open) return null;
@@ -214,17 +216,18 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
               <div key={`${row.kind}-${originalIndex}`} className={`icon-editor-row${row.inherited ? " inherited" : " edited"}`}>
                 <select
                   value={row.kind}
-                  onChange={(e) => updateRow(originalIndex, { kind: e.target.value as "ext" | "file" })}
+                  onChange={(e) => updateRow(originalIndex, { kind: e.target.value as "ext" | "file" | "dir" })}
                   className="icon-editor-kind"
                 >
-                  <option value="ext">.ext</option>
+                  <option value="dir">folder</option>
                   <option value="file">filename</option>
+                  <option value="ext">.ext</option>
                 </select>
                 <input
                   type="text"
                   value={row.key}
                   onChange={(e) => updateRow(originalIndex, { key: e.target.value })}
-                  placeholder={row.kind === "ext" ? "rs" : "Cargo.toml"}
+                  placeholder={row.kind === "ext" ? "rs" : row.kind === "dir" ? "src" : "Cargo.toml"}
                   className="icon-editor-key"
                 />
                 <button
@@ -236,10 +239,10 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
                   {row.text || "?"}
                 </button>
                 <button
-                  className="icon-editor-color"
-                  style={{ background: row.fg }}
+                  className={`icon-editor-color${row.fg.startsWith("theme:") ? " theme-linked" : ""}`}
+                  style={{ background: resolveIconFg(row.fg) }}
                   onClick={() => setPicker({ index: originalIndex, field: "fg" })}
-                  title={row.fg}
+                  title={row.fg.startsWith("theme:") ? `Theme token: ${row.fg.slice(6)}` : row.fg}
                 />
                 <button
                   className="icon-editor-delete"
@@ -291,7 +294,29 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
                 </>
               ) : (
                 <>
-                  <h3>Pick a color</h3>
+                  <h3>Theme palette</h3>
+                  <p className="color-picker-hint">These colors follow the active theme — they shift automatically when you switch themes.</p>
+                  <div className="theme-token-grid">
+                    {THEME_TOKENS.map(({ token, cssVar, sentinel }) => {
+                      const live = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || "#808080";
+                      const isActive = rows[picker.index]?.fg === sentinel;
+                      return (
+                        <button
+                          key={token}
+                          className={`theme-token-cell${isActive ? " active" : ""}`}
+                          style={{ background: live }}
+                          title={token}
+                          onClick={() => {
+                            updateRow(picker.index, { fg: sentinel });
+                            setPicker(null);
+                          }}
+                        >
+                          <span className="theme-token-label">{token.replace("color", "c")}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <h3>Fixed colors</h3>
                   <div className="color-grid">
                     {COLOR_PALETTE.map((c) => (
                       <button
@@ -307,13 +332,13 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
                   </div>
                   <input
                     type="text"
-                    placeholder="#rrggbb"
+                    placeholder="#rrggbb or theme:accent"
                     className="color-custom"
                     defaultValue={rows[picker.index]?.fg ?? ""}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         const v = (e.target as HTMLInputElement).value.trim();
-                        if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                        if (/^#[0-9a-fA-F]{6}$/.test(v) || v.startsWith("theme:")) {
                           updateRow(picker.index, { fg: v });
                           setPicker(null);
                         }

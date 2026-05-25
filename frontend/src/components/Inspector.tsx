@@ -463,7 +463,7 @@ function PreviewSection({
   onNavigate,
 }: PreviewSectionProps) {
   const [wrapPreview, setWrapPreview] = useState(true);
-  const isImage = previewKind === "image";
+  const isImage = previewKind === "image" || isImageFile(record.extension);
   const isText = previewKind === "text";
   const isAudio = previewKind === "audio" || isAudioFile(record.extension);
   const isVideo = previewKind === "video" || isVideoFile(record.extension);
@@ -565,16 +565,17 @@ function PreviewSection({
             Open externally
           </button>
         </div>
+      ) : isImage ? (
+        <div className="preview-content preview-content-image">
+          <ImagePreview
+            path={record.path}
+            title={previewTitle}
+            src={convertFileSrc(record.path)}
+            onOpen={onOpen}
+          />
+        </div>
       ) : preview ? (
         <div className={`preview-content preview-content-${preview.kind}`}>
-          {isImage && (
-            <ImagePreview
-              path={record.path}
-              title={preview.title || record.name}
-              src={preview.content || convertFileSrc(record.path)}
-              onOpen={onOpen}
-            />
-          )}
 
           {isText && isMarkdownFile(record.extension) && (
             <div className={`text-preview text-preview-markdown ${wrapPreview ? "text-preview--wrap" : ""}`}>
@@ -733,7 +734,29 @@ interface AudioPreviewProps {
 
 function AudioPreview({ path, title, mime, onOpen }: AudioPreviewProps) {
   const [playbackError, setPlaybackError] = useState(false);
+  const [alwaysExternal] = useState(
+    () => typeof localStorage !== "undefined" && localStorage.getItem("orbit:media:alwaysExternal") === "1",
+  );
   const src = React.useMemo(() => convertFileSrc(path), [path]);
+
+  if (alwaysExternal) {
+    return (
+      <div className="preview-content preview-content-audio">
+        <div className="audio-preview audio-preview--card">
+          <div className="audio-preview-art" aria-hidden>
+            <Music size={28} strokeWidth={1.6} />
+          </div>
+          <div className="audio-preview-main">
+            <div className="audio-preview-title" title={title}>{title}</div>
+            {mime && <span className="audio-preview-mime">{mime}</span>}
+            <button type="button" className="audio-open-btn" onClick={() => onOpen(path)}>
+              Open in system player
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="preview-content preview-content-audio">
@@ -757,17 +780,21 @@ function AudioPreview({ path, title, mime, onOpen }: AudioPreviewProps) {
           >
             <source src={src} type={mime || undefined} />
           </audio>
-          {playbackError && (
+          {playbackError ? (
             <div className="audio-preview-error">
-              Embedded playback could not decode this file. Open it in your system player instead.
+              <span>This format cannot be decoded in-app (missing GStreamer plugin).</span>
+              <button type="button" className="audio-open-btn" onClick={() => onOpen(path)}>
+                Open in system player
+              </button>
+            </div>
+          ) : (
+            <div className="audio-preview-actions">
+              {mime && <span className="audio-preview-mime">{mime}</span>}
+              <button type="button" className="link-button" onClick={() => onOpen(path)}>
+                Open in system player
+              </button>
             </div>
           )}
-          <div className="audio-preview-actions">
-            {mime && <span className="audio-preview-mime">{mime}</span>}
-            <button type="button" className="link-button" onClick={() => onOpen(path)}>
-              Open in mpv/system player
-            </button>
-          </div>
         </div>
       </div>
     </div>

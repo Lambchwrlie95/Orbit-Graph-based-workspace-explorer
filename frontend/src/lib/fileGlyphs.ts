@@ -84,6 +84,43 @@ export function colorForPath(path: string, isDir: boolean, isCluster?: boolean):
   return colorForExtension(ext);
 }
 
+// Maps the "theme:<token>" sentinel (stored in TOML fg fields) to CSS vars so
+// folder/file colors can follow the active Omarchy/flavor palette at runtime.
+const THEME_TOKEN_CSS: Record<string, string> = {
+  accent:  "--omarchy-accent",
+  cursor:  "--omarchy-cursor",
+  fg:      "--omarchy-fg",
+  color0:  "--omarchy-color0",
+  color1:  "--omarchy-color1",
+  color2:  "--omarchy-color2",
+  color3:  "--omarchy-color3",
+  color4:  "--omarchy-color4",
+  color5:  "--omarchy-color5",
+  color6:  "--omarchy-color6",
+  color7:  "--omarchy-color7",
+  color8:  "--omarchy-color8",
+  color9:  "--omarchy-color9",
+  color10: "--omarchy-color10",
+  color11: "--omarchy-color11",
+  color12: "--omarchy-color12",
+  color13: "--omarchy-color13",
+  color14: "--omarchy-color14",
+  color15: "--omarchy-color15",
+};
+
+export const THEME_TOKENS = Object.entries(THEME_TOKEN_CSS).map(([token, cssVar]) => ({
+  token,
+  cssVar,
+  sentinel: `theme:${token}`,
+}));
+
+export function resolveIconFg(fg: string): string {
+  if (!fg.startsWith("theme:")) return fg;
+  const cssVar = THEME_TOKEN_CSS[fg.slice(6)];
+  if (!cssVar) return fg;
+  return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() || fg;
+}
+
 export function iconRuleForPath(
   path: string,
   isDir: boolean,
@@ -100,7 +137,7 @@ export function iconRuleForPath(
   const normalize = (rule: IconRule): IconRule => ({
     ...rule,
     text: rule.text || glyphForPath(path, isDir, isCluster),
-    fg: rule.fg || colorForPath(path, isDir, isCluster),
+    fg: resolveIconFg(rule.fg || colorForPath(path, isDir, isCluster)),
   });
 
   if (isCluster) return normalize(theme.defaultCluster);

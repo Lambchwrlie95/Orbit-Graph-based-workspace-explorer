@@ -9,6 +9,7 @@ import {
   Info,
   Keyboard,
   Layers,
+  Music,
   Palette,
   Search,
   Settings as SettingsIcon,
@@ -36,6 +37,7 @@ interface SettingsPanelProps {
   editorCommand: string;
   onEditorCommandChange: (command: string) => void;
   onOpenThemesFolder: () => void;
+  onOpenOrbitConfigDir: () => void;
   onClearSelectedThumbnailCache: () => void;
   canClearSelectedThumbnailCache: boolean;
   wallpapers?: GraphWallpaper[];
@@ -50,6 +52,7 @@ type SectionId =
   | "appearance"
   | "icons"
   | "external"
+  | "media"
   | "accessibility"
   | "data"
   | "shortcuts"
@@ -59,7 +62,7 @@ interface SectionMeta {
   id: SectionId;
   label: string;
   hint: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: React.ComponentType<{ size?: number | string; strokeWidth?: number | string }>;
   search: string;
 }
 
@@ -70,6 +73,7 @@ const SECTIONS: SectionMeta[] = [
   { id: "appearance",    label: "Appearance",     hint: "Theme flavor",                        icon: Palette,       search: "appearance color theme flavor catppuccin dracula gruvbox omarchy" },
   { id: "icons",         label: "Icons",          hint: "Icon themes & editor",                icon: ImageIcon,     search: "icons icon theme editor folder glyph" },
   { id: "external",      label: "External Apps",  hint: "Editor & browser launch",             icon: ExternalLink,  search: "external app editor command vscode neovim nvim kitty" },
+  { id: "media",        label: "Media",           hint: "Audio & video playback",               icon: Music,         search: "media audio video music player mpv vlc playback codec gstreamer" },
   { id: "accessibility", label: "Accessibility",  hint: "Motion & contrast",                   icon: Accessibility, search: "accessibility motion contrast reduced" },
   { id: "data",          label: "Data & Storage", hint: "Index, cache, disk usage",            icon: Database,      search: "data storage cache thumbnail clear index database" },
   { id: "shortcuts",     label: "Shortcuts",      hint: "Keyboard reference",                  icon: Keyboard,      search: "shortcuts keyboard hotkey binding key" },
@@ -115,6 +119,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
     visibleFolderRescan, onVisibleFolderRescanChange,
     editorCommand, onEditorCommandChange,
     onOpenThemesFolder,
+    onOpenOrbitConfigDir,
     onClearSelectedThumbnailCache, canClearSelectedThumbnailCache,
     wallpapers = [],
     graph3dWallpaper, onGraph3dWallpaperChange,
@@ -128,6 +133,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
   );
   const [highContrast, setHighContrast] = useState<boolean>(() =>
     typeof window !== "undefined" && window.localStorage.getItem("orbit:high-contrast") === "1",
+  );
+  const [alwaysExternal, setAlwaysExternal] = useState<boolean>(() =>
+    typeof window !== "undefined" && window.localStorage.getItem("orbit:media:alwaysExternal") === "1",
   );
   const [appName, setAppName] = useState<string>("Orbit");
   const [appVersion, setAppVersion] = useState<string>("");
@@ -143,16 +151,20 @@ export function SettingsPanel(props: SettingsPanelProps) {
   }, [highContrast]);
 
   useEffect(() => {
+    window.localStorage.setItem("orbit:media:alwaysExternal", alwaysExternal ? "1" : "0");
+  }, [alwaysExternal]);
+
+  useEffect(() => {
     if (!open) return;
     let cancelled = false;
     (async () => {
       try {
         const tauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
         if (!tauri) return;
-        const mod = await import("@tauri-apps/api/app");
+        const { getName, getVersion } = await import("@tauri-apps/api/app");
         const [name, version] = await Promise.all([
-          mod.getName().catch(() => ""),
-          mod.getVersion().catch(() => ""),
+          getName().catch(() => ""),
+          getVersion().catch(() => ""),
         ]);
         if (cancelled) return;
         if (name) setAppName(name);
@@ -291,18 +303,48 @@ export function SettingsPanel(props: SettingsPanelProps) {
                   min={100} max={5000} step={100}
                   onChange={onGraphNodeLimitChange}
                 />
-                <ActionRow
-                  label="Labels"
-                  description="Show or hide labels above icons."
-                  onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-labels"))}
-                  cta="Toggle"
-                />
-                <ActionRow
-                  label="Particle / icon mode"
-                  description="Switch between sphere particles and file-type icon glyphs."
-                  onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-icons"))}
-                  cta="Toggle"
-                />
+                <div className="settings-block settings-block--card">
+                  <div className="settings-block-label">Graph controls</div>
+                  <div className="settings-action-grid">
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-labels"))}>
+                      <span>Labels</span>
+                      <small>Show / hide node text</small>
+                    </button>
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:toggle-icons"))}>
+                      <span>Icons</span>
+                      <small>Swap spheres and glyphs</small>
+                    </button>
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:fit"))}>
+                      <span>Fit view</span>
+                      <small>Frame the current graph</small>
+                    </button>
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:switch-3d"))}>
+                      <span>3D mode</span>
+                      <small>Jump to the 3D graph</small>
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-block settings-block--card settings-block--3d">
+                  <div className="settings-block-label">3D graph controls</div>
+                  <div className="settings-action-grid">
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:3d:pause-toggle"))}>
+                      <span>Pause / resume</span>
+                      <small>Freeze or reheat physics</small>
+                    </button>
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:3d:pin-toggle"))}>
+                      <span>Drag pinning</span>
+                      <small>Toggle fixed drag positions</small>
+                    </button>
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:3d:release-pins"))}>
+                      <span>Release pins</span>
+                      <small>Let all nodes flow again</small>
+                    </button>
+                    <button type="button" className="settings-action-card" onClick={() => document.dispatchEvent(new CustomEvent("orbit:graph:3d:refit"))}>
+                      <span>Refit 3D</span>
+                      <small>Recenter camera safely</small>
+                    </button>
+                  </div>
+                </div>
                 <div className="settings-block">
                   <div className="settings-block-label">3D wallpaper</div>
                   {wallpapers.length > 0 ? (
@@ -332,12 +374,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
                     <p className="settings-help">No wallpapers found.</p>
                   )}
                   <p className="settings-help">
-                    Wallpapers are loaded from any <code>backgrounds/</code> subdirectory inside
-                    {" "}<code>~/.config/omarchy/themes/</code>. Drop image files there
-                    (jpg, png, webp) and they'll appear here on next launch.
+                    Drop image files (jpg, png, webp) into <code>~/.config/orbit/backgrounds/</code> and they'll appear here on next launch.
+                    Omarchy per-theme backgrounds from <code>~/.config/omarchy/themes/*/backgrounds/</code> are also picked up automatically.
                   </p>
-                  <button type="button" className="settings-cta" onClick={onOpenThemesFolder}>
-                    Open themes folder
+                  <button type="button" className="settings-cta" onClick={onOpenOrbitConfigDir}>
+                    Open Orbit config folder
                   </button>
                 </div>
               </div>
@@ -383,7 +424,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 <div className="settings-block">
                   <div className="settings-block-label">Color flavor</div>
                   <FlavorPicker />
-                  <p className="settings-help">Hot-swaps the whole UI palette. Drop custom themes into <code>~/.config/omarchy/themes/</code>.</p>
+                  <p className="settings-help">Hot-swaps the whole UI palette. Built-in flavors work standalone. "Follow Omarchy" syncs live with your Omarchy color scheme if installed.</p>
                 </div>
               </div>
             )}
@@ -393,7 +434,10 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 <ActionRow
                   label="Icon editor"
                   description="Edit your icon overrides and per-path glyph mappings."
-                  onClick={() => document.dispatchEvent(new CustomEvent("orbit:open-icon-editor"))}
+                  onClick={() => {
+                    document.dispatchEvent(new CustomEvent("orbit:open-icon-editor"));
+                    onClose();
+                  }}
                   cta="Open"
                 />
                 <ActionRow
@@ -430,6 +474,27 @@ export function SettingsPanel(props: SettingsPanelProps) {
                   />
                   <p className="settings-help">
                     Use <code>{"{file}"}</code> as the selected path placeholder. Blank falls back to <code>$EDITOR</code>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {section === "media" && (
+              <div className="settings-stack">
+                <ToggleRow
+                  label="Always open in system player"
+                  description="Skip embedded audio playback and open every audio file directly in your system player (mpv, VLC, etc.)."
+                  checked={alwaysExternal}
+                  onChange={setAlwaysExternal}
+                />
+                <p className="settings-help settings-help--block">
+                  On Linux, embedded audio requires GStreamer plugins (gst-plugins-good, gst-plugins-bad).
+                  If you see <em>"could not decode"</em> errors, enable this toggle or install the missing plugins.
+                </p>
+                <div className="settings-block">
+                  <div className="settings-block-label">Supported formats (embedded)</div>
+                  <p className="settings-help">
+                    OGG Vorbis, WebM Opus, WAV — always work. MP3, AAC, FLAC, and others depend on installed GStreamer plugins.
                   </p>
                 </div>
               </div>
@@ -616,7 +681,7 @@ function ActionRow({
   onClick: () => void;
   cta?: string;
   disabled?: boolean;
-  icon?: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon?: React.ComponentType<{ size?: number | string; strokeWidth?: number | string }>;
 }) {
   return (
     <div className="settings-row">

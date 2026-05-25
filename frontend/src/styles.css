@@ -2012,6 +2012,9 @@ button.secondary {
   --orbit-border: var(--omarchy-border);
   --orbit-border-strong: color-mix(in srgb, var(--omarchy-border) 60%, var(--omarchy-fg) 40%);
   --orbit-text: var(--omarchy-fg);
+  /* Aliases used across icon editor and graph controls */
+  --orbit-fg: var(--omarchy-fg);
+  --orbit-surface: color-mix(in srgb, var(--omarchy-bg) 92%, var(--omarchy-fg) 8%);
   --orbit-muted: color-mix(in srgb, var(--omarchy-fg) 60%, var(--omarchy-bg) 40%);
   --orbit-faint: color-mix(in srgb, var(--omarchy-fg) 30%, var(--omarchy-bg) 70%);
   --orbit-accent: var(--omarchy-accent);
@@ -3065,6 +3068,18 @@ dt {
 .graph-switches button {
   height: 24px;
   text-transform: capitalize;
+}
+
+.graph-switch-select {
+  height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-family: var(--orbit-font-sans);
+  background: var(--orbit-bg-sunken);
+  color: var(--orbit-fg);
+  border: 1px solid var(--orbit-border);
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 @keyframes orbit-pulse {
@@ -4649,9 +4664,30 @@ dt {
 }
 
 .audio-preview-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   color: var(--omarchy-color9, #f47);
   font-size: 11px;
   line-height: 1.35;
+  padding: 6px 0;
+}
+
+.audio-open-btn {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 16%, transparent);
+  border: 1px solid var(--omarchy-accent, #20b8a5);
+  color: var(--omarchy-accent, #20b8a5);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--orbit-font-sans);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.audio-open-btn:hover {
+  background: color-mix(in srgb, var(--omarchy-accent, #20b8a5) 28%, transparent);
 }
 
 .audio-preview-actions {
@@ -5495,7 +5531,7 @@ dt {
 }
 .icon-editor-add:hover,
 .icon-editor-reset:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--orbit-fg) 8%, var(--orbit-bg-sunken));
 }
 .icon-editor-list {
   flex: 1;
@@ -5514,10 +5550,10 @@ dt {
   gap: 8px;
   align-items: center;
   padding: 4px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--orbit-border);
 }
 .icon-editor-row.edited {
-  background: rgba(255, 226, 122, 0.06);
+  background: color-mix(in srgb, var(--orbit-accent) 8%, transparent);
 }
 .icon-editor-kind {
   background: var(--orbit-bg-sunken);
@@ -5612,7 +5648,7 @@ dt {
 }
 .glyph-cell:hover {
   border-color: var(--orbit-accent);
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--orbit-accent) 12%, var(--orbit-bg-sunken));
 }
 .glyph-custom,
 .color-custom {
@@ -5638,6 +5674,57 @@ dt {
 }
 .color-cell:hover {
   outline: 2px solid var(--orbit-fg);
+}
+
+.color-picker-hint {
+  font-size: 11px;
+  color: var(--orbit-muted);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.theme-token-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.theme-token-cell {
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  padding: 2px 3px;
+  position: relative;
+}
+
+.theme-token-cell.active {
+  outline: 2px solid var(--orbit-fg);
+  outline-offset: 1px;
+}
+
+.theme-token-cell:hover {
+  outline: 1px solid var(--orbit-border-strong);
+}
+
+.theme-token-label {
+  font-size: 9px;
+  font-family: var(--orbit-font-mono);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  padding: 0 2px;
+  border-radius: 2px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* Small ring on the color swatch to show it's theme-linked */
+.icon-editor-color.theme-linked {
+  outline: 2px solid var(--orbit-accent);
+  outline-offset: 1px;
 }
 .icon-editor-error {
   margin: 0 16px;
@@ -5928,6 +6015,12 @@ dt {
   flex-direction: column;
   overflow: hidden;
   font-feature-settings: "ss01" 1, "calt" 1;
+  animation: settings-panel-enter 170ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes settings-panel-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .settings-header {
@@ -6086,6 +6179,12 @@ dt {
   display: flex;
   flex-direction: column;
   gap: 0;
+  animation: settings-content-enter 150ms ease-out;
+}
+
+@keyframes settings-content-enter {
+  from { opacity: 0; transform: translateX(4px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .settings-section-head {
@@ -6122,6 +6221,20 @@ dt {
   border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
 }
 .settings-block:last-child { border-bottom: 0; }
+.settings-block--card {
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 78%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--orbit-accent, var(--omarchy-accent)) 7%, transparent), transparent 54%),
+    rgba(255, 255, 255, 0.018);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025) inset;
+}
+.settings-block--3d {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--orbit-edge-code, var(--omarchy-accent)) 16%, transparent), transparent 42%),
+    rgba(255, 255, 255, 0.018);
+}
 .settings-block-label {
   font-size: 10px;
   font-weight: 600;
@@ -6225,6 +6338,49 @@ input.settings-input[type="text"] {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.settings-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(134px, 1fr));
+  gap: 8px;
+}
+
+.settings-action-card {
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--orbit-border) 82%, transparent);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--orbit-text);
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.settings-action-card span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.settings-action-card small {
+  color: var(--orbit-muted);
+  font-size: 10.8px;
+  line-height: 1.35;
+}
+.settings-action-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--orbit-accent, var(--omarchy-accent));
+  background: color-mix(in srgb, var(--orbit-accent, var(--omarchy-accent)) 9%, rgba(255, 255, 255, 0.03));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+.settings-action-card:active { transform: translateY(0); }
 
 /* Switch (toggle) — replaces native checkbox */
 .settings-switch {
@@ -6474,13 +6630,6 @@ input.settings-input[type="text"] {
 }
 
 /* 3D wallpaper picker in Graph settings section */
-.settings-row-label {
-  font-size: 12px;
-  color: var(--orbit-muted);
-  margin-bottom: 6px;
-  margin-top: 4px;
-}
-
 .wallpaper-grid {
   display: flex;
   flex-wrap: wrap;
@@ -6495,12 +6644,13 @@ input.settings-input[type="text"] {
   overflow: hidden;
   background: var(--omarchy-border);
   width: 76px;
-  transition: border-color 0.12s;
+  transition: transform 120ms ease, border-color 120ms ease, opacity 120ms ease;
 }
 
 .wallpaper-option:hover {
   border-color: var(--omarchy-fg);
   opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .wallpaper-option.active {
@@ -6555,8 +6705,9 @@ input.settings-input[type="text"] {
   color: var(--omarchy-fg);
   cursor: pointer;
   text-align: left;
+  transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
-.flavor-option:hover { border-color: var(--omarchy-accent); }
+.flavor-option:hover { border-color: var(--omarchy-accent); transform: translateY(-1px); }
 .flavor-option.active {
   border-color: var(--omarchy-accent);
   background: var(--omarchy-sel-bg);

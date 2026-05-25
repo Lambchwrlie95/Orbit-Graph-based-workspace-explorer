@@ -43,7 +43,8 @@ import {
   graph3dLinkParticleSpeed, graph3dAddSceneEffects, graph3dApplyWallpaper,
   createGraph3DCollisionForce, focusGraph3DNode, frameGraph3DScene,
   configureGraph3DControls, setGraph3DAutoRotate, installGraph3DAtmosphere,
-  graph3dEdgeStyleForCategory, graph3dLayout,
+  graph3dEdgeStyleForCategory, graph3dLayout, graph3dSphericalLayout, installOrientationCube,
+  clearGraph3DNodeRegistry,
   type ForceGraph3DInstance,
   ForceGraph3D,
 } from "./graph3d";
@@ -80,6 +81,9 @@ const PREF = {
   nodeView: "orbit:graph:nodeView:v5",
   minimap: "orbit:graph:showMinimap",
   edges: "orbit:graph:visibleEdgeCategories:v2",
+  localFocus: "orbit:graph:localFocus",
+  localFocusDepth: "orbit:graph:localFocusDepth",
+  spherical3d: "orbit:graph:spherical3d",
 };
 
 const VISUAL_FANOUT = {
@@ -172,6 +176,18 @@ function GraphViewComponent({
   const graphRef = useRef<Graph | null>(null);
   const graph3dRef = useRef<ForceGraph3DInstance<Graph3DNode, Graph3DLink> | null>(null);
   const graph3dNodeRef = useRef<Map<string, Graph3DNode>>(new Map());
+  // Stable refs for callback props so the Sigma/3D effect doesn't rebuild the
+  // entire renderer every time main.tsx re-renders (e.g., on setPreview call).
+  // onFocusFolder is an inline arrow in main.tsx and changes on every render;
+  // without refs, every file click causes renderer.kill() + full rebuild.
+  const onSelectPathRef = useRef(onSelectPath);
+  const onOpenPathRef = useRef(onOpenPath);
+  const onFocusFolderRef = useRef(onFocusFolder);
+  const onExpandClusterRef = useRef(onExpandCluster);
+  onSelectPathRef.current = onSelectPath;
+  onOpenPathRef.current = onOpenPath;
+  onFocusFolderRef.current = onFocusFolder;
+  onExpandClusterRef.current = onExpandCluster;
   const wallpaper3dRef = useRef<string | null>(null);
   wallpaper3dRef.current = wallpaper3d ?? null;
   const [pathfinderMode, setPathfinderMode] = useState(false);
@@ -210,6 +226,9 @@ function GraphViewComponent({
   const [showMinimap, setShowMinimap] = usePersistedState<boolean>(PREF.minimap, false);
   const [graph3dRunning, setGraph3dRunning] = useState(true);
   const [graph3dPinDrag, setGraph3dPinDrag] = usePersistedState<boolean>("orbit:graph:3dPinDrag", true);
+  const [localFocusMode, setLocalFocusMode] = usePersistedState<boolean>(PREF.localFocus, false);
+  const [localFocusDepth, setLocalFocusDepth] = usePersistedState<number>(PREF.localFocusDepth, 2);
+  const [graph3dUseSpherical, setGraph3dUseSpherical] = usePersistedState<boolean>(PREF.spherical3d, false);
   const [visibleEdgeCategories, setVisibleEdgeCategories] = usePersistedState<Set<EdgeCategory>>(
     PREF.edges,
     new Set<EdgeCategory>(["hierarchy", "docs"]),
@@ -254,13 +273,78 @@ function GraphViewComponent({
   useEffect(() => {
     const toggleLabels = () => setShowLabels((value) => !value);
     const toggleIcons = () => setNodeView((value) => (value === "icons" ? "spheres" : "icons"));
+    const switch3d = () => setLayoutMode("graph3d");
+    const frame3d = () => {
+      const graph3d = graph3dRef.current;
+      if (graph3d) frameGraph3DScene(graph3d, graph3dNodeRef.current, 320);
+    };
+    const fitGraphEvent = () => {
+      const graph3d = graph3dRef.current;
+      if (graph3d) {
+        frameGraph3DScene(graph3d, graph3dNodeRef.current, 320);
+        return;
+      }
+      const renderer = rendererRef.current;
+      if (!renderer) return;
+      const camera = renderer.getCamera();
+      void camera.animatedReset({ duration: 320, easing: "quadraticInOut" }).then(() => {
+        camera.setState({ x: 0.5, y: 0.5, ratio: camera.getBoundedRatio(1), angle: 0 });
+        renderer.scheduleRefresh();
+      });
+    };
+    const toggle3dSimulation = () => {
+      const graph = graph3dRef.current;
+      if (!graph) {
+        setLayoutMode("graph3d");
+        return;
+      }
+      const api = graph as unknown as {
+        pauseAnimation?: () => void;
+        resumeAnimation?: () => void;
+        d3ReheatSimulation?: () => void;
+      };
+      setGraph3dRunning((running) => {
+        if (running) {
+          api.pauseAnimation?.();
+          return false;
+        }
+        api.d3ReheatSimulation?.();
+        api.resumeAnimation?.();
+        return true;
+      });
+    };
+    const toggle3dPinning = () => setGraph3dPinDrag((value) => !value);
+    const release3dPins = () => {
+      let released = false;
+      for (const node of graph3dNodeRef.current.values()) {
+        if (node.fx !== undefined || node.fy !== undefined || node.fz !== undefined) released = true;
+        node.fx = undefined;
+        node.fy = undefined;
+        node.fz = undefined;
+      }
+      const api = graph3dRef.current as unknown as { d3ReheatSimulation?: () => void } | null;
+      api?.d3ReheatSimulation?.();
+      if (released) setGraph3dRunning(true);
+    };
     document.addEventListener("orbit:graph:toggle-labels", toggleLabels);
     document.addEventListener("orbit:graph:toggle-icons", toggleIcons);
+    document.addEventListener("orbit:graph:switch-3d", switch3d);
+    document.addEventListener("orbit:graph:fit", fitGraphEvent);
+    document.addEventListener("orbit:graph:3d:refit", frame3d);
+    document.addEventListener("orbit:graph:3d:pause-toggle", toggle3dSimulation);
+    document.addEventListener("orbit:graph:3d:pin-toggle", toggle3dPinning);
+    document.addEventListener("orbit:graph:3d:release-pins", release3dPins);
     return () => {
       document.removeEventListener("orbit:graph:toggle-labels", toggleLabels);
       document.removeEventListener("orbit:graph:toggle-icons", toggleIcons);
+      document.removeEventListener("orbit:graph:switch-3d", switch3d);
+      document.removeEventListener("orbit:graph:fit", fitGraphEvent);
+      document.removeEventListener("orbit:graph:3d:refit", frame3d);
+      document.removeEventListener("orbit:graph:3d:pause-toggle", toggle3dSimulation);
+      document.removeEventListener("orbit:graph:3d:pin-toggle", toggle3dPinning);
+      document.removeEventListener("orbit:graph:3d:release-pins", release3dPins);
     };
-  }, [setNodeView, setShowLabels]);
+  }, [setGraph3dPinDrag, setLayoutMode, setNodeView, setShowLabels]);
 
   useEffect(() => {
     iconThemeRef.current = iconTheme;
@@ -317,6 +401,9 @@ function GraphViewComponent({
         graph3dApplyWallpaper(api3d, wallpaper3dRef.current, graphThemeColor("--orbit-graph-canvas", "#101010"));
         api3d.nodeColor(api3d.nodeColor());
         api3d.linkColor(api3d.linkColor());
+        // Theme changes are rare (user action), so it's safe to rebuild THREE
+        // sprite materials here. On hot paths (hover/click) this must be skipped.
+        api3d.nodeThreeObject(api3d.nodeThreeObject());
       }
     };
     window.addEventListener("orbit:flavor-changed", handler);
@@ -469,13 +556,25 @@ function GraphViewComponent({
       ids.has(edge.targetId) &&
       visibleEdgeCategories.has(edgeCategoryForType(edge.edgeType))
     ));
+    // Local focus: k-hop neighborhood around the selected node
+    if (localFocusMode && selectedPath) {
+      const selectedId = allNodes.find((n) => n.path === selectedPath)?.id ?? null;
+      if (selectedId !== null) {
+        const neighborhood = computeKHopNeighbors(selectedId, localFocusDepth, edges);
+        return {
+          ...payload,
+          nodes: allNodes.filter((n) => neighborhood.has(n.id)),
+          edges: edges.filter((e) => neighborhood.has(e.sourceId) && neighborhood.has(e.targetId)),
+        };
+      }
+    }
     return { ...payload, nodes: allNodes, edges };
-  }, [payload, graphFilter, showFiles, showFolders, visibleTypes, visibleEdgeCategories, breadcrumbNodes, layoutMode, expandedFolders]);
+  }, [payload, graphFilter, showFiles, showFolders, visibleTypes, visibleEdgeCategories, breadcrumbNodes, layoutMode, expandedFolders, localFocusMode, localFocusDepth, selectedPath]);
 
   const displayNodes = useMemo(() => {
     if (!displayPayload) return [];
-    return layoutNodes(displayPayload.nodes, displayPayload.edges, layoutMode);
-  }, [displayPayload, layoutMode]);
+    return layoutNodes(displayPayload.nodes, displayPayload.edges, layoutMode, graph3dUseSpherical && layoutMode === "graph3d");
+  }, [displayPayload, layoutMode, graph3dUseSpherical]);
 
   const nodeByPath = useMemo(() => new Map(displayNodes.map((node) => [node.path, node])), [displayNodes]);
   const nodeById = useMemo(() => new Map(displayNodes.map((node) => [String(node.id), node])), [displayNodes]);
@@ -495,7 +594,8 @@ function GraphViewComponent({
 
   const graph3dData = useMemo(() => {
     if (!displayPayload) return { nodes: [] as Graph3DNode[], links: [] as Graph3DLink[] };
-    return buildGraph3DData(displayNodes, displayPayload.edges, groupColors, iconTheme);
+    const capped = displayNodes.length > 400 ? prioritizeFor3D(displayNodes, 400) : displayNodes;
+    return buildGraph3DData(capped, displayPayload.edges, groupColors, iconTheme);
   }, [displayPayload, displayNodes, groupColors, iconTheme]);
 
 
@@ -554,8 +654,17 @@ function GraphViewComponent({
         // lock. TrackballControls gives free roll/pitch/yaw — the natural
         // expectation for a 3D galaxy view.
         controlType: "trackball",
-        rendererConfig: { antialias: true, alpha: true },
-      })
+        rendererConfig: { antialias: true, alpha: false },
+      });
+      // Call graphData() first so state.layout is initialised before any
+      // subsequent setter or rAF tick can access it. Some setters (e.g.
+      // nodeThreeObject) internally restart the animation loop; if that fires
+      // before graphData() has run, tickFrame throws on state.layout being
+      // undefined. Supplying data up-front is the safest guard.
+      (graphApi as unknown as { pauseAnimation?: () => void }).pauseAnimation?.();
+      graphApi.graphData(graph3dData);
+
+      graphApi
         .backgroundColor(graphThemeColor("--orbit-graph-canvas", "#101010"))
         .showNavInfo(false)
         .width(container.clientWidth || 800)
@@ -577,9 +686,9 @@ function GraphViewComponent({
         .linkDirectionalParticleSpeed((link) => graph3dLinkParticleSpeed(link))
         .enableNodeDrag(true)
         .enableNavigationControls(true)
-        .d3AlphaDecay(0.035)
-        .d3VelocityDecay(0.72)
-        .cooldownTicks(120)
+        .d3AlphaDecay(0.05)
+        .d3VelocityDecay(0.78)
+        .cooldownTicks(80)
         .onEngineStop(() => {
           // Just flag the simulation as stopped. Do NOT reframe the camera
           // here — the engine cools down after every drag, hover, or particle
@@ -596,7 +705,6 @@ function GraphViewComponent({
           setGraph3DAutoRotate(graphApi, false);
           graphApi.nodeColor(graphApi.nodeColor());
           graphApi.linkColor(graphApi.linkColor());
-          graphApi.linkWidth(graphApi.linkWidth());
           graphApi.linkDirectionalParticles(graphApi.linkDirectionalParticles());
         })
         .onLinkHover((link) => {
@@ -609,7 +717,6 @@ function GraphViewComponent({
           setHoveredNode((prev) => prev === id ? prev : id);
           graphApi.nodeColor(graphApi.nodeColor());
           graphApi.linkColor(graphApi.linkColor());
-          graphApi.linkWidth(graphApi.linkWidth());
           graphApi.linkDirectionalParticles(graphApi.linkDirectionalParticles());
         })
         .onBackgroundClick(() => {
@@ -620,28 +727,29 @@ function GraphViewComponent({
           setGraph3DAutoRotate(graphApi, false);
           graphApi.nodeColor(graphApi.nodeColor());
           graphApi.linkColor(graphApi.linkColor());
-          graphApi.linkWidth(graphApi.linkWidth());
         })
         .onNodeClick((node, event) => {
           selectedNodeRef.current = node.id;
           setSelectedNode((prev) => prev === node.id ? prev : node.id);
-          if (node.path) onSelectPath(node.path);
+          if (node.path) onSelectPathRef.current(node.path);
           setGraph3DAutoRotate(graphApi, false);
           graphApi.nodeColor(graphApi.nodeColor());
           graphApi.linkColor(graphApi.linkColor());
-          graphApi.linkWidth(graphApi.linkWidth());
           if (node.isCluster) {
             const folderPath = node.parentPath || node.path.replace("/__cluster__", "").replace(/\/__visual_[^/]+$/, "");
             setExpandingCluster(folderPath);
-            onExpandCluster?.(folderPath);
+            onExpandClusterRef.current?.(folderPath);
             setTimeout(() => setExpandingCluster(null), 550);
-          } else if (node.isDir) {
-            // Match the 2D graph: clicking a folder enters that folder's graph.
-            // Do not camera-focus/rebuild the Three object first; navigate the
-            // data scope directly to avoid the click-to-black crash path.
-            onFocusFolder?.(node.path);
           } else if (event.detail > 1) {
-            void openNodeInEditor(node.path);
+            if (node.isDir) {
+              onFocusFolderRef.current?.(node.path);
+            } else {
+              // Double-click non-dir: open externally (images, videos, etc.)
+              onOpenPathRef.current?.(node.path);
+            }
+          } else {
+            // Single click: select node (folder or file)
+            onSelectPathRef.current(node.path);
           }
         })
         .onNodeRightClick((node, event) => {
@@ -663,8 +771,7 @@ function GraphViewComponent({
             node.fy = undefined;
             node.fz = undefined;
           }
-        })
-        .graphData(graph3dData);
+        });
 
       const api = graphApi as unknown as { d3Force?: (name: string, force?: unknown) => any; d3ReheatSimulation?: () => void };
       const nodesById = new Map(graph3dData.nodes.map((node) => [node.id, node]));
@@ -673,12 +780,21 @@ function GraphViewComponent({
       const collide = api.d3Force?.("collide");
       collide?.radius?.((node: Graph3DNode) => Math.max(node.isDir ? 18 : node.isCluster ? 13 : 8, Math.sqrt(Math.max(1, node.val)) * (node.isDir ? 4.4 : 3.0)));
       api.d3Force?.("orbitCollide", createGraph3DCollisionForce());
-      api.d3ReheatSimulation?.();
-      setGraph3dRunning(true);
+      // d3ReheatSimulation calls resetCountdown() which sets engineRunning=true
+      // before the 1ms kapsule debounce has initialised state.layout. Calling
+      // resumeAnimation() immediately after would then trigger tickFrame →
+      // layoutTick → state.layout[...] crash. Defer both until after the debounce.
+      const reheatTimer = window.setTimeout(() => {
+        if (!graph3dRef.current) return;
+        api.d3ReheatSimulation?.();
+        (graphApi as unknown as { resumeAnimation?: () => void }).resumeAnimation?.();
+        setGraph3dRunning(true);
+      }, 5);
 
       graph3dRef.current = graphApi;
       graph3dNodeRef.current = new Map(graph3dData.nodes.map((node) => [node.id, node]));
       const cleanupSceneEffects = graph3dAddSceneEffects(graphApi, container);
+      const cleanupOrientationCube = installOrientationCube(graphApi, container);
       graph3dApplyWallpaper(graphApi, wallpaper3dRef.current, graphThemeColor("--orbit-graph-canvas", "#101010"));
       
       const onGraph3DKeyDown = (event: KeyboardEvent) => {
@@ -692,12 +808,11 @@ function GraphViewComponent({
             if (candidate.path === path) {
               selectedNodeRef.current = candidate.id;
               setSelectedNode((prev) => (prev === candidate.id ? prev : candidate.id));
-              if (candidate.path) onSelectPath(candidate.path);
+              if (candidate.path) onSelectPathRef.current(candidate.path);
               setGraph3DAutoRotate(graphApi, false);
               focusGraph3DNode(graphApi, candidate, 600);
               graphApi.nodeColor(graphApi.nodeColor());
               graphApi.linkColor(graphApi.linkColor());
-              graphApi.linkWidth(graphApi.linkWidth());
               return true;
             }
           }
@@ -711,7 +826,11 @@ function GraphViewComponent({
           setGraph3DAutoRotate(graphApi, false);
           graphApi.nodeColor(graphApi.nodeColor());
           graphApi.linkColor(graphApi.linkColor());
-          graphApi.linkWidth(graphApi.linkWidth());
+          event.preventDefault();
+          return;
+        }
+        if (event.key === "f" || event.key === "F") {
+          setLocalFocusMode((prev) => !prev);
           event.preventDefault();
           return;
         }
@@ -757,12 +876,18 @@ function GraphViewComponent({
       requestAnimationFrame(() => frameGraph3DScene(graphApi, graph3dNodeRef.current, 0));
 
       return () => {
+        window.clearTimeout(reheatTimer);
         cleanupSceneEffects();
+        cleanupOrientationCube();
+        clearGraph3DNodeRegistry();
         if (graph3dKeyHandlerRef.current) {
           window.removeEventListener("keydown", graph3dKeyHandlerRef.current);
           graph3dKeyHandlerRef.current = null;
         }
         resizeObserver.disconnect();
+        // Cancel any queued rAF tick before destruction so a stale tickFrame
+        // cannot fire after state.layout has been cleaned up by _destructor().
+        (graphApi as unknown as { pauseAnimation?: () => void }).pauseAnimation?.();
         graphApi._destructor();
         graph3dRef.current = null;
         graph3dNodeRef.current = new Map();
@@ -847,7 +972,7 @@ function GraphViewComponent({
         // of the sphere size. In icons mode the sphere is set to 1 graph unit
         // (a tiny invisible hit-target); glyphBaseSize carries the true visual scale.
         glyphBaseSize: baseSize,
-        forceLabel: (node.isDir && !node.isCluster) || (nodeView === "icons" && !node.isCluster && nodeVisualState(node) !== "proxy") || (visibleTypes.size < ALL_NODE_TYPES.length && showLabels && !node.isCluster && nodeVisualState(node) !== "proxy"),
+        forceLabel: (node.isDir && !node.isCluster) || (nodeView === "icons" && !node.isCluster && nodeVisualState(node) !== "proxy") || (visibleTypes.size < ALL_NODE_TYPES.length && showLabels && !node.isCluster && nodeVisualState(node) !== "proxy") || (showLabels && !node.isCluster && nodeVisualState(node) !== "ghost" && nodeVisualState(node) !== "proxy"),
         baseZIndex: Math.round(((node.z3d ?? 0) + 2000) * 10),
       });
     }
@@ -895,15 +1020,21 @@ function GraphViewComponent({
       addedPairs.add(pairKey);
     }
 
+    const circleProgram = createNodeCompoundProgram(
+      [NodeCircleProgram],
+      makeNodeLabelRenderer(nodeView, showLabels),
+      () => undefined,
+    );
+
     const renderer = new Sigma(graph, containerRef.current, {
+      allowInvalidContainer: true,
       renderLabels: nodeView === "icons" ? true : showLabels,
       renderEdgeLabels: false,
       nodeProgramClasses: {
-        circle: createNodeCompoundProgram(
-          [NodeCircleProgram],
-          makeNodeLabelRenderer(nodeView, showLabels),
-          () => undefined,
-        ),
+        circle: circleProgram,
+      },
+      nodeHoverProgramClasses: {
+        circle: circleProgram,
       },
       // Two edge programs registered. Containment edges (parent → child) use
       // the clamped straight-line program — they ARE the visual skeleton and
@@ -969,7 +1100,7 @@ function GraphViewComponent({
         selectedNodeRef.current = node;
         setSelectedNode(prev => prev === node ? prev : node);
         renderer.scheduleRefresh();
-        if (nodePath) onSelectPath(nodePath);
+        if (nodePath) onSelectPathRef.current(nodePath);
         return;
       }
       const path = graph.getNodeAttribute(node, "path") as string;
@@ -983,32 +1114,34 @@ function GraphViewComponent({
         const parentPath = graph.getNodeAttribute(node, "parentPath") as string | null | undefined;
         const folderPath = parentPath || path.replace("/__cluster__", "").replace(/\/__visual_[^/]+$/, "");
         setExpandingCluster(folderPath);
-        onExpandCluster?.(folderPath);
+        onExpandClusterRef.current?.(folderPath);
         setTimeout(() => setExpandingCluster(null), 550);
         return;
       }
-      // Single click: folder → open its graph, file → preview in inspector
+      // Single click: select node (folder or file) — preview in inspector
+      onSelectPathRef.current(path);
+    });
+
+    renderer.on("doubleClickNode", ({ node }) => {
+      const path = graph.getNodeAttribute(node, "path") as string;
+      const isDir = graph.getNodeAttribute(node, "isDir") as boolean;
+      if (!path) return;
       if (isDir) {
+        // Double-click folder to navigate into its graph
         const display = renderer.getNodeDisplayData(node);
         const x = Number(graph.getNodeAttribute(node, "x"));
         const y = Number(graph.getNodeAttribute(node, "y"));
         transitionAnchorRef.current = { path, x, y };
         if (display) {
           renderer.getCamera().animate({ x: display.x, y: display.y, ratio: 0.32 }, { duration: 180, easing: "quadraticOut" });
-          window.setTimeout(() => onFocusFolder?.(path), 110);
+          window.setTimeout(() => onFocusFolderRef.current?.(path), 110);
         } else {
-          onFocusFolder?.(path);
+          onFocusFolderRef.current?.(path);
         }
+      } else {
+        // Double-click file: open externally (OS default viewer)
+        onOpenPathRef.current?.(path);
       }
-      else onSelectPath(path);
-    });
-
-    renderer.on("doubleClickNode", ({ node }) => {
-      const path = graph.getNodeAttribute(node, "path") as string;
-      const isDir = graph.getNodeAttribute(node, "isDir") as boolean;
-      // Double-click on file opens it in editor; folders handled by single-click
-      if (!path || isDir) return;
-      void openNodeInEditor(path);
     });
 
     renderer.on("rightClickNode", (payload: any) => {
@@ -1056,6 +1189,19 @@ function GraphViewComponent({
 
     rendererRef.current = renderer;
 
+    // Container can be 0-width at mount time (parent panel still measuring).
+    // Sigma was initialised with allowInvalidContainer:true to survive that,
+    // but it now needs to be told to recompute when the real size arrives.
+    const sigmaResizeObserver = new ResizeObserver(() => {
+      try {
+        renderer.refresh();
+        renderer.scheduleRefresh();
+      } catch {
+        // Renderer may already be killed during teardown — ignore.
+      }
+    });
+    sigmaResizeObserver.observe(containerRef.current);
+
     // ─── Keyboard navigation ─────────────────────────────────────────────────
     // ArrowLeft/Right: cycle through visible siblings (same parentPath), sorted
     // alphabetically — same model as standard file explorers.
@@ -1070,6 +1216,12 @@ function GraphViewComponent({
       }
       const activeKey = selectedNodeRef.current;
       if (!activeKey) return;
+      if (event.key === " ") {
+        event.preventDefault();
+        const path = graph.getNodeAttribute(activeKey, "path") as string | undefined;
+        if (path) onOpenPathRef.current?.(path);
+        return;
+      }
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       const parentPath = graph.getNodeAttribute(activeKey, "parentPath") as string | undefined;
       const siblings: Array<{ key: string; label: string }> = [];
@@ -1088,7 +1240,7 @@ function GraphViewComponent({
       if (!nextPath) return;
       selectedNodeRef.current = next.key;
       setSelectedNode(next.key);
-      onSelectPath(nextPath);
+      onSelectPathRef.current(nextPath);
       renderer.scheduleRefresh();
       event.preventDefault();
     };
@@ -1295,10 +1447,11 @@ function GraphViewComponent({
         cameraZoomTimeoutRef.current = null;
       }
       renderer.kill();
+      sigmaResizeObserver.disconnect();
       rendererRef.current = null;
       graphRef.current = null;
     };
-  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, graph3dPinDrag, onSelectPath, onOpenPath, onFocusFolder, onExpandCluster, openNodeInEditor, themeVersion]);
+  }, [displayPayload, displayNodes, graph3dData, groupColors, showLabels, dimUnrelated, nodeView, layoutMode, graph3dPinDrag, themeVersion]);
 
   const focusSelected = () => {
     const selected = selectedNodeRef.current;
@@ -1506,6 +1659,34 @@ const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
           >
             Path
           </button>
+          <button
+            className={localFocusMode ? "active" : ""}
+            onClick={() => setLocalFocusMode((v) => !v)}
+            title={localFocusMode ? "Disable local focus — show full graph" : "Local focus: show only the neighborhood around the selected node (press F)"}
+          >
+            Focus
+          </button>
+          {localFocusMode && (
+            <select
+              value={localFocusDepth}
+              onChange={(e) => setLocalFocusDepth(Number(e.target.value))}
+              title="Neighborhood depth (hops from selected node)"
+              className="graph-switch-select"
+            >
+              <option value={1}>1-hop</option>
+              <option value={2}>2-hop</option>
+              <option value={3}>3-hop</option>
+            </select>
+          )}
+          {layoutMode === "graph3d" && (
+            <button
+              className={graph3dUseSpherical ? "active" : ""}
+              onClick={() => setGraph3dUseSpherical((v) => !v)}
+              title={graph3dUseSpherical ? "Switch to flat 3D layout" : "Switch to spherical shell layout (concentric spheres by depth)"}
+            >
+              Sphere
+            </button>
+          )}
         </div>
       </div>
 
@@ -1622,7 +1803,6 @@ const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
                     // produces a black canvas / GPU-context crash. The
                     // refreshed color/link calls below are enough to repaint.
                     api.linkColor(api.linkColor());
-                    api.linkWidth(api.linkWidth());
                   }
                 }}
               >
@@ -1679,7 +1859,7 @@ const hoveredInfo = hoveredNode ? nodeById.get(hoveredNode) : null;
           split, `NotFoundError: The object can not be found here.` fires
           whenever the overlay below toggles while a canvas is alive.
         */}
-        <div className="graph-canvas-mount" ref={containerRef} />
+        <div className="graph-canvas-mount" ref={containerRef} style={{ position: "relative" }} />
         {isLoading && (
           <div className="graph-loading-overlay" role="status" aria-live="polite">
             <span className="orbit-spinner" aria-hidden />
@@ -1817,10 +1997,10 @@ function layoutModeTitle(mode: LayoutMode): string {
   return "Real Three.js 3D force graph with orbit controls";
 }
 
-function layoutNodes(nodes: VisualGraphNode[], edges: GraphEdge[], mode: LayoutMode): GraphDisplayNode[] {
+function layoutNodes(nodes: VisualGraphNode[], edges: GraphEdge[], mode: LayoutMode, spherical3d?: boolean): GraphDisplayNode[] {
   if (nodes.length === 0) return [];
   if (mode === "tree") return treeLayout(nodes, edges);
-  if (mode === "graph3d") return graph3dLayout(nodes, edges);
+  if (mode === "graph3d") return spherical3d ? graph3dSphericalLayout(nodes, edges) : graph3dLayout(nodes, edges);
   return constellationLayout(nodes, edges);
 }
 
@@ -1842,17 +2022,13 @@ function capturePreviousNodePositions(
 function transitionStartPosition(
   node: GraphDisplayNode,
   previous: Map<string, { x: number; y: number }> | null,
-  anchor: { path: string; x: number; y: number } | null,
+  _anchor: { path: string; x: number; y: number } | null,
 ) {
   const direct = previous?.get(node.path);
   if (direct) return direct;
-  if (anchor && (node.path === anchor.path || node.path.startsWith(`${anchor.path}/`))) {
-    const jitter = seededAngle(node.id);
-    return {
-      x: anchor.x + Math.cos(jitter) * 10,
-      y: anchor.y + Math.sin(jitter) * 10,
-    };
-  }
+  // Old behaviour: jitter nodes around the clicked anchor — this stacked
+  // everything in a 20px circle and caused persistent overlap during the
+  // animation.  Skip it; nodes render instantly at their layout positions.
   return { x: node.x, y: node.y };
 }
 
@@ -1916,6 +2092,32 @@ function edgePriority(edge: GraphEdge) {
   if (edge.edgeType === "import") return 2;
   if (edge.edgeType === "markdown_link") return 2;
   return 1;
+}
+
+function computeKHopNeighbors(nodeId: number, k: number, edges: GraphEdge[]): Set<number> {
+  const neighbors = new Set<number>([nodeId]);
+  let frontier = new Set<number>([nodeId]);
+  for (let hop = 0; hop < k; hop++) {
+    const next = new Set<number>();
+    for (const edge of edges) {
+      if (frontier.has(edge.sourceId) && !neighbors.has(edge.targetId)) next.add(edge.targetId);
+      if (frontier.has(edge.targetId) && !neighbors.has(edge.sourceId)) next.add(edge.sourceId);
+    }
+    if (!next.size) break;
+    for (const id of next) neighbors.add(id);
+    frontier = next;
+  }
+  return neighbors;
+}
+
+function prioritizeFor3D(nodes: GraphDisplayNode[], limit: number): GraphDisplayNode[] {
+  return [...nodes]
+    .sort((a, b) => {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      if (a.depth !== b.depth) return a.depth - b.depth;
+      return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0);
+    })
+    .slice(0, limit);
 }
 
 function capVisualFanout(nodes: GraphNode[], edges: GraphEdge[], expandedFolders: string[] = []) {
@@ -2106,13 +2308,13 @@ function constellationLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): Grap
 
 
 function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
-  // Vega-like Cartesian tidy tree: root on the left, depth grows left → right,
-  // leaves get stable vertical slots, and parents sit centered over children.
-  // Spacing bumped from 180/240 → 320/420 — at the previous spacing, sibling
-  // labels overran each other and the depth columns felt cramped relative to
-  // the icon sizes used in icons mode.
-  const LEAF_GAP = 320;
-  const DEPTH_GAP = 420;
+  // Top-down tidy tree: root at the top, depth grows downward, siblings spread
+  // horizontally. Leaf slots are the x-axis and depth levels are the y-axis.
+  // This avoids the "vertical line" problem of the old left-to-right layout,
+  // where a shallow filesystem (many files, 1–2 depth levels) had a tiny x
+  // range and a massive y range, collapsing everything into a single column.
+  const LEAF_GAP = 300;
+  const DEPTH_GAP = 380;
   const ROOT_GAP_LEAVES = 4;
   const tree = hierarchy(nodes, edges);
   const roots = tree.roots.length ? tree.roots : [nodes[0].id];
@@ -2120,38 +2322,32 @@ function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayN
   const placed = new Map<number, GraphDisplayNode>();
   let leafCursor = 0;
 
+  // Returns the leaf-slot x of the placed node so parents can average over children.
   const place = (id: number, depth: number): number => {
     const node = tree.byId.get(id);
     if (!node) return leafCursor * LEAF_GAP;
-    // Cycle / re-entry: return the already-assigned y so parent averages
-    // remain valid. Previously this returned `leafCursor` (a small integer
-    // counter), which collapsed the parent's averaged y toward zero and
-    // stacked everything in a vertical line.
     const existing = placed.get(id);
-    if (existing) return existing.y;
+    if (existing) return existing.x;
     const kids = orderedVegaChildren(id, tree);
-    let y: number;
+    let x: number;
     if (!kids.length) {
-      y = leafCursor * LEAF_GAP;
+      x = leafCursor * LEAF_GAP;
       leafCursor += Math.max(1, Math.min(4, vegaLeafSlots(id, tree) * 0.55));
     } else {
-      const firstBefore = leafCursor;
-      const childYs: number[] = [];
-      for (const child of kids) childYs.push(place(child, depth + 1));
-      y = childYs.length
-        ? childYs.reduce((sum, childY) => sum + childY, 0) / childYs.length
-        : firstBefore * LEAF_GAP;
+      const childXs: number[] = [];
+      for (const child of kids) childXs.push(place(child, depth + 1));
+      x = childXs.reduce((sum, cx) => sum + cx, 0) / childXs.length;
     }
     placed.set(id, {
       ...node,
-      x: depth * DEPTH_GAP,
-      y,
+      x,
+      y: -(depth * DEPTH_GAP), // root at y=0, children below (y-up space)
       depth,
       childCount: kids.length,
       angle: 0,
       leftside: false,
     });
-    return y;
+    return x;
   };
 
   orderedRoots.forEach((root, index) => {
@@ -2159,12 +2355,16 @@ function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayN
     place(root, 0);
   });
 
-  const ys = [...placed.values()].map((node) => node.y);
+  const placedList = [...placed.values()];
+  const xs = placedList.map((n) => n.x);
+  const ys = placedList.map((n) => n.y);
+  const midX = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
   const midY = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : 0;
+
   return nodes.map((node, index) => {
     const placedNode = placed.get(node.id);
     if (!placedNode) return fallbackNode(node, index, 0, 0);
-    return { ...placedNode, y: -(placedNode.y - midY) };
+    return { ...placedNode, x: placedNode.x - midX, y: placedNode.y - midY };
   });
 }
 
@@ -2285,11 +2485,15 @@ function reduceNode(
   if (dimUnrelated && (hovered || selected) && !isHovered && !isSelected && !connectedToActive) {
     if (!iconsMode) {
       targetColor = adjustColorBrightness(targetColor, 0.42);
-      targetSize = Math.max(2, effectiveBase * 0.72);
+      // Keep a hit-able minimum of 6px so dimmed nodes remain hoverable.
+      // At 2px the WebGL picker can't reliably capture the mouse.
+      targetSize = Math.max(6, effectiveBase * 0.72);
     }
     if (iconsMode || isClusterNode) targetGlyphOpacity = isClusterNode ? 0.24 : 0.32;
     targetLabel = "";
-    targetZIndex = 0;
+    // zIndex 1 instead of 0 — keeps dimmed nodes above the floor so they
+    // aren't buried under overlapping geometry and remain hittable.
+    targetZIndex = 1;
   }
 
   // Style breadcrumb nodes (parent/back folders from nav history) — make
