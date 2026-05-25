@@ -996,16 +996,19 @@ export function graph3dSiblingInfo(edges: GraphEdge[]) {
   return info;
 }
 
-// Navigation gizmo: an 88×88 canvas overlay that shows the camera orientation
-// as a colored 6-face cube. Clicking a face snaps the camera to that axis.
+// Navigation gizmo: a 96×96 canvas overlay that shows the camera orientation
+// as a colored 6-face cube. Clicking a face snaps the camera to that view.
+// Dragging rotates the main 3D camera via quaternion rotation on the camera's
+// actual basis vectors — correctly handles TrackballControls free roll.
 export function installOrientationCube(
   graph: ForceGraph3DInstance<Graph3DNode, Graph3DLink>,
   container: HTMLElement,
 ): () => void {
-  const SIZE = 88;
+  const SIZE = 96;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const canvas = document.createElement("canvas");
-  canvas.width = SIZE;
-  canvas.height = SIZE;
+  canvas.width = SIZE * dpr;
+  canvas.height = SIZE * dpr;
   Object.assign(canvas.style, {
     position: "absolute",
     top: "12px",
@@ -1013,65 +1016,78 @@ export function installOrientationCube(
     width: `${SIZE}px`,
     height: `${SIZE}px`,
     borderRadius: "50%",
-    cursor: "pointer",
+    cursor: "grab",
     zIndex: "10",
     pointerEvents: "auto",
   });
   container.appendChild(canvas);
 
   const ctx = canvas.getContext("2d")!;
+  ctx.scale(dpr, dpr);
   const HALF = SIZE / 2;
-  const CUBE_R = 27;
+  const CUBE_R = 29;
 
+  // Unit cube vertices: index encodes which corner (bit0=X, bit1=Y, bit2=Z)
   const VERTS: [number, number, number][] = [
     [ 1, 1, 1], [ 1, 1,-1], [ 1,-1, 1], [ 1,-1,-1],
     [-1, 1, 1], [-1, 1,-1], [-1,-1, 1], [-1,-1,-1],
   ];
+
+  // Face definitions with human-readable labels.
+  // snapUp: the camera.up direction that looks correct for this view.
+  //   Top/Bottom snap need a different up to avoid gimbal (use ±Z instead of ±Y).
   const FACES = [
-    { v: [0,2,3,1], normal: new THREE.Vector3( 1, 0, 0), label: "+X", token: "--omarchy-color9" },
-    { v: [4,5,7,6], normal: new THREE.Vector3(-1, 0, 0), label: "-X", token: "--omarchy-color1" },
-    { v: [0,4,6,2], normal: new THREE.Vector3( 0, 0, 1), label: "+Z", token: "--omarchy-color14" },
-    { v: [1,3,7,5], normal: new THREE.Vector3( 0, 0,-1), label: "-Z", token: "--omarchy-color6" },
-    { v: [0,1,5,4], normal: new THREE.Vector3( 0, 1, 0), label: "+Y", token: "--omarchy-color10" },
-    { v: [2,6,7,3], normal: new THREE.Vector3( 0,-1, 0), label: "-Y", token: "--omarchy-color2" },
+    { v: [0,4,6,2], normal: new THREE.Vector3( 0, 0, 1), label: "Front", snapUp: new THREE.Vector3(0, 1, 0),  token: "--omarchy-color14" },
+    { v: [1,3,7,5], normal: new THREE.Vector3( 0, 0,-1), label: "Back",  snapUp: new THREE.Vector3(0, 1, 0),  token: "--omarchy-color6"  },
+    { v: [0,2,3,1], normal: new THREE.Vector3( 1, 0, 0), label: "Right", snapUp: new THREE.Vector3(0, 1, 0),  token: "--omarchy-color9"  },
+    { v: [4,5,7,6], normal: new THREE.Vector3(-1, 0, 0), label: "Left",  snapUp: new THREE.Vector3(0, 1, 0),  token: "--omarchy-color1"  },
+    { v: [0,1,5,4], normal: new THREE.Vector3( 0, 1, 0), label: "Top",   snapUp: new THREE.Vector3(0, 0,-1), token: "--omarchy-color10" },
+    { v: [2,6,7,3], normal: new THREE.Vector3( 0,-1, 0), label: "Btm",   snapUp: new THREE.Vector3(0, 0, 1),  token: "--omarchy-color2"  },
+  ];
+
+  // Small axis stubs rendered around the cube to show X/Y/Z orientation.
+  const AXIS_TIPS: { dir: THREE.Vector3; color: string; label: string }[] = [
+    { dir: new THREE.Vector3(1, 0, 0), color: "#ff6b6b", label: "X" },
+    { dir: new THREE.Vector3(0, 1, 0), color: "#69db7c", label: "Y" },
+    { dir: new THREE.Vector3(0, 0, 1), color: "#74c0fc", label: "Z" },
   ];
 
   const camApi = graph as unknown as { camera?: () => THREE.Camera };
   let animFrameId = 0;
 
-  // Build a stable Y-up camera basis from the view direction alone, ignoring
-  // any roll that TrackballControls may have accumulated. This keeps the gizmo
-  // visually upright even when the camera has rolled.
-  function getCameraBasis(camera: THREE.Camera) {
-    const fwd = new THREE.Vector3();
-    (camera as THREE.PerspectiveCamera).getWorldDirection(fwd);
-    const wUp = new THREE.Vector3(0, 1, 0);
-    const right = new THREE.Vector3().crossVectors(fwd, wUp).normalize();
-    if (right.lengthSq() < 0.0001) right.set(1, 0, 0); // camera pointing straight up/down
-    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+  // Extract the camera's actual right/up/fwd from its world matrix.
+  // This correctly handles TrackballControls roll — unlike the cross-product
+  // Y-up trick which silently ignores any accumulated roll.
+  function getCameraBasis(camera: THREE.Camera): { fwd: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 } {
+    camera.updateMatrixWorld(false);
+    const right = new THREE.Vector3();
+    const up    = new THREE.Vector3();
+    const fwd   = new THREE.Vector3();
+    // Column 0 = camera local +X (right), column 1 = local +Y (up),
+    // column 2 = local +Z (backward, because THREE cameras look in -Z).
+    camera.matrixWorld.extractBasis(right, up, fwd);
+    fwd.negate(); // flip +Z → -Z = actual forward/look direction
     return { fwd, right, up };
   }
 
-  function projectToScreen(worldDir: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3): [number, number] {
+  function project(v: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3): [number, number] {
     return [
-      HALF + worldDir.dot(right) * CUBE_R,
-      HALF - worldDir.dot(up) * CUBE_R,
+      HALF + v.dot(right) * CUBE_R,
+      HALF - v.dot(up)    * CUBE_R,
     ];
   }
 
   function cubeTheme() {
-    const canvas = graph3dSolidColor(graphThemeColor("--orbit-graph-canvas", "#101010"), "#101010");
+    const bg     = graph3dSolidColor(graphThemeColor("--orbit-graph-canvas", "#101010"), "#101010");
     const accent = graph3dSolidColor(graphThemeColor("--omarchy-accent", "#20b8a5"), "#20b8a5");
-    const fg = graph3dSolidColor(graphThemeColor("--omarchy-fg", "#e5edf4"), "#e5edf4");
+    const fg     = graph3dSolidColor(graphThemeColor("--omarchy-fg", "#e5edf4"), "#e5edf4");
     return {
-      shell: withAlpha(graph3dBlend(canvas, accent, 0.14), 0.72),
-      stroke: withAlpha(graph3dBlend(fg, accent, 0.20), 0.26),
-      label: graph3dBlend(fg, accent, 0.08),
-      face: (token: string, backFace: boolean) => {
+      shell:  withAlpha(graph3dBlend(bg, accent, 0.14), 0.75),
+      stroke: withAlpha(graph3dBlend(fg, accent, 0.20), 0.30),
+      label:  graph3dBlend(fg, accent, 0.06),
+      face: (token: string, back: boolean) => {
         const base = graph3dSolidColor(graphThemeColor(token, accent), accent);
-        return backFace
-          ? graph3dBlend(base, canvas, 0.54)
-          : graph3dBlend(base, fg, 0.08);
+        return back ? graph3dBlend(base, bg, 0.56) : graph3dBlend(base, fg, 0.10);
       },
     };
   }
@@ -1082,48 +1098,75 @@ export function installOrientationCube(
     const { fwd, right, up } = getCameraBasis(camera);
 
     ctx.clearRect(0, 0, SIZE, SIZE);
-    ctx.save();
     const theme = cubeTheme();
 
+    // Circular backdrop
+    ctx.save();
     ctx.beginPath();
     ctx.arc(HALF, HALF, HALF - 1, 0, Math.PI * 2);
     ctx.fillStyle = theme.shell;
     ctx.fill();
     ctx.restore();
 
+    // Sort faces back-to-front (painter's algorithm)
     const projected = FACES.map((face) => {
-      const depth = -face.normal.dot(fwd); // positive = facing camera
-      const pts = face.v.map((i) => {
+      const depth = -face.normal.dot(fwd); // > 0 = facing camera
+      const pts   = face.v.map((i) => {
         const v = new THREE.Vector3(VERTS[i][0], VERTS[i][1], VERTS[i][2]);
-        return projectToScreen(v, right, up);
+        return project(v, right, up);
       });
-      return { pts, depth, label: face.label, color: theme.face(face.token, depth <= -0.05) };
+      const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+      const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+      return { pts, cx, cy, depth, label: face.label, color: theme.face(face.token, depth < 0) };
     });
-    projected.sort((a, b) => a.depth - b.depth); // back to front
+    projected.sort((a, b) => a.depth - b.depth);
 
-    for (const { pts, depth, label, color } of projected) {
-      const visible = depth > -0.05;
+    for (const { pts, cx, cy, depth, label, color } of projected) {
+      const front = depth > 0;
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath();
-      ctx.globalAlpha = visible ? 0.88 : 0.26;
+      ctx.globalAlpha = front ? 0.92 : 0.20;
       ctx.fillStyle = color;
       ctx.fill();
+      ctx.globalAlpha = front ? 0.55 : 0.12;
       ctx.strokeStyle = theme.stroke;
-      ctx.lineWidth = 0.7;
+      ctx.lineWidth = 0.9;
       ctx.stroke();
-      if (visible) {
-        const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
-        const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
-        ctx.globalAlpha = 1.0;
+      // Label: only on faces clearly facing the camera
+      if (depth > 0.18) {
+        ctx.globalAlpha = Math.min(1, (depth - 0.1) * 2.5);
         ctx.fillStyle = theme.label;
-        ctx.font = "bold 9px IBM Plex Sans, sans-serif";
+        ctx.font = `bold ${label.length <= 3 ? 9 : 8}px IBM Plex Sans, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(label, cx, cy);
       }
+      ctx.restore();
+    }
+
+    // Axis stubs — small colored tips beyond the cube face edges
+    for (const { dir, color, label } of AXIS_TIPS) {
+      const depth = dir.dot(fwd); // > 0 means axis points toward camera
+      const tip = project(dir.clone().multiplyScalar(1.38), right, up);
+      const base = project(dir.clone().multiplyScalar(1.04), right, up);
+      const alpha = depth >= 0 ? 1.0 : 0.30;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(base[0], base[1]);
+      ctx.lineTo(tip[0], tip[1]);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.font = "bold 7px IBM Plex Sans, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, tip[0], tip[1]);
       ctx.restore();
     }
   }
@@ -1135,6 +1178,7 @@ export function installOrientationCube(
   animFrameId = requestAnimationFrame(loop);
 
   function onClick(e: MouseEvent) {
+    if ((e as PointerEvent).pointerId !== undefined) return; // handled by pointerup, not click
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left - HALF;
     const my = e.clientY - rect.top - HALF;
@@ -1162,6 +1206,11 @@ export function installOrientationCube(
       : { x: 0, y: 0, z: 0 };
     const dist = camera.position.distanceTo(new THREE.Vector3(target.x, target.y, target.z));
     const n = best.normal;
+
+    // Set camera.up BEFORE calling cameraPosition so TrackballControls
+    // picks up the correct orientation at the end of the transition.
+    camera.up.copy(best.snapUp);
+
     graph.cameraPosition(
       { x: target.x + n.x * dist, y: target.y + n.y * dist, z: target.z + n.z * dist },
       target,
@@ -1169,40 +1218,47 @@ export function installOrientationCube(
     );
   }
 
-  // Drag-to-rotate: dragging the cube rotates the main 3D graph the same way
-  // real 3D apps (Blender, Maya) do. We convert the 2D drag delta into
-  // spherical-coordinate offsets applied to the camera position.
+  // Drag-to-rotate: converts 2D delta into quaternion rotation using the
+  // camera's ACTUAL right/up axes (handles TrackballControls roll correctly).
+  // Drag right → camera orbits right → scene moves left (matches viewport).
   let dragStart: { x: number; y: number } | null = null;
-  const DRAG_SPEED = 0.007;
+  let didDrag = false;
+  const DRAG_SPEED = 0.008;
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
     dragStart = { x: e.clientX, y: e.clientY };
+    didDrag = false;
     canvas.setPointerCapture(e.pointerId);
     canvas.style.cursor = "grabbing";
     e.stopPropagation();
+    e.preventDefault();
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!dragStart) return;
     e.stopPropagation();
+    e.preventDefault();
     const dx = e.clientX - dragStart.x;
     const dy = e.clientY - dragStart.y;
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) didDrag = true;
     dragStart = { x: e.clientX, y: e.clientY };
 
     const camera = camApi.camera?.();
     if (!camera) return;
     const controls = graph3dControls(graph) as (OrbitGraph3DControls & { target?: THREE.Vector3 }) | undefined;
     const target = controls?.target ?? new THREE.Vector3(0, 0, 0);
+    const { right, up } = getCameraBasis(camera);
 
     const offset = camera.position.clone().sub(target);
-    const spherical = new THREE.Spherical().setFromVector3(offset);
-    spherical.theta -= dx * DRAG_SPEED;
-    spherical.phi -= dy * DRAG_SPEED;
-    spherical.phi = Math.max(0.01, Math.min(Math.PI - 0.01, spherical.phi));
-    const newOffset = new THREE.Vector3().setFromSpherical(spherical);
+    // Horizontal drag: orbit around camera's actual up axis
+    // Vertical drag:   orbit around camera's actual right axis
+    const quatH = new THREE.Quaternion().setFromAxisAngle(up,    dx * DRAG_SPEED);
+    const quatV = new THREE.Quaternion().setFromAxisAngle(right, dy * DRAG_SPEED);
+    offset.applyQuaternion(quatH).applyQuaternion(quatV);
+
     graph.cameraPosition(
-      { x: target.x + newOffset.x, y: target.y + newOffset.y, z: target.z + newOffset.z },
+      { x: target.x + offset.x, y: target.y + offset.y, z: target.z + offset.z },
       { x: target.x, y: target.y, z: target.z },
       0,
     );
@@ -1210,14 +1266,18 @@ export function installOrientationCube(
 
   function onPointerUp(e: PointerEvent) {
     if (!dragStart) return;
+    const wasDrag = didDrag;
     dragStart = null;
+    didDrag = false;
     canvas.style.cursor = "grab";
     canvas.releasePointerCapture(e.pointerId);
     e.stopPropagation();
+    // Trigger face-snap only when the pointer didn't move (pure click)
+    if (!wasDrag) {
+      onClick(e as unknown as MouseEvent);
+    }
   }
 
-  canvas.style.cursor = "grab";
-  canvas.addEventListener("click", onClick);
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
@@ -1225,7 +1285,6 @@ export function installOrientationCube(
 
   return () => {
     cancelAnimationFrame(animFrameId);
-    canvas.removeEventListener("click", onClick);
     canvas.removeEventListener("pointerdown", onPointerDown);
     canvas.removeEventListener("pointermove", onPointerMove);
     canvas.removeEventListener("pointerup", onPointerUp);
