@@ -911,8 +911,8 @@ function GraphViewComponent({
     for (const node of displayNodes) {
       // Depth-relative boost: nodes near the scope root are visually dominant;
       // deep leaves are smaller, giving natural hierarchy at every zoom level.
-      // In tree mode the horizontal column already encodes depth, so size
-      // variation by depth is redundant — it just makes deep nodes look
+      // In tree mode the x-axis already encodes depth (left-to-right columns),
+      // so size variation by depth is redundant and makes deep nodes look
       // anaemic. Disable depthBoost in tree mode so every column reads at
       // the same visual weight.
       const depthBoost = layoutMode === "tree"
@@ -2308,50 +2308,55 @@ function constellationLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): Grap
 
 
 function treeLayout(nodes: VisualGraphNode[], edges: GraphEdge[]): GraphDisplayNode[] {
-  // Top-down tidy tree: root at the top, depth grows downward, siblings spread
-  // horizontally. Leaf slots are the x-axis and depth levels are the y-axis.
-  // This avoids the "vertical line" problem of the old left-to-right layout,
-  // where a shallow filesystem (many files, 1–2 depth levels) had a tiny x
-  // range and a massive y range, collapsing everything into a single column.
-  const LEAF_GAP = 300;
-  const DEPTH_GAP = 380;
-  const ROOT_GAP_LEAVES = 4;
+  // Left-to-right tidy tree: depth grows rightward (X axis), siblings spread
+  // vertically (Y axis). This keeps depth — which is always small (2–6 levels)
+  // on the short dimension and leaf count on the tall/scrollable dimension,
+  // so even flat filesystems with hundreds of nodes at depth 1 don't collapse
+  // into a single squashed horizontal line.
   const tree = hierarchy(nodes, edges);
   const roots = tree.roots.length ? tree.roots : [nodes[0].id];
   const orderedRoots = [...roots].sort((a, b) => compareGraphChildren(tree.byId.get(a), tree.byId.get(b)));
   const placed = new Map<number, GraphDisplayNode>();
   let leafCursor = 0;
 
-  // Returns the leaf-slot x of the placed node so parents can average over children.
+  // Adaptive gaps so the bounding box stays within a reasonable aspect ratio
+  // regardless of how many nodes are visible.
+  const DEPTH_GAP = 480;
+  // Cap total vertical extent at ~28 000 units so Sigma's auto-fit gives a
+  // readable initial zoom even for the 800-node worst case.
+  const LEAF_GAP = Math.max(36, Math.min(220, 22000 / Math.max(1, nodes.length)));
+  const ROOT_SEP = Math.max(2, Math.round(6 * (LEAF_GAP / 220)));
+
+  // Returns the vertical centre (y) of the placed subtree.
   const place = (id: number, depth: number): number => {
     const node = tree.byId.get(id);
     if (!node) return leafCursor * LEAF_GAP;
     const existing = placed.get(id);
-    if (existing) return existing.x;
+    if (existing) return existing.y;
     const kids = orderedVegaChildren(id, tree);
-    let x: number;
+    let y: number;
     if (!kids.length) {
-      x = leafCursor * LEAF_GAP;
+      y = leafCursor * LEAF_GAP;
       leafCursor += Math.max(1, Math.min(4, vegaLeafSlots(id, tree) * 0.55));
     } else {
-      const childXs: number[] = [];
-      for (const child of kids) childXs.push(place(child, depth + 1));
-      x = childXs.reduce((sum, cx) => sum + cx, 0) / childXs.length;
+      const childYs: number[] = [];
+      for (const child of kids) childYs.push(place(child, depth + 1));
+      y = childYs.reduce((sum, cy) => sum + cy, 0) / childYs.length;
     }
     placed.set(id, {
       ...node,
-      x,
-      y: -(depth * DEPTH_GAP), // root at y=0, children below (y-up space)
+      x: depth * DEPTH_GAP,
+      y,
       depth,
       childCount: kids.length,
       angle: 0,
       leftside: false,
     });
-    return x;
+    return y;
   };
 
   orderedRoots.forEach((root, index) => {
-    if (index > 0) leafCursor += ROOT_GAP_LEAVES;
+    if (index > 0) leafCursor += ROOT_SEP;
     place(root, 0);
   });
 
@@ -2817,10 +2822,10 @@ function edgeStyleForGraph(
 ): EdgeVisualStyle {
   const edgeType = edge.edgeType;
   const muted = visualState === "proxy" || visualState === "ghost";
-  // Tree mode reads better with near-straight edges (the orthogonal column
-  // structure does the visual hierarchy work; curves just add noise). Atlas
-  // and other layouts keep the full curvature for organic flow.
-  const layoutCurveScale = layoutMode === "tree" ? 0.22 : 1.0;
+  // Tree mode: gentle curves only — the left-to-right column structure already
+  // communicates hierarchy; heavy curves just add noise. Other layouts keep
+  // full curvature for organic flow.
+  const layoutCurveScale = layoutMode === "tree" ? 0.18 : 1.0;
   const rawCurve = routingCtx ? computeEdgeRoute(edge, routingCtx).curvature : edgeCurvatureForId(edge.id);
   const curve = rawCurve * layoutCurveScale;
 
