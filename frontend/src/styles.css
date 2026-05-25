@@ -3036,6 +3036,12 @@ dt {
   pointer-events: none;
 }
 
+/* Force WebKitGTK to respect our theme on native form controls in the commandbar */
+.graph-commandbar select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .graph-mode-tabs,
 .graph-search,
 .graph-switches,
@@ -3072,14 +3078,19 @@ dt {
 
 .graph-switch-select {
   height: 24px;
-  padding: 0 6px;
+  padding: 0 22px 0 7px;
   font-size: 11px;
   font-family: var(--orbit-font-sans);
-  background: var(--orbit-bg-sunken);
+  background-color: var(--orbit-bg-sunken);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
   color: var(--orbit-fg);
   border: 1px solid var(--orbit-border);
   border-radius: 4px;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 @keyframes orbit-pulse {
@@ -5467,6 +5478,16 @@ dt {
   flex-direction: column;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
 }
+
+/* Force WebKitGTK to respect theme colors on all native form controls */
+.icon-editor-modal select,
+.icon-editor-modal input {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--orbit-bg-sunken);
+  color: var(--orbit-fg);
+  border-color: var(--orbit-border);
+}
 .icon-editor-header {
   display: flex;
   align-items: flex-start;
@@ -5556,17 +5577,27 @@ dt {
   background: color-mix(in srgb, var(--orbit-accent) 8%, transparent);
 }
 .icon-editor-kind {
-  background: var(--orbit-bg-sunken);
+  background-color: var(--orbit-bg-sunken);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 5px center;
   border: 1px solid var(--orbit-border);
   color: var(--orbit-fg);
   font-size: 11px;
-  padding: 3px;
+  font-family: var(--orbit-font-sans);
+  padding: 3px 20px 3px 6px;
   border-radius: 3px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
 }
 .icon-editor-key {
-  background: var(--orbit-bg-sunken);
+  background-color: var(--orbit-bg-sunken);
   border: 1px solid var(--orbit-border);
   color: var(--orbit-fg);
+  -webkit-appearance: none;
+  appearance: none;
   padding: 4px 6px;
   font-size: 12px;
   border-radius: 3px;
@@ -5649,6 +5680,25 @@ dt {
 .glyph-cell:hover {
   border-color: var(--orbit-accent);
   background: color-mix(in srgb, var(--orbit-accent) 12%, var(--orbit-bg-sunken));
+}
+.glyph-cell--labeled {
+  height: 42px;
+  flex-direction: column;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-size: 16px;
+}
+.glyph-cell-label {
+  font-size: 8px;
+  font-family: var(--orbit-font-mono);
+  color: var(--orbit-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1;
 }
 .glyph-custom,
 .color-custom {
@@ -5734,6 +5784,38 @@ dt {
   color: #fda4af;
   font-size: 11px;
   border-radius: 3px;
+}
+.icon-editor-export {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--orbit-border);
+  background: color-mix(in srgb, var(--orbit-accent) 4%, transparent);
+}
+.icon-editor-export-name {
+  flex: 1;
+  background: var(--orbit-bg-sunken);
+  border: 1px solid var(--orbit-border);
+  color: var(--orbit-fg);
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 3px;
+  -webkit-appearance: none;
+}
+.icon-editor-export .btn-secondary {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--orbit-border);
+  background: var(--orbit-bg-sunken);
+  color: var(--orbit-fg);
+  white-space: nowrap;
+}
+.icon-editor-export .btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .icon-editor-footer {
   display: flex;

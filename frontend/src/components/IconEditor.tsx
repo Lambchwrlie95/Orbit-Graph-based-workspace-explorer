@@ -48,7 +48,7 @@ interface IconEditorProps {
 }
 
 type Row = {
-  kind: "ext" | "file" | "dir";
+  kind: "ext" | "file" | "dir" | "glob";
   key: string;
   text: string;
   fg: string;
@@ -60,6 +60,9 @@ const USER_THEME_ID = "user-overrides";
 
 function seedRows(activeTheme: IconThemePayload): Row[] {
   const next: Row[] = [];
+  for (const glob of activeTheme.globs) {
+    next.push({ kind: "glob", key: glob.pattern, text: glob.rule.text, fg: glob.rule.fg ?? "#cbd5e1", inherited: true });
+  }
   for (const [name, rule] of Object.entries(activeTheme.byDirname)) {
     next.push({ kind: "dir", key: name, text: rule.text, fg: rule.fg ?? "#73c991", inherited: true });
   }
@@ -69,9 +72,9 @@ function seedRows(activeTheme: IconThemePayload): Row[] {
   for (const [name, rule] of Object.entries(activeTheme.byExt)) {
     next.push({ kind: "ext", key: name, text: rule.text, fg: rule.fg ?? "#cbd5e1", inherited: true });
   }
-  // Sort: dirs first, then files, then exts — all alphabetical within group
+  // Sort: globs first, then dirs, files, exts — all alphabetical within group
   next.sort((a, b) => {
-    const kindOrder = { dir: 0, file: 1, ext: 2 };
+    const kindOrder = { glob: 0, dir: 1, file: 2, ext: 3 };
     if (a.kind !== b.kind) return kindOrder[a.kind] - kindOrder[b.kind];
     return a.key.localeCompare(b.key);
   });
@@ -84,6 +87,8 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
   const [picker, setPicker] = useState<{ index: number; field: "text" | "fg" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportName, setExportName] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   // Seed rows from the active theme each time the modal opens.
   useEffect(() => {
@@ -91,6 +96,7 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
     setRows(seedRows(activeTheme));
     setFilter("");
     setError(null);
+    setExportName("");
   }, [open, activeTheme]);
 
   const visibleRows = useMemo(() => {
@@ -109,9 +115,25 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
 
   const addRow = () => {
     setRows((prev) => [
-      { kind: "dir", key: "", text: "", fg: "#73c991", inherited: false },
+      { kind: "glob", key: "", text: "", fg: "#73c991", inherited: false },
       ...prev,
     ]);
+  };
+
+  const onExport = async () => {
+    const id = exportName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    if (!id) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const toml = buildToml();
+      await tauriInvoke("save_user_icon_theme", { id, tomlContent: toml });
+      setExportName("");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const removeRow = (originalIndex: number) => {
@@ -142,11 +164,18 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
     lines.push("");
     for (const row of rows) {
       if (!row.key.trim() || !row.text.trim()) continue;
-      const tableName = row.kind === "ext" ? "icon.exts" : row.kind === "dir" ? "icon.dirs" : "icon.files";
-      lines.push(`[[${tableName}]]`);
-      lines.push(`name = ${JSON.stringify(row.key.trim())}`);
-      lines.push(`text = ${JSON.stringify(row.text)}`);
-      lines.push(`fg = ${JSON.stringify(row.fg)}`);
+      if (row.kind === "glob") {
+        lines.push(`[[icon.globs]]`);
+        lines.push(`url = ${JSON.stringify(row.key.trim())}`);
+        lines.push(`text = ${JSON.stringify(row.text)}`);
+        lines.push(`fg = ${JSON.stringify(row.fg)}`);
+      } else {
+        const tableName = row.kind === "ext" ? "icon.exts" : row.kind === "dir" ? "icon.dirs" : "icon.files";
+        lines.push(`[[${tableName}]]`);
+        lines.push(`name = ${JSON.stringify(row.key.trim())}`);
+        lines.push(`text = ${JSON.stringify(row.text)}`);
+        lines.push(`fg = ${JSON.stringify(row.fg)}`);
+      }
       lines.push("");
     }
     return lines.join("\n");
@@ -216,9 +245,10 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
               <div key={`${row.kind}-${originalIndex}`} className={`icon-editor-row${row.inherited ? " inherited" : " edited"}`}>
                 <select
                   value={row.kind}
-                  onChange={(e) => updateRow(originalIndex, { kind: e.target.value as "ext" | "file" | "dir" })}
+                  onChange={(e) => updateRow(originalIndex, { kind: e.target.value as "ext" | "file" | "dir" | "glob" })}
                   className="icon-editor-kind"
                 >
+                  <option value="glob">path/glob</option>
                   <option value="dir">folder</option>
                   <option value="file">filename</option>
                   <option value="ext">.ext</option>
@@ -227,7 +257,11 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
                   type="text"
                   value={row.key}
                   onChange={(e) => updateRow(originalIndex, { key: e.target.value })}
-                  placeholder={row.kind === "ext" ? "rs" : row.kind === "dir" ? "src" : "Cargo.toml"}
+                  placeholder={
+                    row.kind === "glob" ? "/home/user/projects or **/node_modules" :
+                    row.kind === "ext" ? "rs" :
+                    row.kind === "dir" ? "src" : "Cargo.toml"
+                  }
                   className="icon-editor-key"
                 />
                 <button
@@ -261,7 +295,45 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
             <div className="icon-editor-picker-inner" onClick={(e) => e.stopPropagation()}>
               {picker.field === "text" ? (
                 <>
-                  <h3>Pick a glyph</h3>
+                  {activeTheme && (() => {
+                    const seen = new Map<string, string>();
+                    for (const [name, rule] of Object.entries(activeTheme.byExt)) {
+                      if (rule.text && !seen.has(rule.text)) seen.set(rule.text, `.${name}`);
+                    }
+                    for (const [name, rule] of Object.entries(activeTheme.byFilename)) {
+                      if (rule.text && !seen.has(rule.text)) seen.set(rule.text, name);
+                    }
+                    for (const [name, rule] of Object.entries(activeTheme.byDirname)) {
+                      if (rule.text && !seen.has(rule.text)) seen.set(rule.text, name);
+                    }
+                    for (const glob of activeTheme.globs) {
+                      if (glob.rule.text && !seen.has(glob.rule.text)) seen.set(glob.rule.text, glob.pattern);
+                    }
+                    if (seen.size === 0) return null;
+                    return (
+                      <>
+                        <h3>From current theme</h3>
+                        <div className="glyph-grid">
+                          {[...seen.entries()].map(([glyph, label]) => (
+                            <button
+                              key={glyph}
+                              className="glyph-cell glyph-cell--labeled"
+                              style={{ fontFamily: "Symbols Nerd Font, Symbola, monospace" }}
+                              title={label}
+                              onClick={() => {
+                                updateRow(picker.index, { text: glyph });
+                                setPicker(null);
+                              }}
+                            >
+                              {glyph}
+                              <span className="glyph-cell-label">{label.length > 6 ? label.slice(-5) : label}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <h3>All glyphs</h3>
+                      </>
+                    );
+                  })()}
                   <div className="glyph-grid">
                     {GLYPH_PALETTE.map((g, i) => (
                       <button
@@ -352,6 +424,25 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
         )}
 
         {error && <div className="icon-editor-error">{error}</div>}
+
+        <div className="icon-editor-export">
+          <input
+            type="text"
+            placeholder="Theme pack name (e.g. My Dark Icons)"
+            value={exportName}
+            onChange={(e) => setExportName(e.target.value)}
+            className="icon-editor-export-name"
+            onKeyDown={(e) => { if (e.key === "Enter") onExport(); }}
+          />
+          <button
+            className="btn-secondary"
+            onClick={onExport}
+            disabled={exporting || !exportName.trim()}
+            title="Save as a separately-named theme pack (does not switch active theme)"
+          >
+            {exporting ? "Saving…" : "Save as pack"}
+          </button>
+        </div>
 
         <footer className="icon-editor-footer">
           <span className="icon-editor-count">{rows.length} entries</span>
