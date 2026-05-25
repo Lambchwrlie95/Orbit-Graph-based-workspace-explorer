@@ -5785,27 +5785,94 @@ dt {
   font-size: 11px;
   border-radius: 3px;
 }
-.icon-editor-export {
+.icon-editor-presets {
+  border-top: 1px solid var(--orbit-border);
+  padding: 6px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.icon-editor-presets-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--orbit-muted);
+}
+.icon-editor-presets-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.preset-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--orbit-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--orbit-bg-sunken);
+}
+.preset-chip.active {
+  border-color: var(--orbit-accent);
+  background: color-mix(in srgb, var(--orbit-accent) 12%, var(--orbit-bg-sunken));
+}
+.preset-chip.builtin .preset-chip-name {
+  font-style: italic;
+}
+.preset-chip-name {
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--orbit-fg);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.preset-chip.active .preset-chip-name {
+  cursor: default;
+}
+.preset-chip-name:hover {
+  background: color-mix(in srgb, var(--orbit-fg) 8%, transparent);
+}
+.preset-chip.active .preset-chip-name:hover {
+  background: transparent;
+}
+.preset-chip-check {
+  color: var(--orbit-accent);
+}
+.preset-chip-del {
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--orbit-muted);
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--orbit-border);
+  cursor: pointer;
+  line-height: 1;
+}
+.preset-chip-del:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+.icon-editor-preset-save {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-top: 1px solid var(--orbit-border);
-  background: color-mix(in srgb, var(--orbit-accent) 4%, transparent);
+  gap: 6px;
 }
 .icon-editor-export-name {
   flex: 1;
   background: var(--orbit-bg-sunken);
   border: 1px solid var(--orbit-border);
   color: var(--orbit-fg);
-  padding: 5px 8px;
-  font-size: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
   border-radius: 3px;
   -webkit-appearance: none;
+  min-width: 0;
 }
-.icon-editor-export .btn-secondary {
-  padding: 6px 12px;
-  font-size: 12px;
+.icon-editor-preset-save .btn-secondary {
+  padding: 4px 10px;
+  font-size: 11px;
   border-radius: 3px;
   cursor: pointer;
   border: 1px solid var(--orbit-border);
@@ -5813,7 +5880,7 @@ dt {
   color: var(--orbit-fg);
   white-space: nowrap;
 }
-.icon-editor-export .btn-secondary:disabled {
+.icon-editor-preset-save .btn-secondary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

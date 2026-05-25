@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { X, Save, Trash2, RefreshCw } from "lucide-react";
 import { tauriInvoke } from "../lib/tauriCommands";
 import { THEME_TOKENS, resolveIconFg } from "../lib/fileGlyphs";
-import type { IconThemePayload } from "../types";
+import type { IconThemePayload, IconThemeMeta } from "../types";
 
 // Curated palette: Nerd Font Private-Use-Area glyphs plus Unicode shapes that
 // render fine without a Nerd Font installed. Click one to pick it for the
@@ -87,17 +87,22 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
   const [picker, setPicker] = useState<{ index: number; field: "text" | "fg" } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [exportName, setExportName] = useState("");
-  const [exporting, setExporting] = useState(false);
+  const [allThemes, setAllThemes] = useState<IconThemeMeta[]>([]);
+  const [presetName, setPresetName] = useState("");
+  const [savingPreset, setSavingPreset] = useState(false);
 
-  // Seed rows from the active theme each time the modal opens.
+  // Seed rows and load theme list each time the modal opens or active theme changes.
   useEffect(() => {
     if (!open || !activeTheme) return;
     setRows(seedRows(activeTheme));
     setFilter("");
     setError(null);
-    setExportName("");
   }, [open, activeTheme]);
+
+  useEffect(() => {
+    if (!open) return;
+    tauriInvoke("list_icon_themes").then(setAllThemes).catch(() => {});
+  }, [open]);
 
   const visibleRows = useMemo(() => {
     if (!filter.trim()) return rows;
@@ -120,19 +125,40 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
     ]);
   };
 
-  const onExport = async () => {
-    const id = exportName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  const applyPreset = async (id: string) => {
+    try {
+      await tauriInvoke("set_active_icon_theme", { id });
+      onSaved(id);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const deletePreset = async (id: string, name: string) => {
+    if (!window.confirm(`Delete preset "${name}"?`)) return;
+    try {
+      await tauriInvoke("delete_user_icon_theme", { id });
+      setAllThemes((prev) => prev.filter((t) => t.id !== id));
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const saveAsPreset = async () => {
+    const id = presetName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
     if (!id) return;
-    setExporting(true);
+    setSavingPreset(true);
     setError(null);
     try {
       const toml = buildToml();
       await tauriInvoke("save_user_icon_theme", { id, tomlContent: toml });
-      setExportName("");
+      setPresetName("");
+      const updated = await tauriInvoke("list_icon_themes");
+      setAllThemes(updated);
     } catch (e) {
       setError(String(e));
     } finally {
-      setExporting(false);
+      setSavingPreset(false);
     }
   };
 
@@ -425,23 +451,49 @@ export const IconEditor: React.FC<IconEditorProps> = ({ open, onClose, activeThe
 
         {error && <div className="icon-editor-error">{error}</div>}
 
-        <div className="icon-editor-export">
-          <input
-            type="text"
-            placeholder="Theme pack name (e.g. My Dark Icons)"
-            value={exportName}
-            onChange={(e) => setExportName(e.target.value)}
-            className="icon-editor-export-name"
-            onKeyDown={(e) => { if (e.key === "Enter") onExport(); }}
-          />
-          <button
-            className="btn-secondary"
-            onClick={onExport}
-            disabled={exporting || !exportName.trim()}
-            title="Save as a separately-named theme pack (does not switch active theme)"
-          >
-            {exporting ? "Saving…" : "Save as pack"}
-          </button>
+        <div className="icon-editor-presets">
+          <span className="icon-editor-presets-label">Presets</span>
+          <div className="icon-editor-presets-list">
+            {allThemes.map((theme) => {
+              const isActive = theme.id === activeTheme?.meta.id;
+              return (
+                <span key={theme.id} className={`preset-chip${isActive ? " active" : ""}${theme.builtin ? " builtin" : ""}`}>
+                  <button
+                    className="preset-chip-name"
+                    onClick={() => !isActive && applyPreset(theme.id)}
+                    title={isActive ? "Currently active" : `Load "${theme.name}"`}
+                  >
+                    {isActive && <span className="preset-chip-check">✓ </span>}
+                    {theme.name}
+                  </button>
+                  {!theme.builtin && (
+                    <button
+                      className="preset-chip-del"
+                      onClick={() => deletePreset(theme.id, theme.name)}
+                      title="Delete preset"
+                    >×</button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          <div className="icon-editor-preset-save">
+            <input
+              type="text"
+              placeholder="Save as preset…"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              className="icon-editor-export-name"
+              onKeyDown={(e) => { if (e.key === "Enter") saveAsPreset(); }}
+            />
+            <button
+              className="btn-secondary"
+              onClick={saveAsPreset}
+              disabled={savingPreset || !presetName.trim()}
+            >
+              {savingPreset ? "Saving…" : "Save"}
+            </button>
+          </div>
         </div>
 
         <footer className="icon-editor-footer">
